@@ -1,6 +1,7 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { DiffView } from "../components/content";
 import { Conversation, IssueHeader } from "../components/conversation";
+import { IssueSidebar } from "../components/labels";
 import { ErrorNote, useAction } from "../components/ui";
 import { api, post, repoApi, shortSha, type Comment, type Commit, type Issue } from "../lib/api";
 
@@ -60,9 +61,12 @@ function PullPage() {
           </ul>
         </section>
       ) : (
-        <div style={{ maxWidth: 900 }} className="timeline">
-          <Conversation info={info} issue={pull} comments={data.comments} me={me?.username ?? null} />
-          <MergeBox data={data} />
+        <div className="issue-layout">
+          <div className="timeline">
+            <Conversation info={info} issue={pull} comments={data.comments} me={me?.username ?? null} />
+            <MergeBox data={data} />
+          </div>
+          <IssueSidebar info={info} issue={pull} />
         </div>
       )}
     </div>

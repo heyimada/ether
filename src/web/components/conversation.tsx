@@ -3,9 +3,22 @@ import { MessageSquare } from "lucide-react";
 import { useState } from "react";
 import { patch, post, repoApi, timeAgo, type Comment, type Issue, type RepoInfo } from "../lib/api";
 import { Markdown } from "./content";
+import { LabelPill } from "./labels";
 import { Avatar, ErrorNote, StateBadge, StateIcon, onSubmit, useAction } from "./ui";
 
-export function IssueList({ info, kind, data, state }: { info: RepoInfo; kind: "issues" | "pulls"; data: { items: Issue[]; open: number; closed: number }; state: "open" | "closed" }) {
+export function IssueList({
+  info,
+  kind,
+  data,
+  state,
+  filter = {},
+}: {
+  info: RepoInfo;
+  kind: "issues" | "pulls";
+  data: { items: Issue[]; open: number; closed: number };
+  state: "open" | "closed";
+  filter?: { label?: string; assignee?: string };
+}) {
   const params = { owner: info.repo.owner, repo: info.repo.name };
   const listTo = kind === "issues" ? "/$owner/$repo/issues" : "/$owner/$repo/pulls";
   const { me } = useRouteContext({ from: "/_authed" });
@@ -19,7 +32,17 @@ export function IssueList({ info, kind, data, state }: { info: RepoInfo; kind: "
         <Link to={listTo} params={params} search={{ state: "closed" }} className={state === "closed" ? "active" : "muted"}>
           {data.closed} Closed
         </Link>
+        {(filter.label || filter.assignee) && (
+          <Link to={listTo} params={params} search={state === "closed" ? { state } : {}} className="filter-chip">
+            {filter.label ? `label: ${filter.label}` : `assignee: ${filter.assignee}`} ×
+          </Link>
+        )}
         <span className="spacer" />
+        {kind === "issues" && (
+          <Link to="/$owner/$repo/labels" params={params} className="button small">
+            Labels
+          </Link>
+        )}
         {canCreate && (
           <Link to={kind === "issues" ? "/$owner/$repo/issues/new" : "/$owner/$repo/pulls/new"} params={params} className="button primary">
             {kind === "issues" ? "New issue" : "New pull request"}
@@ -41,11 +64,25 @@ export function IssueList({ info, kind, data, state }: { info: RepoInfo; kind: "
                 >
                   {i.title}
                 </Link>
+                {i.labels.length > 0 && (
+                  <span className="row-labels">
+                    {i.labels.map((l) => (
+                      <LabelPill key={l.name} label={l} info={kind === "issues" ? info : undefined} />
+                    ))}
+                  </span>
+                )}
                 <div className="muted">
                   {i.isPull ? `${i.head} → ${i.base} · ` : ""}opened {timeAgo(i.createdAt)} by {i.author}
                 </div>
               </div>
               <span className="spacer" />
+              {i.assignees.length > 0 && (
+                <span className="assignee-stack" aria-label={`Assigned to ${i.assignees.join(", ")}`}>
+                  {i.assignees.slice(0, 3).map((a) => (
+                    <Avatar key={a} name={a} size={20} />
+                  ))}
+                </span>
+              )}
               {i.comments > 0 && (
                 <span className="muted num" aria-label={`${i.comments} comments`}>
                   <MessageSquare size={14} aria-hidden /> {i.comments}

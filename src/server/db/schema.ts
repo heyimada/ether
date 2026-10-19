@@ -281,3 +281,44 @@ export const instanceSetting = sqliteTable("instance_setting", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
+
+export const label = sqliteTable(
+  "label",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // #rrggbb
+    color: text("color").notNull(),
+    description: text("description").notNull().default(""),
+  },
+  (t) => [uniqueIndex("label_repo_name_idx").on(t.repoId, t.name)],
+);
+
+export const issueLabel = sqliteTable(
+  "issue_label",
+  {
+    issueId: integer("issue_id")
+      .notNull()
+      .references(() => issue.id, { onDelete: "cascade" }),
+    labelId: integer("label_id")
+      .notNull()
+      .references(() => label.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.issueId, t.labelId] }), index("issue_label_label_idx").on(t.labelId)],
+);
+
+export const issueAssignee = sqliteTable(
+  "issue_assignee",
+  {
+    issueId: integer("issue_id")
+      .notNull()
+      .references(() => issue.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.issueId, t.userId] }), index("issue_assignee_user_idx").on(t.userId)],
+);

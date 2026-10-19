@@ -4,7 +4,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { Elysia } from "elysia";
 import { HttpError, allows, readerOrVisitor, requireRepo, requireUser, type RepoAccess, type Viewer } from "../access";
 import { db } from "../db/client";
-import { comment, issue, repo, user } from "../db/schema";
+import { comment, issue, issueAssignee, issueLabel, label, repo, user } from "../db/schema";
 import * as git from "../git";
 
 const merges = new Mutex();
@@ -29,6 +29,38 @@ function issueRows(repoId: number) {
 }
 
 type IssueRow = Awaited<ReturnType<ReturnType<typeof issueRows>["get"]>>;
+
+export type LabelOut = { name: string; color: string; description: string };
+
+// Labels and assignees for a batch of issues, in two queries.
+function issueMeta(issueIds: number[]) {
+  const labels = new Map<number, LabelOut[]>();
+  const assignees = new Map<number, string[]>();
+  if (issueIds.length) {
+    for (const r of db
+      .select({ issueId: issueLabel.issueId, name: label.name, color: label.color, description: label.description })
+      .from(issueLabel)
+      .innerJoin(label, eq(label.id, issueLabel.labelId))
+      .where(inArray(issueLabel.issueId, issueIds))
+      .orderBy(label.name)
+      .all())
+      labels.set(r.issueId, [...(labels.get(r.issueId) ?? []), { name: r.name, color: r.color, description: r.description }]);
+    for (const r of db
+      .select({ issueId: issueAssignee.issueId, username: user.username })
+      .from(issueAssignee)
+      .innerJoin(user, eq(user.id, issueAssignee.userId))
+      .where(inArray(issueAssignee.issueId, issueIds))
+      .orderBy(user.username)
+      .all())
+      assignees.set(r.issueId, [...(assignees.get(r.issueId) ?? []), r.username!]);
+  }
+  return { labels, assignees };
+}
+
+function presentAll(rows: NonNullable<IssueRow>[]) {
+  const meta = issueMeta(rows.map((r) => r.issue.id));
+  return rows.map((r) => ({ ...present(r), labels: meta.labels.get(r.issue.id) ?? [], assignees: meta.assignees.get(r.issue.id) ?? [] }));
+}
 
 const present = (r: NonNullable<IssueRow>) => ({
   number: r.issue.number,
@@ -76,10 +108,25 @@ function insertIssue(a: RepoAccess, viewer: Viewer, values: Partial<typeof issue
   });
 }
 
-function listIssues(a: RepoAccess, isPull: boolean, state: string | undefined) {
-  const wanted = state === "closed" ? (isPull ? ["closed", "merged"] : ["closed"]) : ["open"];
+function listIssues(a: RepoAccess, isPull: boolean, q: Record<string, string | undefined>) {
+  const wanted = q.state === "closed" ? (isPull ? ["closed", "merged"] : ["closed"]) : ["open"];
+  const filters = [eq(issue.repoId, a.repo.id), eq(issue.isPull, isPull), inArray(issue.state, wanted as ("open" | "closed" | "merged")[])];
+  if (q.label)
+    filters.push(
+      inArray(
+        issue.id,
+        db.select({ id: issueLabel.issueId }).from(issueLabel).innerJoin(label, eq(label.id, issueLabel.labelId)).where(and(eq(label.repoId, a.repo.id), eq(label.name, q.label.toLowerCase()))),
+      ),
+    );
+  if (q.assignee)
+    filters.push(
+      inArray(
+        issue.id,
+        db.select({ id: issueAssignee.issueId }).from(issueAssignee).innerJoin(user, eq(user.id, issueAssignee.userId)).where(eq(user.username, q.assignee.toLowerCase())),
+      ),
+    );
   const rows = issueRows(a.repo.id)
-    .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, isPull), inArray(issue.state, wanted as ("open" | "closed" | "merged")[])))
+    .where(and(...filters))
     .orderBy(desc(issue.number))
     .all();
   const counts = db
@@ -90,7 +137,7 @@ function listIssues(a: RepoAccess, isPull: boolean, state: string | undefined) {
     .all();
   const open = counts.find((c) => c.state === "open")?.n ?? 0;
   const closed = counts.filter((c) => c.state !== "open").reduce((s, c) => s + c.n, 0);
-  return { items: rows.map(present), open, closed };
+  return { items: presentAll(rows), open, closed };
 }
 
 async function pullStatus(a: RepoAccess, row: NonNullable<IssueRow>) {
@@ -113,7 +160,7 @@ export const issueRoutes = new Elysia()
   // ---------- issues ----------
   .get("/repos/:owner/:repo/issues", async ({ request, params, query }) => {
     const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
-    return listIssues(a, false, (query as Record<string, string>).state);
+    return listIssues(a, false, query as Record<string, string>);
   })
   .post("/repos/:owner/:repo/issues", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
@@ -127,7 +174,7 @@ export const issueRoutes = new Elysia()
   .get("/repos/:owner/:repo/issues/:number", async ({ request, params }) => {
     const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
     const row = findIssue(a, params.number);
-    return { issue: present(row), comments: listComments(row.issue.id), role: a.role };
+    return { issue: presentAll([row])[0], comments: listComments(row.issue.id), role: a.role };
   })
   .patch("/repos/:owner/:repo/issues/:number", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
@@ -158,7 +205,7 @@ export const issueRoutes = new Elysia()
   // ---------- pull requests ----------
   .get("/repos/:owner/:repo/pulls", async ({ request, params, query }) => {
     const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
-    return listIssues(a, true, (query as Record<string, string>).state);
+    return listIssues(a, true, query as Record<string, string>);
   })
   .post("/repos/:owner/:repo/pulls", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
@@ -178,7 +225,7 @@ export const issueRoutes = new Elysia()
     const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
     const row = findIssue(a, params.number);
     if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
-    return { pull: present(row), comments: listComments(row.issue.id), role: a.role, ...(await pullStatus(a, row)) };
+    return { pull: presentAll([row])[0], comments: listComments(row.issue.id), role: a.role, ...(await pullStatus(a, row)) };
   })
   .post("/repos/:owner/:repo/pulls/:number/merge", async ({ request, params }) => {
     const viewer = await requireUser(request);

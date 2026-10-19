@@ -4,6 +4,7 @@ import { HttpError, findUser, isOrg, readableRepos, requireRepo, requireUser, re
 import { db } from "../db/client";
 import { collaborator, orgMember, repo, star, user } from "../db/schema";
 import * as git from "../git";
+import { addDefaultLabels } from "./labels";
 
 type Q = Record<string, string | undefined>;
 
@@ -56,9 +57,12 @@ export const repoRoutes = new Elysia()
 
     const path = git.repoPath(ownerRow.username, lower);
     await git.initBare(path);
-    db.insert(repo)
+    const created = db
+      .insert(repo)
       .values({ ownerId: ownerRow.id, name: lower, description: typeof description === "string" ? description.slice(0, 500) : "", visibility: visibility ?? "private" })
-      .run();
+      .returning({ id: repo.id })
+      .get();
+    addDefaultLabels(created.id);
     return { repo: { owner: ownerRow.username, name: lower } };
   })
   .get("/repos/:owner/:repo", async ({ request, params }) => {
