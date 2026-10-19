@@ -1,0 +1,255 @@
+import { Link, useRouter } from "@tanstack/react-router";
+import { useRef, useState } from "react";
+import { api, del, patch, put } from "../lib/api";
+import { Avatar, ErrorNote, Field, onSubmit, useAction } from "./ui";
+
+export type MyProfile = {
+  profile: {
+    displayName: string;
+    bio: string;
+    pronouns: string;
+    company: string;
+    location: string;
+    website: string;
+    socials: string[];
+    status: string;
+    avatarVersion: number | null;
+  };
+  emails: string[];
+  pins: string[];
+};
+
+export const loadMyProfile = () => api<MyProfile>("/api/me/profile");
+
+const Status = ({ text }: { text: string }) =>
+  text ? (
+    <span role="status" className="muted">
+      {text}
+    </span>
+  ) : null;
+
+const MAX_GIF_AVATAR = 2 * 1024 * 1024;
+
+// Stills are resized to a 256px square and re-encoded, which also drops EXIF data such as GPS
+// position. GIFs go up untouched (they carry no EXIF) so animation survives; CSS crops them.
+async function avatarBody(file: File): Promise<Blob> {
+  if (file.type === "image/gif") {
+    if (file.size > MAX_GIF_AVATAR) throw new Error("GIF avatars can be at most 2 MB");
+    return file;
+  }
+  return toAvatarPng(file);
+}
+
+async function toAvatarPng(file: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(file);
+  const side = Math.min(bitmap.width, bitmap.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 256;
+  canvas.getContext("2d")!.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 256, 256);
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not read that image"))), "image/png"));
+}
+
+export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfile; repos: string[] }) {
+  const router = useRouter();
+  const p = data.profile;
+  const [form, setForm] = useState({ ...p, socials: [0, 1, 2, 3].map((i) => p.socials[i] ?? "") });
+  const [status, setStatus] = useState("");
+  const [avatarStatus, setAvatarStatus] = useState("");
+  const [emails, setEmails] = useState(data.emails.join("\n"));
+  const [emailStatus, setEmailStatus] = useState("");
+  const [pins, setPins] = useState<string[]>(data.pins);
+  const [pinStatus, setPinStatus] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const set = (key: keyof typeof form) => (e: { target: { value: string } }) => {
+    setForm({ ...form, [key]: e.target.value });
+    setStatus("");
+  };
+  const saveProfile = useAction(async () => {
+    const { avatarVersion: _, ...fields } = form;
+    await patch("/api/me/profile", { ...fields, socials: form.socials.filter(Boolean) });
+    setStatus("Profile saved");
+    await router.invalidate();
+  });
+  const upload = useAction(async (file: File) => {
+    setAvatarStatus("");
+    const body = await avatarBody(file);
+    const res = await fetch("/api/me/avatar", { method: "PUT", body, headers: { "Content-Type": body.type || "application/octet-stream" }, credentials: "same-origin" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Upload failed");
+    setAvatarStatus("Avatar updated");
+    await router.invalidate();
+  });
+  const removeAvatar = useAction(async () => {
+    await del("/api/me/avatar");
+    setAvatarStatus("Avatar removed");
+    await router.invalidate();
+  });
+  const saveEmails = useAction(async () => {
+    setEmailStatus("");
+    await put("/api/me/emails", { emails: emails.split(/[\s,]+/).filter(Boolean) });
+    setEmailStatus("Commit emails saved");
+    await router.invalidate();
+  });
+  const savePins = useAction(async () => {
+    setPinStatus("");
+    await put("/api/me/pins", { repos: pins });
+    setPinStatus("Pins saved");
+    await router.invalidate();
+  });
+
+  return (
+    <>
+      <section className="card">
+        <header>
+          <h2 style={{ margin: 0 }}>Public profile</h2>
+          <span className="spacer" />
+          <Link to="/$owner" params={{ owner: me }}>
+            View profile
+          </Link>
+        </header>
+        <div className="body stack-md">
+          <div className="avatar-row">
+            <Avatar name={me} size={96} />
+            <div className="stack-sm">
+              <ErrorNote error={upload.error ?? removeAvatar.error} />
+              <label htmlFor="avatar-file" className="button" style={{ alignSelf: "start", margin: 0 }}>
+                Upload avatar
+              </label>
+              <input
+                id="avatar-file"
+                ref={fileRef}
+                className="sr-only"
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) upload.run(file);
+                  e.target.value = "";
+                }}
+              />
+              <span className="hint" style={{ margin: 0 }}>
+                PNG, JPEG, GIF or WebP. Animated GIFs stay animated (up to 2 MB). Images are cropped to a square.
+              </span>
+              <div className="row">
+                {p.avatarVersion && (
+                  <button type="button" className="small" onClick={() => removeAvatar.run()} disabled={removeAvatar.pending}>
+                    Remove avatar
+                  </button>
+                )}
+                <Status text={avatarStatus} />
+              </div>
+            </div>
+          </div>
+          <form className="stack-md" onSubmit={onSubmit(saveProfile.run)}>
+            <ErrorNote error={saveProfile.error} />
+            <div className="form-grid">
+              <Field id="p-name" label="Display name">
+                <input id="p-name" value={form.displayName} onChange={set("displayName")} maxLength={64} autoComplete="name" />
+              </Field>
+              <Field id="p-pronouns" label="Pronouns">
+                <input id="p-pronouns" value={form.pronouns} onChange={set("pronouns")} maxLength={32} />
+              </Field>
+            </div>
+            <Field id="p-bio" label="Bio" hint="Plain text, up to 200 characters.">
+              <textarea id="p-bio" value={form.bio} onChange={set("bio")} maxLength={200} style={{ minHeight: 72 }} />
+            </Field>
+            <Field id="p-status" label="Status" hint="A short note shown on your profile, like what you are working on.">
+              <input id="p-status" value={form.status} onChange={set("status")} maxLength={80} />
+            </Field>
+            <div className="form-grid">
+              <Field id="p-company" label="Company">
+                <input id="p-company" value={form.company} onChange={set("company")} maxLength={64} autoComplete="organization" />
+              </Field>
+              <Field id="p-location" label="Location">
+                <input id="p-location" value={form.location} onChange={set("location")} maxLength={64} />
+              </Field>
+            </div>
+            <Field id="p-website" label="Website">
+              <input id="p-website" type="url" value={form.website} onChange={set("website")} placeholder="https://" />
+            </Field>
+            <fieldset className="stack-sm fieldset">
+              <legend>Social links</legend>
+              {form.socials.map((value, i) => (
+                <input
+                  key={i}
+                  type="url"
+                  aria-label={`Social link ${i + 1}`}
+                  placeholder="https://"
+                  value={value}
+                  onChange={(e) => {
+                    const socials = [...form.socials];
+                    socials[i] = e.target.value;
+                    setForm({ ...form, socials });
+                    setStatus("");
+                  }}
+                />
+              ))}
+            </fieldset>
+            <div className="row">
+              <button className="primary" disabled={saveProfile.pending}>
+                Save profile
+              </button>
+              <Status text={status} />
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section className="card">
+        <header>
+          <h2 style={{ margin: 0 }}>Contributions</h2>
+        </header>
+        <form className="body stack-sm" onSubmit={onSubmit(saveEmails.run)}>
+          <ErrorNote error={saveEmails.error} />
+          <Field id="emails" label="Commit emails" hint="One per line. Commits authored with these addresses count towards your contribution graph. An address can belong to one account only.">
+            <textarea id="emails" value={emails} onChange={(e) => setEmails(e.target.value)} style={{ minHeight: 72 }} className="mono" />
+          </Field>
+          <div className="row">
+            <button disabled={saveEmails.pending}>Save commit emails</button>
+            <Status text={emailStatus} />
+          </div>
+        </form>
+      </section>
+
+      <section className="card">
+        <header>
+          <h2 style={{ margin: 0 }}>Pinned repositories</h2>
+          <span className="muted num">{pins.length} / 6</span>
+        </header>
+        <form className="body stack-sm" onSubmit={onSubmit(savePins.run)}>
+          <ErrorNote error={savePins.error} />
+          {repos.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>
+              No repositories to pin yet.
+            </p>
+          ) : (
+            <fieldset className="fieldset pin-list">
+              <legend className="sr-only">Repositories to pin</legend>
+              {repos.map((full) => {
+                const checked = pins.includes(full);
+                return (
+                  <label key={full} className="radio">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={!checked && pins.length >= 6}
+                      onChange={() => {
+                        setPins(checked ? pins.filter((x) => x !== full) : [...pins, full]);
+                        setPinStatus("");
+                      }}
+                    />
+                    <span className="mono">{full}</span>
+                  </label>
+                );
+              })}
+            </fieldset>
+          )}
+          <div className="row">
+            <button disabled={savePins.pending}>Save pins</button>
+            <Status text={pinStatus} />
+          </div>
+        </form>
+      </section>
+    </>
+  );
+}

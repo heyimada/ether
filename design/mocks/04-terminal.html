@@ -1,0 +1,790 @@
+<!doctype html>
+<!--
+  DIRECTION 04 - INDUSTRIAL BRUTALIST TERMINAL
+  Palette: off-white paper (#ECEAE3) with black ink and thick black rules; one signal colour, safety orange (#FF4D00), for primary actions and state; green only for merge/OK. Dark variant inverts to near-black paper with the same orange.
+  Type: IBM Plex Mono everywhere. Uppercase labels, tabular numbers, fixed rules, no rounded corners, no shadows.
+  Key ideas: a rigid 12-column grid with 3px rules; every control is a bordered block with a hard offset; data stays dense and aligned; ASCII marks ([ ], //, +, x) stand in for decoration.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ether - Direction 04 Industrial Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Light (paper) is the primary palette. Dark inverts it when the OS asks for dark, or when toggled. */
+  :root,
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --paper: #ECEAE3;
+    --panel: #F7F6F1;
+    --ink: #0B0B0A;
+    --ink-2: #3A3935;
+    --ink-3: #5C5A52;
+    --rule: #0B0B0A;
+    --hair: rgba(11, 11, 10, .22);
+    --signal: #FF4D00;
+    --signal-ink: #0B0B0A;
+    --ok: #1B7A3E;
+    --ok-ink: #FFFFFF;
+    --add-bg: #D7EFD9;
+    --add-ink: #0F5A26;
+    --del-bg: #F8D8CF;
+    --del-ink: #8A2A08;
+    --hunk-bg: #0B0B0A;
+    --hunk-ink: #ECEAE3;
+    --l-bg: #0B0B0A;
+    --l-ink: #ECEAE3;
+    --focus: #FF4D00;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #0F0F0D;
+      --panel: #171714;
+      --ink: #ECEAE3;
+      --ink-2: #BDBAB0;
+      --ink-3: #9A978C;
+      --rule: #ECEAE3;
+      --hair: rgba(236, 234, 227, .2);
+      --signal: #FF5A1F;
+      --signal-ink: #0B0B0A;
+      --ok: #3DDC84;
+      --ok-ink: #0B0B0A;
+      --add-bg: rgba(61, 220, 132, .14);
+      --add-ink: #7BF0AE;
+      --del-bg: rgba(255, 90, 31, .16);
+      --del-ink: #FFA27E;
+      --hunk-bg: #ECEAE3;
+      --hunk-ink: #0F0F0D;
+      --l-bg: #ECEAE3;
+      --l-ink: #0F0F0D;
+      --focus: #FF5A1F;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #0F0F0D;
+    --panel: #171714;
+    --ink: #ECEAE3;
+    --ink-2: #BDBAB0;
+    --ink-3: #9A978C;
+    --rule: #ECEAE3;
+    --hair: rgba(236, 234, 227, .2);
+    --signal: #FF5A1F;
+    --signal-ink: #0B0B0A;
+    --ok: #3DDC84;
+    --ok-ink: #0B0B0A;
+    --add-bg: rgba(61, 220, 132, .14);
+    --add-ink: #7BF0AE;
+    --del-bg: rgba(255, 90, 31, .16);
+    --del-ink: #FFA27E;
+    --hunk-bg: #ECEAE3;
+    --hunk-ink: #0F0F0D;
+    --l-bg: #ECEAE3;
+    --l-ink: #0F0F0D;
+    --focus: #FF5A1F;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { background: var(--paper); -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 14px/1.5 "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  a { color: inherit; }
+  p { margin: 0; }
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+
+  .ic { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: square; stroke-linejoin: miter; }
+
+  /* Masthead */
+  .masthead {
+    max-width: 1280px; margin: 0 auto; padding: 24px clamp(16px, 3vw, 32px) 16px;
+    display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between;
+    border-bottom: 3px solid var(--rule);
+  }
+  .masthead h1 { font-size: clamp(22px, 3.4vw, 34px); letter-spacing: -.03em; text-transform: uppercase; }
+  .masthead p { color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em; font-size: 12px; margin-top: 6px; }
+  .btn-invert {
+    font: 600 13px/1 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .04em;
+    height: 40px; padding: 0 16px; border: 3px solid var(--rule); background: var(--paper); color: var(--ink); cursor: pointer;
+  }
+  .btn-invert:hover { background: var(--rule); color: var(--paper); }
+
+  main { padding: 0 clamp(16px, 3vw, 32px) 80px; }
+  .frame { max-width: 1280px; margin: 40px auto 0; }
+  .frame-cap {
+    display: grid; grid-template-columns: auto 1fr; align-items: stretch;
+    border: 3px solid var(--rule); border-bottom: 0; background: var(--rule); color: var(--paper);
+  }
+  .frame-cap .cap-no { padding: 8px 14px; font-weight: 700; background: var(--signal); color: var(--signal-ink); border-right: 3px solid var(--rule); }
+  .frame-cap h2 { padding: 8px 14px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; }
+
+  .screen {
+    display: flex; flex-direction: column;
+    border: 3px solid var(--rule); background: var(--paper); min-width: 0;
+  }
+  .screen > * { min-width: 0; }
+
+  /* Controls: bordered blocks, no radius, hard hover state */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px;
+    border: 2px solid var(--rule); background: var(--paper); color: var(--ink);
+    font: 600 13px/1 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .03em;
+    text-decoration: none; cursor: pointer; white-space: nowrap;
+    transition: background .1s, color .1s;
+  }
+  .btn:hover { background: var(--rule); color: var(--paper); }
+  .btn:active { transform: translate(1px, 1px); }
+  .btn-signal { background: var(--signal); color: var(--signal-ink); border-color: var(--rule); box-shadow: 4px 4px 0 var(--rule); }
+  .btn-signal:hover { background: var(--signal); color: var(--signal-ink); box-shadow: 2px 2px 0 var(--rule); transform: translate(2px, 2px); }
+  .btn-merge {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 48px; padding: 0 22px;
+    border: 3px solid var(--rule); background: var(--ok); color: var(--ok-ink); cursor: pointer;
+    font: 700 14px/1 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .04em;
+    box-shadow: 4px 4px 0 var(--rule);
+  }
+  .btn-merge:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--rule); }
+  .btn-merge:focus-visible { outline-offset: 4px; }
+
+  .count { display: inline-block; min-width: 22px; padding: 2px 5px; text-align: center; border: 2px solid currentColor; font-size: 12px; font-weight: 600; line-height: 1.2; }
+  .label-cap { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px;
+    border: 2px solid var(--rule); font: 700 11px/1 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap;
+  }
+  .badge-private { background: var(--rule); color: var(--paper); }
+  .badge-open { background: var(--signal); color: var(--signal-ink); }
+
+  .sq-avatar {
+    width: 32px; height: 32px; flex: none; display: inline-grid; place-items: center;
+    border: 2px solid var(--rule); font: 700 12px/1 "IBM Plex Mono", monospace; background: var(--panel); color: var(--ink);
+  }
+  .sq-avatar.is-signal { background: var(--signal); color: var(--signal-ink); }
+
+  /* Topbar */
+  .topbar {
+    display: flex; flex-wrap: wrap; align-items: stretch; justify-content: space-between; gap: 0;
+    background: var(--rule); color: var(--paper); border-bottom: 3px solid var(--rule);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; padding: 0 16px; min-height: 52px; color: var(--paper); text-decoration: none; }
+  .brand-mark {
+    width: 30px; height: 30px; display: grid; place-items: center; background: var(--signal); color: var(--signal-ink);
+    font: 700 16px/1 "IBM Plex Mono", monospace; border: 2px solid var(--paper);
+  }
+  .brand-word { font-weight: 700; text-transform: uppercase; letter-spacing: .12em; font-size: 15px; }
+  .top-actions { display: flex; flex-wrap: wrap; align-items: stretch; }
+  .top-actions > * { display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; min-height: 52px; color: var(--paper); background: transparent; border: 0; border-left: 2px solid var(--paper); font: 600 13px/1 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .04em; text-decoration: none; cursor: pointer; }
+  .top-actions > *:hover { background: var(--paper); color: var(--rule); }
+  .top-actions > .is-new { background: var(--signal); color: var(--signal-ink); }
+  .top-actions > .is-new:hover { background: var(--paper); color: var(--signal-ink); }
+
+  /* Repo header */
+  .repo-head { padding: 22px 20px 18px; border-bottom: 3px solid var(--rule); display: grid; gap: 12px; }
+  .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: clamp(20px, 3vw, 30px); font-weight: 700; text-transform: uppercase; letter-spacing: -.02em; line-height: 1.1; }
+  .crumbs .sep { color: var(--signal); }
+  .crumbs a { text-decoration: none; }
+  .crumbs a:hover { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
+  .repo-desc { color: var(--ink-2); max-width: 72ch; }
+
+  .tabs { display: flex; flex-wrap: wrap; border-bottom: 3px solid var(--rule); }
+  .tab {
+    display: inline-flex; align-items: center; gap: 10px; padding: 14px 18px; min-height: 52px;
+    border-right: 2px solid var(--rule); color: var(--ink); text-decoration: none; text-transform: uppercase;
+    font-weight: 600; font-size: 13px; letter-spacing: .06em;
+  }
+  .tab:first-child { border-left: 0; }
+  .tab:hover { background: var(--panel); }
+  .tab.is-active { background: var(--rule); color: var(--paper); }
+  .tab.is-active .count { border-color: var(--paper); }
+  .tab .count { color: var(--ink); }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 0; justify-content: space-between; align-items: stretch; border-bottom: 2px solid var(--rule); }
+  .toolbar-group { display: flex; flex-wrap: wrap; align-items: stretch; }
+  .toolbar-group > * { display: inline-flex; align-items: center; gap: 10px; }
+  .branch-pick { padding: 0 16px; min-height: 52px; background: var(--paper); border: 0; border-right: 2px solid var(--rule); font: 600 14px/1 "IBM Plex Mono", monospace; text-transform: uppercase; cursor: pointer; color: var(--ink); }
+  .branch-pick:hover { background: var(--panel); }
+  .branch-pick .ic { width: 16px; height: 16px; }
+  .toolbar-meta { padding: 0 16px; color: var(--ink-3); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .toolbar-group .btn { border: 0; border-left: 2px solid var(--rule); height: auto; min-height: 52px; }
+
+  /* Latest commit */
+  .commitbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 20px;
+    background: var(--panel); border-bottom: 3px solid var(--rule);
+  }
+  .commitbar .author { font-weight: 700; text-transform: uppercase; font-size: 13px; }
+  .commitbar .msg { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+  .sha { font-weight: 600; padding: 4px 8px; border: 2px solid var(--rule); background: var(--paper); text-decoration: none; }
+  .sha:hover { background: var(--rule); color: var(--paper); }
+  .when { color: var(--ink-3); text-transform: uppercase; font-size: 12px; letter-spacing: .06em; white-space: nowrap; }
+
+  /* Layout */
+  .repo-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; }
+  .repo-main { min-width: 0; border-right: 3px solid var(--rule); }
+  .repo-side { min-width: 0; display: flex; flex-direction: column; }
+
+  /* File table */
+  .ft { width: 100%; border-collapse: collapse; }
+  .ft th, .ft td { text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--rule); vertical-align: middle; }
+  .ft th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); background: var(--panel); border-top: 0; }
+  .ft td { font-size: 14px; }
+  .ft tr:last-child td { border-bottom: 0; }
+  .ft tbody tr:hover td { background: var(--rule); color: var(--paper); }
+  .ft tbody tr:hover td .muted { color: var(--paper); }
+  .ft tbody tr:hover a { color: var(--paper); }
+  .ft a { text-decoration: none; font-weight: 600; }
+  .ft a:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  .ft .r { text-align: right; white-space: nowrap; }
+  .ft .muted { color: var(--ink-3); }
+  .ft .dir::before { content: "[+] "; color: var(--signal); font-weight: 600; }
+  .ft .file::before { content: "    "; }
+  .ft .msg { overflow-wrap: anywhere; color: var(--ink-2); }
+  .ft tbody tr:hover .msg { color: var(--paper); }
+  .ft tbody tr:hover .dir::before { color: var(--signal); }
+
+  /* README */
+  .readme { border-top: 3px solid var(--rule); }
+  .readme-head {
+    display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--rule); color: var(--paper);
+    font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em;
+  }
+  .readme-body { padding: 24px 22px 28px; display: grid; gap: 16px; max-width: 72ch; }
+  .readme-body h1 { font-size: 30px; letter-spacing: -.03em; text-transform: uppercase; padding-bottom: 10px; border-bottom: 3px solid var(--rule); }
+  .readme-body h2 { font-size: 16px; text-transform: uppercase; letter-spacing: .06em; }
+  .readme-body p { color: var(--ink-2); }
+  .readme-body ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .readme-body li { display: grid; grid-template-columns: 18px minmax(0, 1fr); color: var(--ink-2); }
+  .readme-body li::before { content: "\25A0"; color: var(--signal); font-size: 11px; line-height: 1.9; }
+  .readme-body pre {
+    margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--rule); color: var(--paper);
+    font: 400 13px/1.7 "IBM Plex Mono", monospace; border: 3px solid var(--rule);
+  }
+  .readme-body pre .cm { color: #A8A59A; }
+  .readme-body pre .pr { color: var(--signal); }
+  .readme-body code { font-size: 13px; }
+
+  /* Side panels */
+  .panel { border-bottom: 3px solid var(--rule); }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px;
+    background: var(--panel); border-bottom: 2px solid var(--rule);
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+  }
+  .panel-body { padding: 16px; display: grid; gap: 12px; }
+  .clone-field {
+    display: flex; align-items: stretch; border: 3px solid var(--rule); background: var(--paper);
+  }
+  .clone-field .prompt { padding: 10px 10px 10px 12px; font-weight: 700; color: var(--signal); border-right: 2px solid var(--rule); display: flex; align-items: center; }
+  .clone-field code { flex: 1; min-width: 0; padding: 10px 10px; font-size: 12.5px; font-weight: 500; overflow-wrap: anywhere; display: flex; align-items: center; }
+  .copy-btn {
+    width: 46px; flex: none; display: grid; place-items: center; border: 0; border-left: 2px solid var(--rule);
+    background: var(--paper); color: var(--ink); cursor: pointer;
+  }
+  .copy-btn:hover { background: var(--signal); color: var(--signal-ink); }
+  .copy-btn:focus-visible { outline-offset: -4px; }
+  .kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0; font-size: 13px; }
+  .kv dt, .kv dd { margin: 0; padding: 8px 0; border-bottom: 1px dashed var(--hair); }
+  .kv dt { color: var(--ink-3); text-transform: uppercase; font-size: 11px; letter-spacing: .08em; padding-right: 14px; }
+  .kv dd { text-align: right; font-weight: 600; }
+  .lang { display: flex; height: 18px; border: 2px solid var(--rule); }
+  .lang span { display: block; height: 100%; }
+  .lang-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .lang-list li { display: flex; justify-content: space-between; gap: 10px; }
+
+  /* Pull request */
+  .pr-head { padding: 22px 20px 18px; display: grid; gap: 12px; border-bottom: 3px solid var(--rule); }
+  .pr-title { font-size: clamp(22px, 3.4vw, 34px); font-weight: 700; text-transform: uppercase; letter-spacing: -.02em; line-height: 1.12; }
+  .pr-title .num { color: var(--signal); }
+  .pr-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; font-size: 13px; color: var(--ink-2); }
+  .pr-sub b { color: var(--ink); }
+  .ref { border: 2px solid var(--rule); padding: 3px 8px; font-weight: 600; background: var(--panel); color: var(--ink); }
+  .pr-tabs { display: flex; flex-wrap: wrap; border-bottom: 3px solid var(--rule); }
+  .pr-thread { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+  .post { display: grid; grid-template-columns: 56px minmax(0, 1fr); border-bottom: 3px solid var(--rule); }
+  .post-side { border-right: 3px solid var(--rule); padding: 14px 0; display: flex; justify-content: center; align-items: flex-start; background: var(--panel); }
+  .post-main { min-width: 0; }
+  .post-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 16px;
+    background: var(--panel); border-bottom: 2px solid var(--rule); font-size: 13px;
+  }
+  .post-head b { text-transform: uppercase; letter-spacing: .04em; }
+  .post-head span { color: var(--ink-3); text-transform: uppercase; font-size: 11px; letter-spacing: .08em; }
+  .post-body { padding: 16px; display: grid; gap: 12px; max-width: 80ch; }
+  .post-body p { color: var(--ink-2); }
+  .post-body code { font-weight: 600; background: var(--panel); border: 1px solid var(--hair); padding: 0 4px; color: var(--ink); }
+
+  .merge-box { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px 18px; align-items: center; padding: 20px; border-bottom: 3px solid var(--rule); background: var(--panel); }
+  .merge-mark {
+    width: 44px; height: 44px; display: grid; place-items: center; border: 3px solid var(--rule); background: var(--ok); color: var(--ok-ink);
+    font: 700 16px/1 "IBM Plex Mono", monospace;
+  }
+  .merge-box h2 { font-size: 16px; text-transform: uppercase; letter-spacing: .02em; }
+  .merge-box p { color: var(--ink-3); font-size: 13px; margin-top: 4px; }
+  .merge-box .checks { margin-top: 8px; font-size: 12px; color: var(--ink-2); display: grid; gap: 2px; }
+
+  /* Diff */
+  .diff-wrap { border-bottom: 0; }
+  .diff-head {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px;
+    padding: 10px 16px; background: var(--rule); color: var(--paper);
+  }
+  .diff-file { font-weight: 600; overflow-wrap: anywhere; }
+  .stat { display: inline-flex; gap: 12px; font-weight: 700; font-size: 13px; }
+  .stat .a { color: var(--ok); }
+  .stat .d { color: var(--signal); }
+  .diff-scroll { overflow-x: auto; }
+  .diff { width: 100%; min-width: 640px; border-collapse: collapse; font: 400 13px/1.75 "IBM Plex Mono", monospace; }
+  .diff td { padding: 0 10px; white-space: pre; vertical-align: top; }
+  .diff td.ln { width: 48px; text-align: right; color: var(--ink-3); background: var(--panel); user-select: none; border-right: 2px solid var(--rule); padding-right: 8px; }
+  .diff td.sg { width: 26px; text-align: center; font-weight: 700; user-select: none; }
+  .diff td.code { width: 100%; }
+  .diff tr.add td { background: var(--add-bg); }
+  .diff tr.add td.sg { color: var(--add-ink); }
+  .diff tr.add td.ln { background: var(--add-bg); }
+  .diff tr.del td { background: var(--del-bg); }
+  .diff tr.del td.sg { color: var(--del-ink); }
+  .diff tr.del td.ln { background: var(--del-bg); }
+  .diff tr.hunk td { background: var(--hunk-bg); color: var(--hunk-ink); padding: 4px 10px; font-weight: 600; }
+  .diff tr:hover td:not(.ln):not(.sg) { box-shadow: inset 0 0 0 9999px rgba(127, 127, 127, .07); }
+
+  /* Issues */
+  .issues-head { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: space-between; border-bottom: 3px solid var(--rule); }
+  .issues-head h1 { font-size: clamp(22px, 3.4vw, 32px); text-transform: uppercase; letter-spacing: -.02em; padding: 18px 20px; }
+  .issues-head h1 span { color: var(--ink-3); font-weight: 400; font-size: 0.6em; }
+  .issue-actions { display: flex; flex-wrap: wrap; align-items: stretch; }
+  .seg { display: flex; border-left: 3px solid var(--rule); }
+  .seg button {
+    display: inline-flex; align-items: center; gap: 10px; padding: 0 18px; min-height: 56px; border: 0; border-right: 2px solid var(--rule);
+    background: var(--paper); color: var(--ink); font: 600 14px/1 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .04em; cursor: pointer;
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button:hover { background: var(--panel); }
+  .seg button[aria-pressed="true"] { background: var(--rule); color: var(--paper); }
+  .seg button[aria-pressed="true"] .count { border-color: var(--paper); }
+  .new-issue { min-height: 56px; padding: 0 22px; border: 0; border-left: 3px solid var(--rule); background: var(--signal); color: var(--signal-ink); font: 700 14px/1 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; }
+  .new-issue:hover { background: var(--rule); color: var(--paper); }
+
+  .filterbar { display: flex; flex-wrap: wrap; align-items: stretch; border-bottom: 2px solid var(--rule); }
+  .filterbar label { flex: 1 1 280px; display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 48px; background: var(--panel); border-right: 2px solid var(--rule); font-size: 13px; }
+  .filterbar label span { font-weight: 700; color: var(--signal); }
+  .filterbar input {
+    flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: 500 13.5px/1 "IBM Plex Mono", monospace; padding: 14px 0;
+  }
+  .filterbar input:focus-visible { outline: none; }
+  .filterbar label:focus-within { background: var(--paper); box-shadow: inset 0 -3px 0 var(--signal); }
+  .filterbar .meta { display: flex; align-items: center; padding: 0 16px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); }
+
+  .issue-list { list-style: none; margin: 0; padding: 0; }
+  .issue-list li + li { border-top: 2px solid var(--rule); }
+  .issue {
+    display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 0; align-items: stretch;
+    text-decoration: none; color: var(--ink); min-height: 72px;
+  }
+  .issue-state { display: grid; place-items: center; border-right: 2px solid var(--rule); font: 700 16px/1 "IBM Plex Mono", monospace; }
+  .issue-state.open { background: var(--signal); color: var(--signal-ink); }
+  .issue-state.closed { background: var(--paper); color: var(--ink); }
+  .issue-main { padding: 12px 16px; min-width: 0; display: grid; gap: 6px; align-content: center; }
+  .issue-title { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+  .issue-meta { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+  .issue-meta b { color: var(--ink); font-weight: 600; }
+  .issue-side { display: flex; align-items: center; gap: 12px; padding: 0 16px; border-left: 2px solid var(--rule); font-weight: 600; font-size: 13px; }
+  .issue:hover { background: var(--panel); }
+  .issue:hover .issue-title { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  .issue:hover .issue-state.closed { background: var(--rule); color: var(--paper); }
+  .tags { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 8px; vertical-align: middle; }
+  .tag { display: inline-block; border: 2px solid var(--rule); padding: 1px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; background: var(--paper); color: var(--ink); }
+  .tag.is-hot { background: var(--l-bg); color: var(--l-ink); }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .repo-grid { grid-template-columns: minmax(0, 1fr); }
+    .repo-main { border-right: 0; }
+    .repo-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); border-top: 3px solid var(--rule); }
+    .repo-side .panel { border-right: 3px solid var(--rule); }
+  }
+  @media (max-width: 640px) {
+    .topbar, .top-actions { width: 100%; }
+    .top-actions > * { flex: 1 1 auto; justify-content: center; padding: 0 12px; }
+    .tab { flex: 1 1 auto; justify-content: center; padding: 12px 10px; }
+    .toolbar-group { width: 100%; }
+    .toolbar-group .btn { flex: 1; justify-content: center; }
+    .toolbar-group .toolbar-meta { display: none; }
+    .branch-pick { flex: 1; }
+    .ft .hide-xs, .ft th.hide-xs { display: none; }
+    .ft th, .ft td { padding: 9px 10px; }
+    .post { grid-template-columns: 1fr; }
+    .post-side { border-right: 0; border-bottom: 2px solid var(--rule); justify-content: flex-start; padding: 10px 16px; }
+    .merge-box { grid-template-columns: minmax(0, 1fr); }
+    .merge-box .btn-merge { width: 100%; }
+    .issue { grid-template-columns: 40px minmax(0, 1fr); }
+    .issue-side { grid-column: 2; border-left: 0; border-top: 2px solid var(--rule); padding: 8px 16px; }
+    .seg { width: 100%; border-left: 0; border-top: 3px solid var(--rule); }
+    .seg button { flex: 1; justify-content: center; }
+    .new-issue { width: 100%; border-left: 0; border-top: 3px solid var(--rule); }
+    .issues-head h1 { padding-bottom: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12"/><path d="M4 16V4h12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+  </defs>
+</svg>
+
+<header class="masthead">
+  <div>
+    <h1>Ether UI // Direction 04</h1>
+    <p>Industrial terminal. Paper, black rules, one signal colour.</p>
+  </div>
+  <button class="btn-invert" id="theme" type="button" aria-pressed="false">[ Invert to dark ]</button>
+</header>
+
+<main>
+
+  <!-- SCREEN 01: REPOSITORY CODE VIEW -->
+  <section class="frame" aria-labelledby="f1">
+    <div class="frame-cap"><span class="cap-no">01</span><h2 id="f1">Repository // code view</h2></div>
+    <div class="screen">
+
+      <nav class="topbar" aria-label="Global">
+        <a class="brand" href="#"><span class="brand-mark" aria-hidden="true">E</span><span class="brand-word">Ether</span></a>
+        <div class="top-actions">
+          <a href="#" class="is-new">+ New repository</a>
+          <a href="#">ADMIN [v]</a>
+        </div>
+      </nav>
+
+      <div class="repo-head">
+        <div class="crumbs">
+          <a href="#">admin</a><span class="sep">/</span><a href="#">ether-core</a>
+          <span class="badge badge-private">Private</span>
+        </div>
+        <p class="repo-desc">Server, web client and git transport for Ether. Invite-only, one machine, no public ports.</p>
+      </div>
+
+      <nav class="tabs" aria-label="Repository">
+        <a href="#" class="tab is-active" aria-current="page">Code</a>
+        <a href="#" class="tab">Issues <span class="count">5</span></a>
+        <a href="#" class="tab">Pull requests <span class="count">1</span></a>
+        <a href="#" class="tab">Settings</a>
+      </nav>
+
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <button class="branch-pick" type="button" aria-haspopup="listbox">Branch: main [v]</button>
+          <span class="toolbar-meta">4 branches // 2 tags</span>
+        </div>
+        <div class="toolbar-group">
+          <a href="#" class="btn">Commits <span class="count">214</span></a>
+        </div>
+      </div>
+
+      <div class="commitbar">
+        <span class="author">mira</span>
+        <span class="msg">Harden session cookie rotation on login</span>
+        <a href="#" class="sha">3f9a1c2</a>
+        <span class="when">2 hours ago</span>
+      </div>
+
+      <div class="repo-grid">
+        <div class="repo-main">
+          <table class="ft">
+            <thead>
+              <tr><th scope="col">Name</th><th scope="col" class="hide-xs">Last commit</th><th scope="col" class="hide-xs">Updated</th><th scope="col" class="r">Size</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><a href="#" class="dir">src/</a></td><td class="msg hide-xs">Add invite token table and consume flow</td><td class="muted hide-xs">2 hours ago</td><td class="r muted"></td></tr>
+              <tr><td><a href="#" class="dir">e2e/</a></td><td class="msg hide-xs">Cover expired invites in signup spec</td><td class="muted hide-xs">yesterday</td><td class="r muted"></td></tr>
+              <tr><td><a href="#" class="dir">drizzle/</a></td><td class="msg hide-xs">Migration 0004: invites table</td><td class="muted hide-xs">2 hours ago</td><td class="r muted"></td></tr>
+              <tr><td><a href="#" class="file">README.md</a></td><td class="msg hide-xs">Document invite-only setup</td><td class="muted hide-xs">5 days ago</td><td class="r">4.2 KB</td></tr>
+              <tr><td><a href="#" class="file">package.json</a></td><td class="msg hide-xs">Bump drizzle-orm to 0.44</td><td class="muted hide-xs">3 days ago</td><td class="r">1.8 KB</td></tr>
+              <tr><td><a href="#" class="file">tsconfig.json</a></td><td class="msg hide-xs">Strict mode and path aliases</td><td class="muted hide-xs">3 weeks ago</td><td class="r">612 B</td></tr>
+            </tbody>
+          </table>
+
+          <article class="readme">
+            <div class="readme-head">README.md</div>
+            <div class="readme-body">
+              <h1>ether-core</h1>
+              <p>Ether is a small, self-hosted git host for a handful of friends. Repositories live on disk as bare git repos. This package holds the HTTP server, the web UI and the invite flow that gates signup.</p>
+              <h2>Quick start</h2>
+              <pre><code><span class="cm"># needs Node 22 and pnpm</span>
+pnpm install
+pnpm db:migrate
+pnpm dev     <span class="cm"># http://localhost:4000</span></code></pre>
+              <ul>
+                <li>Invite-only registration, single-use tokens that expire after 7 days</li>
+                <li>Smart HTTP git transport, so friends clone with a login and no SSH keys</li>
+                <li>One process, one SQLite file, no public ports</li>
+              </ul>
+            </div>
+          </article>
+        </div>
+
+        <aside class="repo-side">
+          <section class="panel" aria-labelledby="clone-h">
+            <div class="panel-head"><span id="clone-h">Clone</span><span class="label-cap">HTTPS</span></div>
+            <div class="panel-body">
+              <div class="clone-field">
+                <span class="prompt">$</span>
+                <code>https://pc.tail576a27.ts.net/admin/ether-core.git</code>
+                <button class="copy-btn" type="button" aria-label="Copy clone URL"><svg class="ic"><use href="#i-copy"/></svg></button>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="lang-h">
+            <div class="panel-head"><span id="lang-h">Languages</span><span class="label-cap">214 commits</span></div>
+            <div class="panel-body">
+              <div class="lang" aria-hidden="true">
+                <span style="width:91%;background:var(--ink)"></span>
+                <span style="width:6%;background:var(--signal)"></span>
+                <span style="width:3%;background:var(--hair)"></span>
+              </div>
+              <ul class="lang-list">
+                <li><span>TypeScript</span><span>91.0%</span></li>
+                <li><span>SQL</span><span>6.1%</span></li>
+                <li><span>CSS</span><span>2.9%</span></li>
+              </ul>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="act-h">
+            <div class="panel-head"><span id="act-h">Activity</span><span class="label-cap">main</span></div>
+            <div class="panel-body">
+              <dl class="kv">
+                <dt>Last push</dt><dd>2 hours ago</dd>
+                <dt>Branches</dt><dd>4</dd>
+                <dt>Tags</dt><dd>2</dd>
+                <dt>Open PRs</dt><dd>1</dd>
+              </dl>
+            </div>
+          </section>
+        </aside>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SCREEN 02: PULL REQUEST -->
+  <section class="frame" aria-labelledby="f2">
+    <div class="frame-cap"><span class="cap-no">02</span><h2 id="f2">Pull request // conversation and diff</h2></div>
+    <div class="screen">
+
+      <nav class="topbar" aria-label="Global">
+        <a class="brand" href="#"><span class="brand-mark" aria-hidden="true">E</span><span class="brand-word">Ether</span></a>
+        <div class="top-actions">
+          <a href="#" class="is-new">+ New repository</a>
+          <a href="#">ADMIN [v]</a>
+        </div>
+      </nav>
+
+      <header class="pr-head">
+        <div class="crumbs" style="font-size:13px;letter-spacing:.06em;"><a href="#">admin / ether-core</a></div>
+        <h1 class="pr-title">Add invite-only registration <span class="num">#12</span></h1>
+        <div class="pr-sub">
+          <span class="badge badge-open">Open</span>
+          <span><b>admin</b> wants to merge <span class="ref">feature/invites</span> into <span class="ref">main</span></span>
+          <span>// opened 1 day ago</span>
+        </div>
+      </header>
+
+      <nav class="pr-tabs tabs" aria-label="Pull request">
+        <a href="#" class="tab is-active" aria-current="page">Conversation</a>
+        <a href="#" class="tab">Commits <span class="count">3</span></a>
+        <a href="#" class="tab">Files changed <span class="count">3</span></a>
+      </nav>
+
+      <div class="pr-thread">
+        <article class="post">
+          <div class="post-side"><span class="sq-avatar is-signal">AD</span></div>
+          <div class="post-main">
+            <div class="post-head"><b>admin</b><span>commented 1 day ago</span></div>
+            <div class="post-body">
+              <p>Replaces open signup. Admins mint an invite, it goes to one friend, and it is single use and expires after 7 days. Tokens are stored as SHA-256 hashes, so a leaked database dump does not leak live invites.</p>
+              <p>Covered by the new e2e spec for expired and reused tokens.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="post">
+          <div class="post-side"><span class="sq-avatar">MI</span></div>
+          <div class="post-main">
+            <div class="post-head"><b>mira</b><span>commented 5 hours ago</span></div>
+            <div class="post-body">
+              <p>Looks right. Can we make the claim atomic? Right now <code>consumeInvite</code> checks <code>usedAt</code> and then updates it, so two friends opening the same link at once could both pass the check. Moving the check into the <code>UPDATE ... WHERE</code> closes that gap.</p>
+            </div>
+          </div>
+        </article>
+
+        <section class="merge-box" aria-labelledby="merge-h">
+          <span class="merge-mark" aria-hidden="true">OK</span>
+          <div>
+            <h2 id="merge-h">This branch has no conflicts with the base branch</h2>
+            <p>Merging can be performed automatically.</p>
+            <div class="checks">
+              <span>[x] 14 checks passed</span>
+              <span>[x] Review not required</span>
+            </div>
+          </div>
+          <button class="btn-merge" type="button">Merge pull request</button>
+        </section>
+
+        <figure class="diff-wrap" style="margin:0;">
+          <figcaption class="diff-head">
+            <span class="diff-file">src/server/invites.ts</span>
+            <span class="stat"><span class="a">+8</span><span class="d">-2</span></span>
+          </figcaption>
+          <div class="diff-scroll">
+            <table class="diff">
+              <tbody>
+                <tr class="hunk"><td class="ln"></td><td class="ln"></td><td class="sg"></td><td class="code">@@ -19,5 +19,11 @@ export async function consumeInvite(db: Db, token: string)</td></tr>
+                <tr><td class="ln">19</td><td class="ln">19</td><td class="sg"> </td><td class="code">  const hash = sha256(token);</td></tr>
+                <tr class="del"><td class="ln">20</td><td class="ln"></td><td class="sg">-</td><td class="code">  const row = await db.query.invites.findFirst({ where: eq(invites.hash, hash) });</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">20</td><td class="sg">+</td><td class="code">  const row = await db.query.invites.findFirst({</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">21</td><td class="sg">+</td><td class="code">    where: and(eq(invites.hash, hash), isNull(invites.usedAt)),</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">22</td><td class="sg">+</td><td class="code">  });</td></tr>
+                <tr><td class="ln">21</td><td class="ln">23</td><td class="sg"> </td><td class="code">  if (!row || row.expiresAt &lt; now()) throw new InviteError("invalid");</td></tr>
+                <tr class="del"><td class="ln">22</td><td class="ln"></td><td class="sg">-</td><td class="code">  await db.update(invites).set({ usedAt: now() }).where(eq(invites.id, row.id));</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">24</td><td class="sg">+</td><td class="code">  const claimed = await db.update(invites)</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">25</td><td class="sg">+</td><td class="code">    .set({ usedAt: now() })</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">26</td><td class="sg">+</td><td class="code">    .where(and(eq(invites.id, row.id), isNull(invites.usedAt)))</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">27</td><td class="sg">+</td><td class="code">    .returning();</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">28</td><td class="sg">+</td><td class="code">  if (claimed.length === 0) throw new InviteError("already-used");</td></tr>
+                <tr><td class="ln">23</td><td class="ln">29</td><td class="sg"> </td><td class="code">  return row;</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </figure>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SCREEN 03: ISSUES LIST -->
+  <section class="frame" aria-labelledby="f3">
+    <div class="frame-cap"><span class="cap-no">03</span><h2 id="f3">Issues // list</h2></div>
+    <div class="screen">
+
+      <nav class="topbar" aria-label="Global">
+        <a class="brand" href="#"><span class="brand-mark" aria-hidden="true">E</span><span class="brand-word">Ether</span></a>
+        <div class="top-actions">
+          <a href="#" class="is-new">+ New repository</a>
+          <a href="#">ADMIN [v]</a>
+        </div>
+      </nav>
+
+      <div class="issues-head">
+        <h1>ether-core <span>/ issues</span></h1>
+        <div class="issue-actions">
+          <div class="seg" role="group" aria-label="Filter by state">
+            <button type="button" aria-pressed="true">Open <span class="count">5</span></button>
+            <button type="button" aria-pressed="false">Closed <span class="count">9</span></button>
+          </div>
+          <button class="new-issue" type="button">+ New issue</button>
+        </div>
+      </div>
+
+      <div class="filterbar">
+        <label>
+          <span>FILTER</span>
+          <input type="search" value="is:issue is:open" aria-label="Search issues">
+        </label>
+        <div class="meta">5 shown</div>
+      </div>
+
+      <ol class="issue-list">
+        <li>
+          <a href="#" class="issue">
+            <span class="issue-state open" aria-label="Open">[o]</span>
+            <div class="issue-main">
+              <div class="issue-title">Session cookies vanish after a server restart<span class="tags"><span class="tag is-hot">bug</span></span></div>
+              <div class="issue-meta">#14 opened 3 days ago by <b>kat</b></div>
+            </div>
+            <span class="issue-side">[4] comments</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="issue">
+            <span class="issue-state open" aria-label="Open">[o]</span>
+            <div class="issue-main">
+              <div class="issue-title">Show LFS pointers as a placeholder in the file browser<span class="tags"><span class="tag">enhancement</span></span></div>
+              <div class="issue-meta">#13 opened 3 days ago by <b>jonas</b></div>
+            </div>
+            <span class="issue-side">[2] comments</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="issue">
+            <span class="issue-state open" aria-label="Open">[o]</span>
+            <div class="issue-main">
+              <div class="issue-title">Invite emails with a copy-paste fallback<span class="tags"><span class="tag">enhancement</span><span class="tag">docs</span></span></div>
+              <div class="issue-meta">#11 opened 4 days ago by <b>mira</b></div>
+            </div>
+            <span class="issue-side">[0] comments</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="issue">
+            <span class="issue-state open" aria-label="Open">[o]</span>
+            <div class="issue-main">
+              <div class="issue-title">Rate-limit the clone endpoint per token<span class="tags"><span class="tag is-hot">security</span></span></div>
+              <div class="issue-meta">#10 opened 4 days ago by <b>admin</b></div>
+            </div>
+            <span class="issue-side">[1] comment</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="issue">
+            <span class="issue-state open" aria-label="Open">[o]</span>
+            <div class="issue-main">
+              <div class="issue-title">Add an e2e case for signup with an expired invite</div>
+              <div class="issue-meta">#9 opened 5 days ago by <b>kat</b></div>
+            </div>
+            <span class="issue-side">[3] comments</span>
+          </a>
+        </li>
+      </ol>
+
+    </div>
+  </section>
+
+</main>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById('theme');
+    var darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    function isDark() {
+      return root.dataset.theme ? root.dataset.theme === 'dark' : darkQuery.matches;
+    }
+    function sync() {
+      var dark = isDark();
+      btn.textContent = dark ? '[ Invert to paper ]' : '[ Invert to dark ]';
+      btn.setAttribute('aria-pressed', String(dark));
+    }
+    btn.addEventListener('click', function () {
+      root.dataset.theme = isDark() ? 'light' : 'dark';
+      sync();
+    });
+    sync();
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,1059 @@
+<!doctype html>
+<!--
+  Direction 03: Monochrome precision. Ether, round 2.
+  Layout: top header with a breadcrumb project switcher, horizontal sub-nav, one content column with a 264px side column on desktop.
+  Palette: near-white and near-black surfaces, 1px hairlines, semantic state colours only, one blue for links and focus.
+  Type: Geist for UI, Geist Mono for code, shas, paths and branch names. Steps of 12, 14, 16, 20, 24 on an 8px grid.
+  Distinct: restraint. Hierarchy comes from weight, spacing and hairlines. No fills, gradients or shadows beyond popovers.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ether, direction 03: Monochrome precision</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Tokens: light is the default. Dark is repeated twice, once for the OS preference and once for an explicit choice. */
+  :root {
+    --bg: #ffffff;
+    --surface: #fafafa;
+    --surface-2: #f4f4f5;
+    --hover: #f4f4f5;
+    --active: #e9e9eb;
+    --border: #e5e5e5;
+    --border-strong: #d4d4d4;
+    --control-border: #8f8f99;
+    --fg: #0a0a0a;
+    --fg-2: #4d4d55;
+    --fg-3: #6b6b73;
+    --accent: #0b5cc4;
+    --primary: #0a0a0a;
+    --primary-fg: #ffffff;
+    --primary-hover: #2b2b2e;
+    --open: #17692d;
+    --open-bg: #eaf6ee;
+    --merged: #6639ba;
+    --merged-bg: #f3edfc;
+    --closed: #b42318;
+    --closed-bg: #fdecea;
+    --add: #116329;
+    --add-bg: #e9f7ee;
+    --del: #a40e26;
+    --del-bg: #fdeff0;
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--border);
+    --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px; --s8: 32px;
+    --t-meta: 12px; --t-body: 14px; --t-section: 16px; --t-title: 20px; --t-doc: 24px;
+    --radius: 6px;
+    --radius-lg: 8px;
+    --ease: 150ms ease;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface-2: #171717;
+      --hover: #1c1c1f;
+      --active: #26262a;
+      --border: #262626;
+      --border-strong: #363639;
+      --control-border: #6e6e7a;
+      --fg: #ededed;
+      --fg-2: #a1a1aa;
+      --fg-3: #8b8b94;
+      --accent: #6cb2ff;
+      --primary: #ededed;
+      --primary-fg: #0a0a0a;
+      --primary-hover: #d4d4d8;
+      --open: #3fb950;
+      --open-bg: #0f2918;
+      --merged: #b392f0;
+      --merged-bg: #231a3a;
+      --closed: #ff7b72;
+      --closed-bg: #3a1517;
+      --add: #7ee2a0;
+      --add-bg: #0f2b1b;
+      --del: #ffa198;
+      --del-bg: #351619;
+      --shadow: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border);
+      --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface-2: #171717;
+    --hover: #1c1c1f;
+    --active: #26262a;
+    --border: #262626;
+    --border-strong: #363639;
+    --control-border: #6e6e7a;
+    --fg: #ededed;
+    --fg-2: #a1a1aa;
+    --fg-3: #8b8b94;
+    --accent: #6cb2ff;
+    --primary: #ededed;
+    --primary-fg: #0a0a0a;
+    --primary-hover: #d4d4d8;
+    --open: #3fb950;
+    --open-bg: #0f2918;
+    --merged: #b392f0;
+    --merged-bg: #231a3a;
+    --closed: #ff7b72;
+    --closed-bg: #3a1517;
+    --add: #7ee2a0;
+    --add-bg: #0f2b1b;
+    --del: #ffa198;
+    --del-bg: #351619;
+    --shadow: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border);
+    --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: var(--t-body);
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+    overflow-wrap: anywhere;
+  }
+  h1, h2, h3, p, ul, ol, figure { margin: 0; }
+  ul, ol { padding: 0; list-style: none; }
+  a { color: var(--accent); text-decoration: none; cursor: pointer; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled, input:disabled { cursor: not-allowed; }
+  :focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--radius); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .mono, code, .sha, .path { font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .num { font-variant-numeric: tabular-nums; }
+  .muted { color: var(--fg-3); }
+  .strong { font-weight: 600; color: var(--fg); }
+  .meta { font-size: var(--t-meta); line-height: 16px; color: var(--fg-3); font-variant-numeric: tabular-nums; }
+  .only-sm { display: none !important; }
+
+  .i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .i-20 { width: 20px; height: 20px; }
+
+  /* Stage and frame labels */
+  .stage { max-width: 1280px; margin: 0 auto; padding: var(--s8) var(--s6) 96px; display: flex; flex-direction: column; gap: 56px; }
+  .stage-head { display: flex; flex-direction: column; gap: var(--s2); }
+  .stage-head h1 { font-size: var(--t-section); font-weight: 600; }
+  .frame { min-width: 0; display: flex; flex-direction: column; gap: var(--s3); }
+  .frame-label { display: flex; align-items: baseline; gap: var(--s2); font-size: var(--t-meta); line-height: 16px; color: var(--fg-3); }
+  .frame-label strong { color: var(--fg); font-weight: 600; font-size: var(--t-body); }
+  .app { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); }
+  .state-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s6); align-items: start; }
+  .state-card { min-width: 0; display: flex; flex-direction: column; gap: var(--s3); }
+  .state-well { min-width: 0; border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); padding: var(--s6); background: var(--surface); min-height: 200px; }
+
+  /* Global header */
+  .gh { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); height: 56px; padding: 0 var(--s4); border-bottom: 1px solid var(--border); min-width: 0; }
+  .gh-left, .gh-right { display: flex; align-items: center; gap: var(--s4); min-width: 0; }
+  .logo { display: inline-flex; align-items: center; gap: var(--s2); color: var(--fg); font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
+  .logo:hover { text-decoration: none; }
+  .logo-mark { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--fg); position: relative; flex: none; }
+  .logo-mark::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--fg); }
+  .gnav { display: flex; align-items: center; gap: var(--s1); }
+  .gnav a { display: inline-flex; align-items: center; height: 32px; padding: 0 var(--s2); border-radius: var(--radius); color: var(--fg-2); transition: color var(--ease), background-color var(--ease); }
+  .gnav a:hover { color: var(--fg); background: var(--hover); text-decoration: none; }
+  .gnav a[aria-current="page"] { color: var(--fg); }
+  .search { position: relative; display: flex; align-items: center; width: 240px; min-width: 0; }
+  .search .i { position: absolute; left: var(--s3); color: var(--fg-3); pointer-events: none; }
+  .search input { width: 100%; height: 32px; padding: 0 56px 0 36px; border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--bg); transition: border-color var(--ease); }
+  .search input::placeholder { color: var(--fg-3); }
+  .search input:hover { border-color: var(--control-border); }
+  .search kbd { position: absolute; right: var(--s2); font-family: "Geist Mono", ui-monospace, monospace; font-size: var(--t-meta); line-height: 16px; color: var(--fg-3); border: 1px solid var(--border); border-radius: 4px; padding: 0 var(--s1); background: var(--surface); }
+  .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--fg-2); transition: background-color var(--ease), color var(--ease); flex: none; }
+  .icon-btn:hover { background: var(--hover); color: var(--fg); }
+  .icon-btn:active { background: var(--active); }
+  .icon-btn:disabled { opacity: 0.4; }
+  .user { display: inline-flex; align-items: center; gap: var(--s2); height: 32px; padding: 0 var(--s2) 0 var(--s1); border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--fg); transition: background-color var(--ease); }
+  .user:hover { background: var(--hover); }
+  .avatar { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--fg-2); font-size: var(--t-meta); font-weight: 500; flex: none; }
+  .avatar.lg { width: 32px; height: 32px; font-size: var(--t-body); }
+  .user-name { font-size: var(--t-body); }
+
+  /* Repository header and project switcher */
+  .repo-head { padding: var(--s6) var(--s6) 0; display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
+  .crumb { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2); font-size: var(--t-section); line-height: 24px; min-width: 0; }
+  .crumb a { color: var(--fg-2); }
+  .crumb a:hover { color: var(--fg); }
+  .crumb .sep { color: var(--fg-3); }
+  .crumb .current { font-weight: 600; color: var(--fg); }
+  .crumb-switch { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--fg-3); }
+  .crumb-switch:hover { background: var(--hover); color: var(--fg); }
+  .badge-private { display: inline-flex; align-items: center; gap: var(--s1); height: 20px; padding: 0 var(--s2); border: 1px solid var(--border-strong); border-radius: 999px; font-size: var(--t-meta); color: var(--fg-2); font-weight: 500; }
+  .repo-desc { color: var(--fg-2); }
+
+  .subnav { display: flex; gap: var(--s4); padding: 0 var(--s6); margin-top: var(--s4); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+  .subnav::-webkit-scrollbar { display: none; }
+  .subnav a { display: inline-flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s1) 11px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--fg-2); font-weight: 500; white-space: nowrap; transition: color var(--ease), border-color var(--ease); }
+  .subnav a:hover { color: var(--fg); text-decoration: none; }
+  .subnav a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--fg); }
+  .count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 var(--s1); border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--fg-2); font-size: var(--t-meta); font-weight: 500; font-variant-numeric: tabular-nums; }
+  a[aria-current="page"] .count { color: var(--fg); }
+
+  .repo-body { padding: var(--s6); display: grid; grid-template-columns: minmax(0, 1fr) 232px; gap: var(--s8); align-items: start; }
+  .main-col { min-width: 0; display: flex; flex-direction: column; gap: var(--s4); }
+  .toolbar { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2); min-width: 0; }
+  .spacer { flex: 1 1 0; }
+
+  /* Buttons and inputs */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--s2); height: 32px; padding: 0 var(--s3); border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--bg); color: var(--fg); font-weight: 500; white-space: nowrap; transition: background-color var(--ease), border-color var(--ease), color var(--ease); }
+  .btn:hover { background: var(--hover); border-color: var(--control-border); }
+  .btn:active { background: var(--active); }
+  .btn:disabled, .btn:disabled:hover { opacity: 0.45; background: var(--bg); border-color: var(--border-strong); }
+  .btn-primary { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); }
+  .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+  .btn-primary:active { background: var(--primary-hover); opacity: 0.9; }
+  .btn.btn-primary:disabled, .btn.btn-primary:disabled:hover { background: var(--primary); border-color: var(--primary); }
+  .btn-ghost { border-color: transparent; background: transparent; }
+  .btn-ghost:hover { background: var(--hover); border-color: transparent; }
+  .btn .i { color: var(--fg-2); }
+  .btn-primary .i { color: inherit; }
+  .btn.is-focus, .icon-btn.is-focus { box-shadow: var(--focus); }
+  .btn:not(.btn-primary)[aria-expanded="true"] { background: var(--active); }
+
+  .input-group { display: flex; align-items: stretch; min-width: 0; height: 32px; border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--bg); transition: border-color var(--ease); }
+  .input-group:hover { border-color: var(--control-border); }
+  .input-group:focus-within { box-shadow: var(--focus); }
+  .input-group .input-label { display: inline-flex; align-items: center; padding: 0 var(--s3); border-right: 1px solid var(--border); color: var(--fg-2); font-size: var(--t-meta); font-weight: 500; background: var(--surface); border-radius: var(--radius) 0 0 var(--radius); white-space: nowrap; }
+  .input-group input { flex: 1 1 auto; min-width: 0; width: 100%; padding: 0 var(--s3); border: 0; background: transparent; outline: none; }
+  .input-group input::placeholder { color: var(--fg-3); }
+  .input-group input:focus-visible { outline: none; box-shadow: none; }
+  .input-group .icon-btn { width: 32px; height: 30px; border-radius: 0 var(--radius) var(--radius) 0; border: 0; border-left: 1px solid var(--border); }
+  .input-group input.mono { font-size: 13px; }
+
+  .field-label { display: block; margin-bottom: var(--s1); font-weight: 500; font-size: var(--t-meta); color: var(--fg-2); }
+  .field-label-row { font-size: var(--t-body); color: var(--fg); }
+  .help { font-size: var(--t-meta); line-height: 16px; color: var(--fg-3); }
+  .textarea { width: 100%; min-height: 96px; padding: var(--s3); border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--bg); resize: vertical; transition: border-color var(--ease); }
+  .textarea:hover { border-color: var(--control-border); }
+  .textarea:focus-visible { outline: none; box-shadow: var(--focus); }
+
+  .segmented { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+  .segmented button { display: inline-flex; align-items: center; gap: var(--s2); height: 28px; padding: 0 var(--s3); border: 0; border-radius: 6px; background: transparent; color: var(--fg-2); font-weight: 500; white-space: nowrap; transition: background-color var(--ease), color var(--ease); }
+  .segmented button:hover { color: var(--fg); background: var(--hover); }
+  .segmented button[aria-pressed="true"] { background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--control-border), 0 1px 2px rgba(0, 0, 0, 0.06); }
+  .segmented button:disabled { opacity: 0.45; }
+  .segmented .count { background: transparent; border: 0; min-width: 0; padding: 0; }
+  .segmented button[aria-pressed="true"] .count { color: var(--fg); }
+
+  /* Badges and state icons */
+  .badge { display: inline-flex; align-items: center; gap: var(--s1); height: 24px; padding: 0 var(--s2); border-radius: 999px; font-size: var(--t-meta); font-weight: 500; white-space: nowrap; }
+  .badge .i { width: 16px; height: 16px; }
+  .badge-open { color: var(--open); background: var(--open-bg); }
+  .badge-merged { color: var(--merged); background: var(--merged-bg); }
+  .badge-closed { color: var(--closed); background: var(--closed-bg); }
+  .state-open { color: var(--open); }
+  .state-closed { color: var(--closed); }
+  .state-merged { color: var(--merged); }
+  .state-muted { color: var(--fg-3); }
+
+  /* Popovers */
+  .anchor { position: relative; }
+  .popover { position: absolute; top: calc(100% + var(--s2)); z-index: 20; width: min(320px, calc(100vw - 32px)); border-radius: var(--radius-lg); background: var(--bg); box-shadow: var(--shadow); padding: var(--s1); }
+  .popover.static { position: relative; top: auto; width: 100%; box-shadow: var(--shadow); }
+  .popover.clone-pop { width: min(360px, calc(100vw - 32px)); }
+  .popover.right { right: 0; }
+  .popover.left { left: 0; }
+  .pop-title { padding: var(--s2) var(--s3) var(--s1); font-size: var(--t-meta); font-weight: 500; color: var(--fg-3); }
+  .pop-filter { padding: var(--s1) var(--s1) var(--s2); }
+  .pop-filter .input-group { height: 32px; }
+  .pop-filter .input-group input { font-size: var(--t-body); }
+  .pop-tabs { display: flex; gap: var(--s1); padding: 0 var(--s1); border-bottom: 1px solid var(--border); margin-bottom: var(--s1); }
+  .pop-tabs button { height: 32px; padding: 0 var(--s2); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--fg-2); font-weight: 500; transition: color var(--ease); }
+  .pop-tabs button:hover { color: var(--fg); }
+  .pop-tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); }
+  .pop-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
+  .pop-item { display: flex; align-items: center; gap: var(--s2); min-height: 32px; padding: var(--s1) var(--s2); border-radius: var(--radius); color: var(--fg); cursor: pointer; transition: background-color var(--ease); }
+  .pop-item:hover { background: var(--hover); }
+  .pop-item[aria-selected="true"] { background: var(--surface-2); }
+  .pop-item .check { width: 16px; color: var(--fg); }
+  .pop-item .mono { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pop-item .meta { margin-left: auto; white-space: nowrap; }
+  .pop-divider { height: 1px; background: var(--border); margin: var(--s1) 0; }
+  .clone-body { padding: var(--s3); display: flex; flex-direction: column; gap: var(--s3); }
+  .clone-title { font-weight: 600; font-size: var(--t-body); }
+  .clone-body .input-group input { font-size: 13px; }
+
+  /* Latest commit and file table */
+  .commit-bar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2) var(--s3); min-width: 0; padding: var(--s2) var(--s3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+  .commit-bar .msg { min-width: 0; color: var(--fg); font-weight: 500; }
+  .commit-bar .msg:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .commit-bar .count-link { margin-left: auto; display: inline-flex; align-items: center; gap: var(--s1); color: var(--fg-2); white-space: nowrap; }
+  .commit-bar .count-link:hover { color: var(--fg); text-decoration: none; }
+  .sha { font-size: 13px; color: var(--fg-2); }
+  .table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); }
+  table.files { width: 100%; min-width: 480px; border-collapse: collapse; }
+  table.files th { height: 32px; padding: 0 var(--s3); text-align: left; font-size: var(--t-meta); font-weight: 500; color: var(--fg-3); border-bottom: 1px solid var(--border); background: var(--surface); white-space: nowrap; }
+  table.files td { height: 40px; padding: 0 var(--s3); border-top: 1px solid var(--border); vertical-align: middle; color: var(--fg-2); white-space: nowrap; }
+  table.files tr:first-child td { border-top: 0; }
+  table.files tr { transition: background-color var(--ease); }
+  table.files tbody tr:hover { background: var(--hover); }
+  table.files .name { color: var(--fg); }
+  table.files .name a { display: inline-flex; align-items: center; gap: var(--s2); color: var(--fg); font-family: "Geist Mono", ui-monospace, monospace; font-size: 13px; }
+  table.files .name a:hover { color: var(--accent); }
+  table.files .name .i { color: var(--fg-3); }
+  table.files .msg { white-space: normal; min-width: 180px; color: var(--fg-2); }
+  table.files .num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.files th.num { text-align: right; }
+  table.files .age { white-space: nowrap; }
+
+  /* Skeleton */
+  .skel { display: block; height: 10px; border-radius: 4px; background: var(--surface-2); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+  /* README */
+  .readme { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-top: var(--s4); }
+  .readme-head { display: flex; align-items: center; gap: var(--s2); height: 40px; padding: 0 var(--s3); background: var(--surface); border-bottom: 1px solid var(--border); font-size: 13px; color: var(--fg-2); }
+  .readme-head .mono { color: var(--fg); }
+  .prose { padding: var(--s6) var(--s6) var(--s8); max-width: 75ch; color: var(--fg); }
+  .prose h1 { font-size: var(--t-doc); line-height: 32px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: var(--s4); padding-bottom: var(--s3); border-bottom: 1px solid var(--border); }
+  .prose p { line-height: 24px; color: var(--fg-2); margin-bottom: var(--s4); font-size: var(--t-body); }
+  .prose pre { margin: 0 0 var(--s4); padding: var(--s3) var(--s4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
+  .prose pre code { font-size: 13px; line-height: 20px; color: var(--fg); white-space: pre; }
+  .prose ul { list-style: disc; padding-left: var(--s6); color: var(--fg-2); }
+  .prose li { line-height: 24px; margin-bottom: var(--s1); }
+
+  /* Side column */
+  .side { min-width: 0; display: flex; flex-direction: column; gap: var(--s6); padding-top: var(--s2); }
+  .side h2 { font-size: var(--t-meta); font-weight: 500; color: var(--fg-3); margin-bottom: var(--s2); }
+  .side ul { display: flex; flex-direction: column; gap: var(--s2); }
+  .side li { display: flex; align-items: center; gap: var(--s2); color: var(--fg-2); }
+  .side li .i { color: var(--fg-3); }
+  .side li strong { color: var(--fg); font-weight: 500; }
+  .side-block { padding-top: var(--s6); border-top: 1px solid var(--border); }
+
+  /* Issues */
+  .issue-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2); }
+  .issue-toolbar .input-group { flex: 1 1 260px; max-width: 520px; }
+  .issue-list { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .issue-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); border-top: 1px solid var(--border); transition: background-color var(--ease); }
+  .issue-row:first-child { border-top: 0; }
+  .issue-row:hover { background: var(--hover); }
+  .issue-row .issue-title { color: var(--fg); font-weight: 500; font-size: var(--t-body); }
+  .issue-row .issue-title:hover { color: var(--accent); }
+  .issue-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .issue-comments { display: inline-flex; align-items: center; gap: var(--s1); color: var(--fg-3); font-variant-numeric: tabular-nums; min-width: 32px; justify-content: flex-end; font-size: var(--t-meta); }
+  .issue-comments .i { width: 16px; height: 16px; }
+  .pager { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--s3); padding-top: var(--s3); }
+  .pager .btns { display: flex; gap: var(--s2); }
+  .empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--s2); padding: var(--s8) var(--s4); }
+  .empty .icon-wrap { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--fg-2); margin-bottom: var(--s1); }
+  .empty h3 { font-size: var(--t-section); font-weight: 600; }
+  .empty p { color: var(--fg-2); max-width: 36ch; }
+
+  /* Pull request */
+  .pr-head { padding: var(--s6) var(--s6) 0; display: flex; flex-direction: column; gap: var(--s3); }
+  .pr-title { font-size: var(--t-title); line-height: 28px; font-weight: 600; letter-spacing: -0.01em; }
+  .pr-title .pr-num { color: var(--fg-3); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .pr-sum { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); color: var(--fg-2); }
+  .branch { display: inline-flex; align-items: center; height: 22px; padding: 0 var(--s2); border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; color: var(--fg); max-width: 100%; }
+  .pr-tabs { display: flex; gap: var(--s4); padding: 0 var(--s6); margin-top: var(--s4); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+  .pr-tabs::-webkit-scrollbar { display: none; }
+  .pr-tabs a { display: inline-flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s1) 11px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--fg-2); font-weight: 500; white-space: nowrap; transition: color var(--ease); }
+  .pr-tabs a:hover { color: var(--fg); text-decoration: none; }
+  .pr-tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--fg); }
+  .pr-body { padding: var(--s6); display: flex; flex-direction: column; gap: var(--s6); min-width: 0; max-width: 960px; }
+
+  .timeline { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
+  .comment { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-lg); min-width: 0; }
+  .comment-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2); min-height: 40px; padding: var(--s2) var(--s3); background: var(--surface); border-bottom: 1px solid var(--border); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .comment-head a { color: var(--fg); font-weight: 600; }
+  .comment-head .tag { height: 20px; display: inline-flex; align-items: center; padding: 0 var(--s2); border: 1px solid var(--border-strong); border-radius: 999px; font-size: var(--t-meta); color: var(--fg-2); }
+  .comment-head .meta { margin-left: auto; }
+  .comment-body { padding: var(--s4); display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+  .comment-body p { color: var(--fg); line-height: 24px; max-width: 75ch; }
+  .comment-body code { font-size: 13px; padding: 0 4px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border); }
+
+  .merge-box { border: 1px solid var(--border-strong); border-radius: var(--radius-lg); overflow: hidden; }
+  .merge-row { display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--s4); padding: var(--s4); min-width: 0; }
+  .merge-row + .merge-row { border-top: 1px solid var(--border); }
+  .merge-row .status { display: flex; gap: var(--s3); align-items: flex-start; min-width: 0; flex: 1 1 280px; }
+  .merge-row .status strong { display: block; font-weight: 600; }
+  .merge-row .status p { color: var(--fg-2); margin-top: 2px; }
+  .merge-row .action { display: flex; flex-direction: column; align-items: flex-end; gap: var(--s2); }
+  .merge-ok .status > .i { color: var(--open); margin-top: 2px; }
+  .merge-conflict .status > .i { color: var(--closed); margin-top: 2px; }
+  .conflict-list { margin-top: var(--s2); display: flex; flex-direction: column; gap: var(--s1); }
+  .conflict-list li { display: flex; align-items: center; gap: var(--s2); font-size: 13px; color: var(--fg-2); min-width: 0; }
+  .conflict-list .mono { color: var(--fg); overflow-wrap: anywhere; }
+
+  .composer { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--s3); display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+  .composer-foot { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: var(--s2); }
+
+  .section-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s3); justify-content: space-between; }
+  .section-head h2 { font-size: var(--t-section); font-weight: 600; }
+  .section-head .sums { display: inline-flex; align-items: center; gap: var(--s3); font-variant-numeric: tabular-nums; font-size: var(--t-meta); }
+
+  .counts { display: inline-flex; align-items: center; gap: var(--s2); font-variant-numeric: tabular-nums; font-size: 13px; line-height: 20px;  }
+  .add { color: var(--add); }
+  .del { color: var(--del); }
+
+  .diff-file { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; min-width: 0; }
+  .diff-head { display: flex; align-items: center; gap: var(--s2); min-height: 40px; padding: 0 var(--s3); background: var(--surface); border-bottom: 1px solid var(--border); min-width: 0; }
+  .diff-head .path { font-size: 13px; color: var(--fg); min-width: 0; overflow-wrap: anywhere; }
+  .diff-head .counts { margin-left: auto; }
+  .diff-scroll { overflow-x: auto; }
+  table.diff { width: 100%; min-width: 560px; border-collapse: collapse; font-family: "Geist Mono", ui-monospace, monospace; font-size: 13px; line-height: 20px; }
+  table.diff td { padding: 0; vertical-align: top; white-space: pre; }
+  table.diff .ln { width: 1%; min-width: 40px; padding: 0 var(--s2); text-align: right; color: var(--fg-3); font-variant-numeric: tabular-nums; user-select: none; background: var(--surface); border-right: 1px solid var(--border); }
+  table.diff .sign { width: 24px; text-align: center; user-select: none; color: var(--fg-2); }
+  table.diff .code { padding: 0 var(--s3) 0 var(--s1); color: var(--fg); }
+  table.diff tr.add td { background: var(--add-bg); }
+  table.diff tr.add .sign { color: var(--add); font-weight: 600; }
+  table.diff tr.del td { background: var(--del-bg); }
+  table.diff tr.del .sign { color: var(--del); font-weight: 600; }
+  table.diff tr.add .ln, table.diff tr.del .ln { background: transparent; }
+
+  .file-table { width: 100%; border-collapse: collapse; min-width: 420px; }
+  .file-table td { height: 36px; padding: 0 var(--s3); border-top: 1px solid var(--border); white-space: nowrap; color: var(--fg-2); }
+  .file-table tr:first-child td { border-top: 0; }
+  .file-table .path { color: var(--fg); font-size: 13px; }
+  .file-table .counts { justify-content: flex-end; }
+  .file-table td.r { text-align: right; }
+  .files-wrap { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow-x: auto; }
+
+  .sums-row { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+
+  /* Interactive hover for links within prose */
+  .prose a, .comment-body a { color: var(--accent); }
+
+  /* Frame-level mobile behaviour */
+  @media (max-width: 960px) {
+    .repo-body { grid-template-columns: minmax(0, 1fr); gap: var(--s6); }
+    .side { flex-direction: row; flex-wrap: wrap; gap: var(--s6); padding-top: 0; }
+    .side > section { flex: 1 1 200px; }
+    .state-grid { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 719px) {
+    .stage { padding: var(--s6) var(--s4) 64px; gap: 40px; }
+    .gh { padding: 0 var(--s3); gap: var(--s2); }
+    .gh-left { gap: var(--s2); }
+    .gnav, .search, .user-name { display: none; }
+    .only-sm { display: inline-flex !important; }
+    .only-sm.search-open { display: none !important; }
+    .hide-sm { display: none !important; }
+    .repo-head, .pr-head, .pr-body, .repo-body, .issues-body { padding-left: var(--s4); padding-right: var(--s4); }
+    .subnav, .pr-tabs { padding-left: var(--s4); padding-right: var(--s4); }
+    .repo-head { padding-top: var(--s4); }
+    .crumb { font-size: var(--t-section); }
+    .prose { padding: var(--s4); }
+    .prose h1 { font-size: var(--t-section); line-height: 24px; }
+    .commit-bar .count-link { margin-left: 0; }
+    .section-head { align-items: flex-start; }
+    .merge-row .action { align-items: stretch; width: 100%; }
+    .merge-row .action .btn { width: 100%; }
+    .toolbar .anchor { position: static; }
+    .toolbar .popover.clone-pop { left: 0; right: 0; width: auto; }
+    .file-table { min-width: 0; }
+    .issue-toolbar .input-group { flex-basis: 100%; max-width: none; }
+    .issue-toolbar .btn-primary { margin-left: auto; }
+    .issue-row { padding: var(--s3); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-branch" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="i-pr" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" x2="6" y1="9" y2="21"/></symbol>
+  <symbol id="i-issue" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-commit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5"/></symbol>
+  <symbol id="i-comment" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-columns" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="12" x2="12" y1="3" y2="21"/></symbol>
+</svg>
+
+<main class="stage">
+  <header class="stage-head">
+    <h1>Ether, direction 03: Monochrome precision</h1>
+    <p class="meta">Five screens and states at 1280 px, followed by the 375 px behaviour. Light and dark follow the OS setting.</p>
+  </header>
+
+  <!-- ===================== 01 Repository code view ===================== -->
+  <figure class="frame" aria-labelledby="f01">
+    <figcaption id="f01" class="frame-label"><strong>01 Repository code view</strong><span>1280 px</span></figcaption>
+    <div class="app">
+      <header class="gh">
+        <div class="gh-left">
+          <a class="logo" href="#" aria-label="Ether home"><span class="logo-mark" aria-hidden="true"></span>Ether</a>
+          <nav class="gnav" aria-label="Global">
+            <a href="#" aria-current="page">Repositories</a>
+            <a href="#">Invites</a>
+          </nav>
+        </div>
+        <div class="gh-right"><button class="icon-btn only-sm" aria-label="Open menu"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+          <label class="search">
+            <span class="sr">Search repositories, issues and code</span>
+            <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+            <input type="search" placeholder="Search or jump to">
+            <kbd>Ctrl K</kbd>
+          </label>
+          <button class="icon-btn only-sm" aria-label="Search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button class="user" aria-label="Account menu for admin">
+            <span class="avatar">A</span>
+            <span class="user-name">admin</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="repo-head">
+        <div class="crumb">
+          <a href="#">admin</a>
+          <span class="sep">/</span>
+          <span class="current">ether-core</span>
+          <button class="crumb-switch" aria-label="Switch project" aria-haspopup="menu"><svg class="i" aria-hidden="true"><use href="#i-chev-down"/></svg></button>
+          <span class="badge-private"><svg class="i" aria-hidden="true" ><use href="#i-lock"/></svg>Private</span>
+        </div>
+        <p class="repo-desc">Server, web client and git transport for Ether.</p>
+      </div>
+
+      <nav class="subnav" aria-label="Repository">
+        <a href="#" aria-current="page">Code</a>
+        <a href="#">Issues <span class="count">5</span></a>
+        <a href="#">Pull requests <span class="count">1</span></a>
+        <a href="#">Settings</a>
+      </nav>
+
+      <div class="repo-body">
+        <div class="main-col">
+          <div class="toolbar">
+            <button class="btn" aria-haspopup="listbox" aria-expanded="false">
+              <svg class="i" aria-hidden="true"><use href="#i-branch"/></svg>
+              <span class="mono" style="font-size:13px">main</span>
+              <svg class="i" aria-hidden="true"><use href="#i-chev-down"/></svg>
+            </button>
+            <span class="meta">3 branches · 1 tag</span>
+            <div class="spacer"></div>
+            <div class="anchor">
+              <button class="btn btn-primary" aria-haspopup="dialog" aria-expanded="true">
+                Code
+                <svg class="i" aria-hidden="true"><use href="#i-chev-down"/></svg>
+              </button>
+              <div class="popover right clone-pop" role="dialog" aria-label="Clone repository">
+                <div class="clone-body">
+                  <div class="clone-title">Clone</div>
+                  <div>
+                    <label class="field-label" for="clone-url-03">HTTPS</label>
+                    <div class="input-group">
+                      <input id="clone-url-03" class="mono" readonly value="https://pc-ltyci6a.tail576a27.ts.net/admin/ether-core.git">
+                      <button class="icon-btn" aria-label="Copy clone URL"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button>
+                    </div>
+                  </div>
+                  <p class="help">Git asks for your username and a personal access token. Your account password does not work for Git.</p>
+                  <p class="help">Reachable from inside your Tailscale network only.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="commit-bar">
+            <span class="avatar">m</span>
+            <a class="strong" href="#">mira</a>
+            <a class="msg" href="#">Harden session cookie rotation on login</a>
+            <span class="sha">3f9a1c2</span>
+            <span class="meta">2 hours ago</span>
+            <a class="count-link" href="#"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg><span class="num">214</span>&nbsp;commits</a>
+          </div>
+
+          <div class="table-wrap">
+            <table class="files">
+              <caption class="sr">Files at the root of main</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col" class="hide-sm">Last commit</th>
+                  <th scope="col">Age</th>
+                  <th scope="col" class="num">Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg>src/</a></td>
+                  <td class="msg hide-sm">Add invite token table and consume flow</td>
+                  <td class="age meta">2 hours ago</td>
+                  <td class="num meta"></td>
+                </tr>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg>e2e/</a></td>
+                  <td class="msg hide-sm">Cover expired invites in signup spec</td>
+                  <td class="age meta">yesterday</td>
+                  <td class="num meta"></td>
+                </tr>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg>drizzle/</a></td>
+                  <td class="msg hide-sm">Migration 0004: invites table</td>
+                  <td class="age meta">2 hours ago</td>
+                  <td class="num meta"></td>
+                </tr>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>README.md</a></td>
+                  <td class="msg hide-sm">Document setup steps</td>
+                  <td class="age meta">5 days ago</td>
+                  <td class="num meta">4.2 KB</td>
+                </tr>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>package.json</a></td>
+                  <td class="msg hide-sm">Bump Bun types</td>
+                  <td class="age meta">3 days ago</td>
+                  <td class="num meta">1.8 KB</td>
+                </tr>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>tsconfig.json</a></td>
+                  <td class="msg hide-sm">Enable strict mode</td>
+                  <td class="age meta">3 weeks ago</td>
+                  <td class="num meta">612 B</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <article class="readme" aria-label="README.md">
+            <div class="readme-head">
+              <svg class="i" aria-hidden="true"><use href="#i-file"/></svg>
+              <span class="mono">README.md</span>
+            </div>
+            <div class="prose">
+              <h1>ether-core</h1>
+              <p>Ether is a self-hosted code host for a small group of trusted people. It keeps private Git repositories on your own machine, serves a web client for code, issues and pull requests, and speaks Git over HTTPS. Accounts are created from one-time invite links, and Git clients authenticate with a personal access token.</p>
+              <pre><code>bun install
+bun run build
+bun run ether create-admin &lt;you&gt; --password '...'
+bun run start</code></pre>
+              <ul>
+                <li>Repositories are private. Collaborators get Read or Write access.</li>
+                <li>Sign-up works only through invite links that an admin creates.</li>
+                <li>Git runs over HTTPS at <code class="mono">/&lt;owner&gt;/&lt;repo&gt;.git</code>.</li>
+              </ul>
+            </div>
+          </article>
+        </div>
+
+        <aside class="side" aria-label="Repository details">
+          <section>
+            <h2>About</h2>
+            <ul>
+              <li><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg><span>Private repository</span></li>
+              <li><svg class="i" aria-hidden="true"><use href="#i-commit"/></svg><span><strong class="num">214</strong> commits on main</span></li>
+              <li><svg class="i" aria-hidden="true"><use href="#i-branch"/></svg><span><strong class="num">3</strong> branches</span></li>
+              <li><svg class="i" aria-hidden="true"><use href="#i-tag"/></svg><span><strong class="num">1</strong> tag, <span class="mono" style="font-size:13px">v0.3.0</span></span></li>
+            </ul>
+          </section>
+          <section class="side-block">
+            <h2>Activity</h2>
+            <ul>
+              <li><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg><span>Pull request <strong class="num">#12</strong> is open</span></li>
+              <li><svg class="i" aria-hidden="true"><use href="#i-issue"/></svg><span><strong class="num">5</strong> open issues</span></li>
+            </ul>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================== 02 Pull request ===================== -->
+  <figure class="frame" aria-labelledby="f02">
+    <figcaption id="f02" class="frame-label"><strong>02 Pull request</strong><span>1280 px</span></figcaption>
+    <div class="app">
+      <header class="gh">
+        <div class="gh-left">
+          <a class="logo" href="#" aria-label="Ether home"><span class="logo-mark" aria-hidden="true"></span>Ether</a>
+          <nav class="gnav" aria-label="Global">
+            <a href="#" aria-current="page">Repositories</a>
+            <a href="#">Invites</a>
+          </nav>
+        </div>
+        <div class="gh-right"><button class="icon-btn only-sm" aria-label="Open menu"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+          <label class="search"><span class="sr">Search repositories, issues and code</span><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input type="search" placeholder="Search or jump to"><kbd>Ctrl K</kbd></label>
+          <button class="icon-btn only-sm" aria-label="Search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button class="user" aria-label="Account menu for admin"><span class="avatar">A</span><span class="user-name">admin</span></button>
+        </div>
+      </header>
+
+      <div class="repo-head">
+        <div class="crumb">
+          <a href="#">admin</a><span class="sep">/</span><span class="current">ether-core</span>
+          <button class="crumb-switch" aria-label="Switch project" aria-haspopup="menu"><svg class="i" aria-hidden="true"><use href="#i-chev-down"/></svg></button>
+          <span class="badge-private"><svg class="i" aria-hidden="true" ><use href="#i-lock"/></svg>Private</span>
+        </div>
+      </div>
+      <nav class="subnav" aria-label="Repository">
+        <a href="#">Code</a>
+        <a href="#">Issues <span class="count">5</span></a>
+        <a href="#" aria-current="page">Pull requests <span class="count">1</span></a>
+        <a href="#">Settings</a>
+      </nav>
+
+      <div class="pr-head">
+        <h1 class="pr-title">Add invite-only registration <span class="pr-num">#12</span></h1>
+        <div class="pr-sum">
+          <span class="badge badge-open"><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg>Open</span>
+          <span><strong class="strong">admin</strong> wants to merge 3 commits into <span class="branch">main</span> from <span class="branch">feature/invites</span></span>
+        </div>
+      </div>
+      <nav class="pr-tabs" aria-label="Pull request">
+        <a href="#" aria-current="page">Conversation</a>
+        <a href="#">Commits <span class="count">3</span></a>
+        <a href="#">Files changed <span class="count">4</span></a>
+      </nav>
+
+      <div class="pr-body">
+        <ol class="timeline" aria-label="Conversation">
+          <li class="comment">
+            <header class="comment-head">
+              <span class="avatar">A</span>
+              <a href="#">admin</a>
+              <span class="tag">Author</span>
+              <span class="meta">opened 2 days ago</span>
+            </header>
+            <div class="comment-body">
+              <p>Adds sign-up through one-time invite links. An admin creates an invite, and it can be claimed once. The claim is a conditional update, so a link cannot be used twice.</p>
+            </div>
+          </li>
+          <li class="comment">
+            <header class="comment-head">
+              <span class="avatar">M</span>
+              <a href="#">mira</a>
+              <span class="meta">commented yesterday</span>
+            </header>
+            <div class="comment-body">
+              <p>Can we make the invite claim atomic? Two requests could both pass the <code class="mono">usedAt</code> check before either one writes.</p>
+            </div>
+          </li>
+          <li class="comment">
+            <header class="comment-head">
+              <span class="avatar">A</span>
+              <a href="#">admin</a>
+              <span class="tag">Author</span>
+              <span class="meta">replied 3 hours ago</span>
+            </header>
+            <div class="comment-body">
+              <p>Fixed. The claim is now a single conditional UPDATE, and the handler checks the row count before it creates the account.</p>
+            </div>
+          </li>
+        </ol>
+
+        <section class="merge-box" aria-label="Merge">
+          <div class="merge-row merge-ok">
+            <div class="status">
+              <svg class="i i-20" aria-hidden="true"><use href="#i-check-circle"/></svg>
+              <div>
+                <strong>No conflicts with main</strong>
+                <p>This branch can be merged automatically.</p>
+              </div>
+            </div>
+            <div class="action">
+              <button class="btn btn-primary">Merge pull request</button>
+              <span class="help">Creates a merge commit on main.</span>
+            </div>
+          </div>
+        </section>
+
+        <form class="composer" aria-label="Add a comment" onsubmit="return false">
+          <label class="field-label" for="pr-comment-03">Comment</label>
+          <textarea id="pr-comment-03" class="textarea" placeholder="Leave a comment"></textarea>
+          <div class="composer-foot">
+            <span class="help">Markdown supported</span>
+            <button type="button" class="btn">Comment</button>
+          </div>
+        </form>
+
+        <section aria-labelledby="files-03">
+          <div class="section-head" style="margin-bottom:16px">
+            <h2 id="files-03">Files changed <span class="count">4</span></h2>
+            <div class="sums">
+              <span class="counts"><span class="add">+148</span><span class="del">−31</span></span>
+              <div class="segmented" role="group" aria-label="Diff view">
+                <button aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-columns"/></svg>Unified</button>
+                <button aria-pressed="false">Split</button>
+              </div>
+            </div>
+          </div>
+          <div class="files-wrap" style="margin-bottom:16px">
+            <table class="file-table">
+              <caption class="sr">Changed files</caption>
+              <tbody>
+                <tr><td class="path"><span class="mono">src/server/invites.ts</span></td><td class="r"><span class="counts"><span class="add">+8</span><span class="del">−2</span></span></td></tr>
+                <tr><td class="path"><span class="mono">drizzle/0004_invites.sql</span></td><td class="r"><span class="counts"><span class="add">+21</span><span class="del">−0</span></span></td></tr>
+                <tr><td class="path"><span class="mono">src/web/routes/signup.tsx</span></td><td class="r"><span class="counts"><span class="add">+96</span><span class="del">−24</span></span></td></tr>
+                <tr><td class="path"><span class="mono">e2e/signup.spec.ts</span></td><td class="r"><span class="counts"><span class="add">+23</span><span class="del">−5</span></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diff-file">
+            <header class="diff-head">
+              <svg class="i" aria-hidden="true"><use href="#i-file"/></svg>
+              <span class="path">src/server/invites.ts</span>
+              <span class="counts"><span class="add">+8</span><span class="del">−2</span></span>
+            </header>
+            <div class="diff-scroll">
+              <table class="diff" aria-label="Diff for src/server/invites.ts">
+                <tbody>
+                  <tr><td class="ln">12</td><td class="ln">12</td><td class="sign"> </td><td class="code">import { and, eq, isNull } from "drizzle-orm";</td></tr>
+                  <tr><td class="ln">13</td><td class="ln">13</td><td class="sign"> </td><td class="code">import { invites } from "../db/schema";</td></tr>
+                  <tr><td class="ln">14</td><td class="ln">14</td><td class="sign"> </td><td class="code"></td></tr>
+                  <tr><td class="ln">15</td><td class="ln">15</td><td class="sign"> </td><td class="code">export async function claimInvite(db: Db, token: string, username: string) {</td></tr>
+                  <tr class="del"><td class="ln">16</td><td class="ln"></td><td class="sign">−</td><td class="code">  const invite = await db.query.invites.findFirst({ where: eq(invites.token, token) });</td></tr>
+                  <tr class="del"><td class="ln">17</td><td class="ln"></td><td class="sign">−</td><td class="code">  if (!invite || invite.usedAt) throw new InviteError("invalid");</td></tr>
+                  <tr class="add"><td class="ln"></td><td class="ln">16</td><td class="sign">+</td><td class="code">  const claimed = await db</td></tr>
+                  <tr class="add"><td class="ln"></td><td class="ln">17</td><td class="sign">+</td><td class="code">    .update(invites)</td></tr>
+                  <tr class="add"><td class="ln"></td><td class="ln">18</td><td class="sign">+</td><td class="code">    .set({ usedAt: new Date(), usedBy: username })</td></tr>
+                  <tr class="add"><td class="ln"></td><td class="ln">19</td><td class="sign">+</td><td class="code">    .where(and(eq(invites.token, token), isNull(invites.usedAt)))</td></tr>
+                  <tr class="add"><td class="ln"></td><td class="ln">20</td><td class="sign">+</td><td class="code">    .returning({ id: invites.id });</td></tr>
+                  <tr class="add"><td class="ln"></td><td class="ln">21</td><td class="sign">+</td><td class="code">  if (claimed.length === 0) throw new InviteError("invalid");</td></tr>
+                  <tr class="add"><td class="ln"></td><td class="ln">22</td><td class="sign">+</td><td class="code"></td></tr>
+                  <tr class="add"><td class="ln"></td><td class="ln">23</td><td class="sign">+</td><td class="code">  // One conditional UPDATE: only one request can set usedAt on an unused invite.</td></tr>
+                  <tr><td class="ln">18</td><td class="ln">24</td><td class="sign"> </td><td class="code">  return createAccount(db, username);</td></tr>
+                  <tr><td class="ln">19</td><td class="ln">25</td><td class="sign"> </td><td class="code">}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================== 03 Issues list ===================== -->
+  <figure class="frame" aria-labelledby="f03">
+    <figcaption id="f03" class="frame-label"><strong>03 Issues list</strong><span>1280 px</span></figcaption>
+    <div class="app">
+      <header class="gh">
+        <div class="gh-left">
+          <a class="logo" href="#" aria-label="Ether home"><span class="logo-mark" aria-hidden="true"></span>Ether</a>
+          <nav class="gnav" aria-label="Global"><a href="#" aria-current="page">Repositories</a><a href="#">Invites</a></nav>
+        </div>
+        <div class="gh-right"><button class="icon-btn only-sm" aria-label="Open menu"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+          <label class="search"><span class="sr">Search repositories, issues and code</span><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input type="search" placeholder="Search or jump to"><kbd>Ctrl K</kbd></label>
+          <button class="icon-btn only-sm" aria-label="Search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button class="user" aria-label="Account menu for admin"><span class="avatar">A</span><span class="user-name">admin</span></button>
+        </div>
+      </header>
+
+      <div class="repo-head">
+        <div class="crumb">
+          <a href="#">admin</a><span class="sep">/</span><span class="current">ether-core</span>
+          <button class="crumb-switch" aria-label="Switch project" aria-haspopup="menu"><svg class="i" aria-hidden="true"><use href="#i-chev-down"/></svg></button>
+          <span class="badge-private"><svg class="i" aria-hidden="true" ><use href="#i-lock"/></svg>Private</span>
+        </div>
+      </div>
+      <nav class="subnav" aria-label="Repository">
+        <a href="#">Code</a>
+        <a href="#" aria-current="page">Issues <span class="count">5</span></a>
+        <a href="#">Pull requests <span class="count">1</span></a>
+        <a href="#">Settings</a>
+      </nav>
+
+      <div class="issues-body" style="padding: 24px; display:flex; flex-direction:column; gap:16px">
+        <div class="section-head">
+          <div class="segmented" role="group" aria-label="Issue state">
+            <button aria-pressed="true"><svg class="i state-open" aria-hidden="true"><use href="#i-issue"/></svg>Open <span class="count num">5</span></button>
+            <button aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Closed <span class="count num">9</span></button>
+          </div>
+          <button class="btn btn-primary"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New issue</button>
+        </div>
+
+        <div class="issue-toolbar">
+          <label class="input-group" style="flex:1 1 260px; max-width:520px">
+            <span class="input-label">Filter</span>
+            <input type="search" value="is:issue is:open" aria-label="Filter issues">
+          </label>
+        </div>
+
+        <ul class="issue-list" aria-label="Open issues">
+          <li class="issue-row">
+            <svg class="i state-open" aria-hidden="true"><use href="#i-issue"/></svg>
+            <div class="issue-main">
+              <a class="issue-title" href="#">Session cookie survives logout in Safari</a>
+              <span class="meta"><span class="sr">Open. </span>#21 opened 3 days ago by kat</span>
+            </div>
+            <a class="issue-comments" href="#" aria-label="4 comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>4</a>
+          </li>
+          <li class="issue-row">
+            <svg class="i state-open" aria-hidden="true"><use href="#i-issue"/></svg>
+            <div class="issue-main">
+              <a class="issue-title" href="#">Show file sizes in the tree on narrow screens</a>
+              <span class="meta"><span class="sr">Open. </span>#19 opened 4 days ago by jonas</span>
+            </div>
+            <a class="issue-comments" href="#" aria-label="1 comment"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>1</a>
+          </li>
+          <li class="issue-row">
+            <svg class="i state-open" aria-hidden="true"><use href="#i-issue"/></svg>
+            <div class="issue-main">
+              <a class="issue-title" href="#">Clone hangs on packfiles over 200 MB</a>
+              <span class="meta"><span class="sr">Open. </span>#17 opened 5 days ago by jonas</span>
+            </div>
+            <a class="issue-comments" href="#" aria-label="6 comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>6</a>
+          </li>
+          <li class="issue-row">
+            <svg class="i state-open" aria-hidden="true"><use href="#i-issue"/></svg>
+            <div class="issue-main">
+              <a class="issue-title" href="#">Invite link should show who invited you</a>
+              <span class="meta"><span class="sr">Open. </span>#14 opened 1 week ago by mira</span>
+            </div>
+            <a class="issue-comments" href="#" aria-label="2 comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>2</a>
+          </li>
+          <li class="issue-row">
+            <svg class="i state-open" aria-hidden="true"><use href="#i-issue"/></svg>
+            <div class="issue-main">
+              <a class="issue-title" href="#">Document the backup command</a>
+              <span class="meta"><span class="sr">Open. </span>#11 opened 2 weeks ago by admin</span>
+            </div>
+            <a class="issue-comments" href="#" aria-label="0 comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>0</a>
+          </li>
+        </ul>
+
+        <nav class="pager" aria-label="Pagination">
+          <span class="meta">Showing <span class="num">1–5</span> of <span class="num">5</span> open issues</span>
+          <div class="btns">
+            <button class="btn" disabled><svg class="i" aria-hidden="true"><use href="#i-chev-left"/></svg>Previous</button>
+            <button class="btn" disabled>Next<svg class="i" aria-hidden="true"><use href="#i-chev-right"/></svg></button>
+          </div>
+        </nav>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================== States ===================== -->
+  <section class="frame" aria-labelledby="states-03">
+    <h2 id="states-03" class="frame-label"><strong>States</strong><span>Shown at 1280 px, each labelled</span></h2>
+    <div class="state-grid">
+
+      <div class="state-card">
+        <span class="frame-label"><strong>A. Branch picker open</strong><span>Filter field and tabs</span></span>
+        <div class="state-well">
+          <div class="anchor" style="display:block; width:min(320px, 100%)">
+            <button class="btn" aria-haspopup="listbox" aria-expanded="true">
+              <svg class="i" aria-hidden="true"><use href="#i-branch"/></svg>
+              <span class="mono" style="font-size:13px">main</span>
+              <svg class="i" aria-hidden="true"><use href="#i-chev-down"/></svg>
+            </button>
+            <div class="popover left static" role="listbox" aria-label="Switch branch" style="margin-top:8px">
+              <div class="pop-tabs" role="tablist" aria-label="Refs">
+                <button role="tab" aria-selected="true">Branches <span class="count num">3</span></button>
+                <button role="tab" aria-selected="false">Tags <span class="count num">1</span></button>
+              </div>
+              <div class="pop-filter">
+                <label class="input-group"><span class="input-label">Find</span><input type="search" placeholder="Find a branch" aria-label="Find a branch"></label>
+              </div>
+              <div class="pop-list">
+                <div class="pop-item" role="option" aria-selected="true">
+                  <svg class="i check" aria-hidden="true"><use href="#i-check"/></svg>
+                  <span class="mono">main</span><span class="meta">default</span>
+                </div>
+                <div class="pop-item" role="option" aria-selected="false">
+                  <span class="check"></span>
+                  <span class="mono">feature/invites</span><span class="meta">2 hours ago</span>
+                </div>
+                <div class="pop-item" role="option" aria-selected="false">
+                  <span class="check"></span>
+                  <span class="mono">fix/session-rotation</span><span class="meta">yesterday</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="state-card">
+        <span class="frame-label"><strong>B. File list loading</strong><span>Skeleton rows</span></span>
+        <div class="state-well">
+          <div class="table-wrap" aria-busy="true" aria-label="Loading files">
+            <table class="files" aria-hidden="true">
+              <tbody>
+                <tr><td class="name" style="width:40%"><span class="skel" style="width:64%"></span></td><td class="hide-sm"><span class="skel" style="width:70%"></span></td><td><span class="skel" style="width:60px"></span></td><td class="num"><span class="skel" style="width:40px; margin-left:auto"></span></td></tr>
+                <tr><td class="name"><span class="skel" style="width:52%"></span></td><td class="hide-sm"><span class="skel" style="width:56%"></span></td><td><span class="skel" style="width:60px"></span></td><td class="num"><span class="skel" style="width:40px; margin-left:auto"></span></td></tr>
+                <tr><td class="name"><span class="skel" style="width:58%"></span></td><td class="hide-sm"><span class="skel" style="width:64%"></span></td><td><span class="skel" style="width:60px"></span></td><td class="num"><span class="skel" style="width:40px; margin-left:auto"></span></td></tr>
+                <tr><td class="name"><span class="skel" style="width:46%"></span></td><td class="hide-sm"><span class="skel" style="width:60%"></span></td><td><span class="skel" style="width:60px"></span></td><td class="num"><span class="skel" style="width:40px; margin-left:auto"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="state-card">
+        <span class="frame-label"><strong>C. Empty filter result</strong><span>Issues, closed view</span></span>
+        <div class="state-well" style="padding:0">
+          <div class="empty">
+            <span class="icon-wrap" aria-hidden="true"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg></span>
+            <h3>No closed issues match</h3>
+            <p>Check the filter, or switch back to open issues.</p>
+            <button class="btn" style="margin-top:8px">Show open issues</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="state-card">
+        <span class="frame-label"><strong>D. Conflict merge box</strong><span>Merge blocked</span></span>
+        <div class="state-well" style="padding:16px">
+          <section class="merge-box merge-conflict" aria-label="Merge blocked">
+            <div class="merge-row">
+              <div class="status">
+                <svg class="i i-20" aria-hidden="true"><use href="#i-alert"/></svg>
+                <div>
+                  <strong>Merge blocked: 2 files have conflicts</strong>
+                  <p>Resolve them on feature/invites, push, then merge again.</p>
+                  <ul class="conflict-list">
+                    <li><span class="mono">src/server/invites.ts</span></li>
+                    <li><span class="mono">drizzle/0004_invites.sql</span></li>
+                  </ul>
+                </div>
+              </div>
+              <div class="action">
+                <button class="btn btn-primary" disabled>Merge pull request</button>
+                <span class="help">Merge commits only. Blocked until conflicts are gone.</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="state-card">
+        <span class="frame-label"><strong>E. Keyboard focus and disabled</strong><span>2 px ring, never removed</span></span>
+        <div class="state-well" style="display:flex; flex-wrap:wrap; gap:16px; align-items:center">
+          <button class="btn is-focus">Code</button>
+          <button class="btn">Copy</button>
+          <button class="btn btn-primary">Merge</button>
+          <button class="btn btn-primary" disabled>Merge</button>
+          <button class="icon-btn is-focus" aria-label="Copy clone URL"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  Direction 09 — Printed zine / paper.
+  Palette: cream newsprint (#f3ecdc) with ink-black text (#1d1a16), a single rust accent (#a8431f) and a blue-grey proof ink for additions. Dark mode is a lamp-lit proof: warm charcoal paper, cream ink.
+  Type: Fraunces (display, optical sizing) for titles and headings, Newsreader for reading text, JetBrains Mono for code, paths and metadata. Hierarchy comes from serif size contrast, italics and small-caps labels, not from boxes.
+  Key ideas: issue threads read like letters with a dateline, metadata sits in marginalia, the diff is proofreader markup (struck deletions, inserted marks) that is still a real unified diff with line numbers, and a faint paper grain sits under every frame.
+-->
+<title>Ether — Direction 09, Printed Zine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..700&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f3ecdc;
+    --paper-2: #ebe2cc;
+    --paper-3: #e1d5b8;
+    --ink: #1d1a16;
+    --ink-2: #4a443b;
+    --ink-3: #7a7163;
+    --rule: #1d1a16;
+    --rule-soft: rgba(29, 26, 22, 0.22);
+    --accent: #a8431f;
+    --accent-ink: #f7efe0;
+    --proof: #2f5470;
+    --proof-bg: rgba(47, 84, 112, 0.10);
+    --del: #9c2f1a;
+    --del-bg: rgba(168, 67, 31, 0.10);
+    --focus: #a8431f;
+    --shadow: 6px 6px 0 rgba(29, 26, 22, 0.9);
+    --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --font-text: "Newsreader", "Iowan Old Style", Georgia, serif;
+    --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #17150f;
+      --paper-2: #1f1c15;
+      --paper-3: #2a261d;
+      --ink: #ece4cf;
+      --ink-2: #c9bfa6;
+      --ink-3: #958b76;
+      --rule: #ece4cf;
+      --rule-soft: rgba(236, 228, 207, 0.20);
+      --accent: #e8794a;
+      --accent-ink: #17150f;
+      --proof: #8fb8d6;
+      --proof-bg: rgba(143, 184, 214, 0.12);
+      --del: #ef8a6c;
+      --del-bg: rgba(232, 121, 74, 0.12);
+      --focus: #f0a27f;
+      --shadow: 6px 6px 0 rgba(236, 228, 207, 0.85);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #17150f;
+    --paper-2: #1f1c15;
+    --paper-3: #2a261d;
+    --ink: #ece4cf;
+    --ink-2: #c9bfa6;
+    --ink-3: #958b76;
+    --rule: #ece4cf;
+    --rule-soft: rgba(236, 228, 207, 0.20);
+    --accent: #e8794a;
+    --accent-ink: #17150f;
+    --proof: #8fb8d6;
+    --proof-bg: rgba(143, 184, 214, 0.12);
+    --del: #ef8a6c;
+    --del-bg: rgba(232, 121, 74, 0.12);
+    --focus: #f0a27f;
+    --shadow: 6px 6px 0 rgba(236, 228, 207, 0.85);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-width: 0;
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-text);
+    font-size: 17px;
+    line-height: 1.55;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Paper grain: an SVG turbulence tile laid over the whole sheet. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.22;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.09  0 0 0 0 0.07  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) body::after { mix-blend-mode: screen; opacity: 0.12; }
+  }
+  :root[data-theme="dark"] body::after { mix-blend-mode: screen; opacity: 0.12; }
+
+  a { color: inherit; }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 2px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  svg.i { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.125em; }
+  .mono { font-family: var(--font-mono); font-size: 0.82em; }
+  .muted { color: var(--ink-3); }
+  .smallcaps { font-variant: small-caps; letter-spacing: 0.06em; text-transform: lowercase; }
+  .num { font-variant-numeric: tabular-nums lining-nums; }
+
+  /* ---------- Gallery chrome (not part of the app) ---------- */
+  .colophon {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 48px 24px 24px;
+    border-bottom: 3px double var(--rule);
+  }
+  .colophon .kicker { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+  .colophon h1 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 50;
+    font-weight: 600;
+    font-size: clamp(40px, 7vw, 88px);
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    margin: 12px 0 8px;
+  }
+  .colophon p { max-width: 62ch; margin: 0; color: var(--ink-2); font-style: italic; }
+  .gallery { max-width: 1280px; margin: 0 auto; padding: 40px 24px 96px; display: grid; gap: 72px; }
+  .frame-label {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin: 0 0 16px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .frame-label b { font-family: var(--font-display); font-style: italic; font-size: 26px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink); }
+  .frame-label::after { content: ""; flex: 1; border-bottom: 1px solid var(--rule-soft); transform: translateY(-4px); }
+
+  .sheet {
+    background: var(--paper-2);
+    border: 1.5px solid var(--rule);
+    box-shadow: var(--shadow);
+    min-width: 0;
+    overflow: hidden;
+  }
+  .sheet-inner { max-width: 1280px; margin: 0 auto; padding: 0 32px; }
+
+  /* ---------- Shared app pieces ---------- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1.5px solid var(--rule);
+    flex-wrap: wrap;
+  }
+  .logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; min-width: 0; }
+  .logo-mark {
+    width: 34px; height: 34px;
+    display: grid; place-items: center;
+    border: 1.5px solid var(--rule);
+    border-radius: 50%;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 700;
+    font-size: 22px;
+    line-height: 1;
+    padding-bottom: 3px;
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  .wordmark { font-family: var(--font-display); font-weight: 650; font-size: 24px; letter-spacing: -0.01em; font-variation-settings: "opsz" 72; }
+  .wordmark em { font-style: italic; color: var(--accent); font-weight: 500; }
+  .top-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 6px 16px;
+    border: 1.5px solid var(--rule);
+    background: transparent;
+    border-radius: 2px;
+    cursor: pointer;
+    font-family: var(--font-text);
+    font-size: 16px;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
+  }
+  .btn:hover { background: var(--ink); color: var(--paper); }
+  .btn:active { transform: translate(1px, 1px); }
+  .btn-solid { background: var(--ink); color: var(--paper); }
+  .btn-solid:hover { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn-quiet { border-color: transparent; padding-inline: 10px; }
+  .btn-quiet:hover { background: var(--paper-3); color: var(--ink); }
+  .btn-sm { min-height: 32px; padding: 2px 10px; font-size: 15px; }
+  .user { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; background: none; border: 0; padding: 4px; }
+  .avatar {
+    width: 30px; height: 30px; flex: none;
+    display: inline-grid; place-items: center;
+    border-radius: 50%;
+    border: 1.5px solid var(--rule);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 13px;
+    background: var(--paper-3);
+    color: var(--ink);
+  }
+  .avatar.lg { width: 40px; height: 40px; font-size: 16px; }
+  .av-admin { background: var(--accent); color: var(--accent-ink); }
+  .av-mira { background: #d9c58e; }
+  .av-jonas { background: #b9cad6; }
+  .av-kat { background: #c9d6b5; }
+
+  .crumbs { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 28px 0 6px; min-width: 0; }
+  .crumbs .owner { font-family: var(--font-display); font-size: 26px; font-style: italic; color: var(--ink-3); font-weight: 400; }
+  .crumbs .slash { font-family: var(--font-display); font-size: 26px; color: var(--ink-3); }
+  .crumbs .repo { font-family: var(--font-display); font-size: clamp(30px, 4.6vw, 44px); font-weight: 700; letter-spacing: -0.02em; font-variation-settings: "opsz" 144; line-height: 1.05; overflow-wrap: anywhere; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 1px 10px;
+    border: 1.5px solid var(--rule);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    align-self: center;
+    white-space: nowrap;
+  }
+  .badge-open { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .badge-closed { color: var(--ink-3); border-color: var(--ink-3); }
+  .desc { margin: 4px 0 22px; font-style: italic; font-size: 19px; color: var(--ink-2); max-width: 60ch; }
+
+  .tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; border-bottom: 1.5px solid var(--rule); }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 14px 10px;
+    background: none; border: 0; cursor: pointer;
+    font-size: 17px;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .tab:hover { color: var(--ink); background: var(--paper-3); }
+  .tab[aria-current="page"] { color: var(--ink); font-weight: 600; }
+  .tab[aria-current="page"]::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1.5px;
+    height: 4px; background: var(--accent);
+  }
+  .count {
+    font-family: var(--font-mono); font-size: 11px;
+    padding: 0 6px; border: 1px solid var(--rule-soft); border-radius: 2px; color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Screen 1: repo code view ---------- */
+  .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 18px 0; }
+  .branch-pick { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 14px; border: 1.5px solid var(--rule); background: var(--paper); border-radius: 2px; cursor: pointer; font-family: var(--font-mono); font-size: 14px; }
+  .branch-pick:hover { background: var(--paper-3); }
+  .meta-note { font-style: italic; color: var(--ink-3); font-size: 15px; }
+  .toolbar .spacer { flex: 1; }
+
+  .lastcommit {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px 16px;
+    padding: 14px 18px;
+    background: var(--paper);
+    border: 1px solid var(--rule-soft);
+    border-left: 4px solid var(--accent);
+    margin-bottom: 0;
+    min-width: 0;
+  }
+  .lastcommit .who { font-weight: 600; }
+  .lastcommit .msg { min-width: 0; overflow-wrap: anywhere; }
+  .lastcommit .meta { font-family: var(--font-mono); font-size: 13px; color: var(--ink-3); text-align: right; white-space: nowrap; }
+  .lastcommit .sha { color: var(--accent); }
+
+  .repo-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; padding: 28px 0 56px; align-items: start; }
+  .files { width: 100%; border-collapse: collapse; font-size: 16px; min-width: 0; }
+  .files th { text-align: left; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); padding: 0 12px 8px 0; border-bottom: 1px solid var(--rule); }
+  .files td { padding: 10px 12px 10px 0; border-bottom: 1px dotted var(--rule-soft); vertical-align: baseline; }
+  .files tr:hover td { background: var(--paper-3); }
+  .files td.name { white-space: nowrap; width: 1%; }
+  .files td.name a { text-decoration: none; display: inline-flex; align-items: center; gap: 10px; font-weight: 500; padding: 2px 0; }
+  .files td.name a:hover { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+  .files td.name .i { color: var(--ink-3); }
+  .files td.msg { font-style: italic; color: var(--ink-2); overflow-wrap: anywhere; }
+  .files td.when { font-family: var(--font-mono); font-size: 13px; color: var(--ink-3); white-space: nowrap; text-align: right; }
+  .files td.size { font-family: var(--font-mono); font-size: 13px; color: var(--ink-3); text-align: right; white-space: nowrap; }
+  .files th.size, .files th.when { text-align: right; }
+  .files td.size { padding-left: 0; }
+
+  .aside { display: grid; gap: 28px; min-width: 0; }
+  .aside-block { border-top: 3px double var(--rule); padding-top: 14px; }
+  .aside-block h3 { margin: 0 0 10px; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 20px; font-variation-settings: "opsz" 36; }
+  .clone { display: flex; align-items: stretch; border: 1.5px solid var(--rule); background: var(--paper); min-width: 0; }
+  .clone code { flex: 1; min-width: 0; padding: 10px 12px; font-family: var(--font-mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+  .clone button { border: 0; border-left: 1.5px solid var(--rule); background: var(--ink); color: var(--paper); padding: 0 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 15px; }
+  .clone button:hover { background: var(--accent); color: var(--accent-ink); }
+  .clone-note { margin: 8px 0 0; font-size: 14px; font-style: italic; color: var(--ink-3); }
+  .about dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 15px; }
+  .about dt { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); padding-top: 2px; }
+  .about dd { margin: 0; }
+
+  .readme { border-top: 1.5px solid var(--rule); padding-top: 28px; max-width: 74ch; }
+  .readme h2 {
+    font-family: var(--font-display); font-weight: 700; font-size: 40px; letter-spacing: -0.02em; line-height: 1.05;
+    font-variation-settings: "opsz" 144; margin: 0 0 14px;
+  }
+  .readme h3 { font-family: var(--font-display); font-size: 24px; font-weight: 600; margin: 28px 0 8px; font-variation-settings: "opsz" 72; }
+  .readme p { margin: 0 0 14px; }
+  .readme p.lede { font-size: 21px; line-height: 1.45; color: var(--ink); }
+  .readme p.lede::first-letter {
+    font-family: var(--font-display); float: left; font-size: 64px; line-height: 0.85; padding: 6px 8px 0 0; font-weight: 700; color: var(--accent);
+  }
+  .readme ul { padding-left: 0; list-style: none; margin: 0 0 14px; }
+  .readme li { position: relative; padding-left: 26px; margin-bottom: 6px; }
+  .readme li::before { content: "\2014"; position: absolute; left: 0; color: var(--accent); }
+  .readme a { text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+  .readme a:hover { color: var(--accent); }
+  code, pre { font-family: var(--font-mono); }
+  .readme code { font-size: 0.85em; background: var(--paper-3); padding: 1px 6px; border-radius: 2px; }
+  .codeblock {
+    margin: 18px 0 22px;
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: 2px;
+    box-shadow: 4px 4px 0 var(--accent);
+    overflow: hidden;
+  }
+  .codeblock header { display: flex; justify-content: space-between; align-items: center; padding: 6px 14px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; border-bottom: 1px solid rgba(236, 228, 207, 0.2); }
+  .codeblock pre { margin: 0; padding: 14px 16px; overflow-x: auto; font-size: 14px; line-height: 1.6; }
+  .codeblock .prompt { color: var(--accent); user-select: none; }
+  .codeblock .cm { opacity: 0.6; font-style: italic; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .codeblock { background: #0c0b08; color: var(--ink); box-shadow: 4px 4px 0 var(--accent); }
+  }
+  :root[data-theme="dark"] .codeblock { background: #0c0b08; color: var(--ink); }
+
+  /* ---------- Screen 2: pull request ---------- */
+  .pr-head { padding: 28px 0 0; }
+  .pr-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px; margin: 0; }
+  .pr-title .t { font-family: var(--font-display); font-weight: 650; font-size: clamp(32px, 4.4vw, 52px); letter-spacing: -0.02em; line-height: 1.05; font-variation-settings: "opsz" 144; }
+  .pr-title .n { font-family: var(--font-display); font-style: italic; font-size: 30px; color: var(--ink-3); font-weight: 400; }
+  .pr-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 14px 0 0; font-size: 16px; color: var(--ink-2); }
+  .chip { font-family: var(--font-mono); font-size: 13px; padding: 2px 8px; border: 1px solid var(--rule); background: var(--paper); border-radius: 2px; white-space: nowrap; }
+  .chip.target { background: var(--paper-3); }
+  .pr-tabs { margin-top: 22px; }
+  .pr-grid { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 36px; padding: 28px 0 56px; align-items: start; }
+  .thread { display: grid; gap: 28px; min-width: 0; }
+  .letter {
+    display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 16px;
+    padding: 0 0 22px;
+    border-bottom: 1px dotted var(--rule-soft);
+  }
+  .letter .dateline { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin: 0 0 6px; }
+  .letter .dateline strong { font-family: var(--font-text); text-transform: none; font-size: 17px; letter-spacing: 0; color: var(--ink); font-weight: 600; font-style: normal; }
+  .letter .salutation { font-style: italic; margin: 0 0 6px; color: var(--ink-2); }
+  .letter .body { font-size: 18px; line-height: 1.6; max-width: 62ch; margin: 0; }
+  .letter .body::first-letter { font-family: var(--font-display); font-weight: 700; float: left; font-size: 52px; line-height: 0.85; padding: 4px 6px 0 0; color: var(--accent); }
+  .letter .sign { font-style: italic; margin-top: 8px; color: var(--ink-2); }
+  .letter .reply-btn { margin-top: 10px; }
+  .margin-note { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); }
+
+  .merge-box { border: 1.5px solid var(--rule); background: var(--paper); padding: 20px 22px; display: grid; gap: 14px; margin-top: 6px; position: relative; }
+  .merge-box::before { content: "Ready"; position: absolute; top: -11px; left: 16px; background: var(--paper-2); padding: 0 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+  .merge-status { display: flex; align-items: flex-start; gap: 12px; font-size: 18px; }
+  .merge-status .i { color: var(--proof); width: 22px; height: 22px; margin-top: 2px; }
+  .merge-status small { display: block; font-style: italic; font-size: 15px; color: var(--ink-3); }
+  .merge-btn { background: var(--proof); color: var(--paper); border-color: var(--proof); font-weight: 600; min-height: 46px; font-size: 18px; justify-content: center; }
+  .merge-btn:hover { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  .merge-foot { font-size: 14px; color: var(--ink-3); font-style: italic; }
+  .composer { border: 1.5px solid var(--rule); background: var(--paper); padding: 14px; }
+  .composer label { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); display: block; margin-bottom: 8px; }
+  .composer textarea {
+    width: 100%; min-height: 90px; resize: vertical;
+    background: transparent; border: 0; border-bottom: 1px dashed var(--rule-soft);
+    font-family: var(--font-text); font-size: 18px; color: var(--ink); padding: 4px 0; outline: none;
+  }
+  .composer textarea:focus { border-bottom: 2px solid var(--focus); }
+  .composer textarea::placeholder { color: var(--ink-3); font-style: italic; }
+  .composer .row { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+  .side-pr { display: grid; gap: 22px; min-width: 0; }
+  .side-pr section { border-top: 1px solid var(--rule-soft); padding-top: 12px; font-size: 15px; }
+  .side-pr h4 { margin: 0 0 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); }
+  .side-pr p { margin: 0; }
+
+  .diff {
+    margin-top: 18px;
+    border: 1.5px solid var(--rule);
+    background: var(--paper);
+    min-width: 0;
+  }
+  .diff-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 10px 14px;
+    background: var(--paper-3);
+    border-bottom: 1.5px solid var(--rule);
+  }
+  .diff-head .path { font-family: var(--font-mono); font-size: 14px; overflow-wrap: anywhere; }
+  .diff-head .stat { font-family: var(--font-mono); font-size: 13px; white-space: nowrap; }
+  .diff-head .stat .plus { color: var(--proof); }
+  .diff-head .stat .minus { color: var(--del); }
+  .diff-scroll { overflow-x: auto; }
+  .diff-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 13.5px; line-height: 1.55; }
+  .diff-table td { padding: 0; vertical-align: top; }
+  .diff-table .hunk td { background: var(--paper-3); color: var(--ink-3); padding: 4px 14px; font-style: italic; }
+  .diff-table .ln { width: 1%; min-width: 38px; padding: 0 8px; text-align: right; color: var(--ink-3); user-select: none; font-variant-numeric: tabular-nums; border-right: 1px solid var(--rule-soft); white-space: nowrap; }
+  .diff-table .sign { width: 1%; padding: 0 10px; text-align: center; user-select: none; }
+  .diff-table .code { padding: 0 14px 0 6px; white-space: pre; }
+  .diff-table tr.add td { background: var(--proof-bg); }
+  .diff-table tr.add .sign { color: var(--proof); font-weight: 700; }
+  .diff-table tr.del td { background: var(--del-bg); }
+  .diff-table tr.del .sign { color: var(--del); font-weight: 700; }
+  .diff-table tr.del .code { text-decoration: line-through; text-decoration-color: var(--del); text-decoration-thickness: 1.5px; color: var(--ink-2); }
+  .diff-table tr.add .code { text-decoration: underline; text-decoration-style: wavy; text-decoration-color: var(--proof); text-decoration-thickness: 1px; text-underline-offset: 4px; }
+  .diff-table tr.ctx .sign { color: var(--ink-3); }
+  .diff-foot { padding: 8px 14px; font-size: 14px; font-style: italic; color: var(--ink-3); border-top: 1px dotted var(--rule-soft); }
+  .diff-foot a { color: var(--ink); }
+
+  /* ---------- Screen 3: issues ---------- */
+  .issues-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 26px 0 14px; border-bottom: 1px solid var(--rule); }
+  .issues-head h2 { margin: 0; font-family: var(--font-display); font-weight: 650; font-size: clamp(34px, 4.6vw, 52px); letter-spacing: -0.02em; line-height: 1; font-variation-settings: "opsz" 144; }
+  .issues-head h2 span { font-style: italic; color: var(--ink-3); font-weight: 400; }
+  .issues-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 0; }
+  .seg { display: inline-flex; border: 1.5px solid var(--rule); background: var(--paper); }
+  .seg button {
+    min-height: 40px; padding: 4px 16px; border: 0; background: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px; font-size: 16px; color: var(--ink-2);
+  }
+  .seg button + button { border-left: 1.5px solid var(--rule); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .seg button:not([aria-pressed="true"]):hover { background: var(--paper-3); color: var(--ink); }
+  .seg button .count { border-color: currentColor; }
+  .search {
+    flex: 1 1 260px; min-width: 0; min-height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    border: 1.5px solid var(--rule); background: var(--paper);
+  }
+  .search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-family: var(--font-mono); font-size: 14px; }
+  .search input::placeholder { color: var(--ink-3); }
+  .search:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .issue-list { border-top: 1.5px solid var(--rule); margin: 0; padding: 0; list-style: none; }
+  .issue {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 6px 16px;
+    padding: 18px 12px 18px 4px;
+    border-bottom: 1px dotted var(--rule-soft);
+    position: relative;
+    transition: background-color 120ms ease;
+  }
+  .issue:hover { background: var(--paper-3); }
+  .issue:focus-within { background: var(--paper-3); }
+  .issue .state { width: 26px; height: 26px; margin-top: 2px; }
+  .issue .state.open { color: var(--accent); }
+  .issue .state.closed { color: var(--proof); }
+  .issue .title-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; min-width: 0; }
+  .issue .title { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.2; font-variation-settings: "opsz" 48; text-decoration: none; overflow-wrap: anywhere; }
+  .issue .title::after { content: ""; position: absolute; inset: 0; }
+  .issue .title:hover { color: var(--accent); }
+  .issue .title:focus-visible { outline: none; }
+  .issue:focus-within .title { color: var(--accent); }
+  .issue .sub { grid-column: 2; font-size: 15px; color: var(--ink-3); font-style: italic; }
+  .issue .sub .mono { font-style: normal; }
+  .issue .labels { grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .label { font-family: var(--font-mono); font-size: 11px; padding: 1px 8px; border: 1px solid var(--rule); border-radius: 999px; letter-spacing: 0.02em; background: var(--paper); white-space: nowrap; }
+  .label.bug { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .label.design { background: var(--paper-3); }
+  .label.docs { border-style: dashed; }
+  .label.enh { background: var(--proof-bg); border-color: var(--proof); color: var(--proof); }
+  .issue .side { grid-column: 3; grid-row: 1 / span 2; display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 14px; color: var(--ink-2); align-self: start; padding-top: 4px; }
+  .issue .side .i { width: 18px; height: 18px; }
+  .issue-empty-note { margin: 22px 0 0; font-style: italic; color: var(--ink-3); font-size: 15px; }
+  .list-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 0 0; font-size: 15px; color: var(--ink-3); font-style: italic; }
+  .pager { display: inline-flex; gap: 8px; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 1040px) {
+    .repo-grid, .pr-grid { grid-template-columns: minmax(0, 1fr); }
+    .aside { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .side-pr { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 760px) {
+    body { font-size: 16px; }
+    .colophon { padding: 32px 16px 20px; }
+    .gallery { padding: 28px 16px 72px; gap: 52px; }
+    .sheet-inner { padding: 0 16px; }
+    .sheet { box-shadow: 4px 4px 0 rgba(29, 26, 22, 0.9); }
+    .files th.msg, .files td.msg { display: none; }
+    .lastcommit { grid-template-columns: auto minmax(0, 1fr); }
+    .lastcommit .meta { grid-column: 1 / -1; text-align: left; white-space: normal; }
+    .top-actions { margin-left: 0; width: 100%; justify-content: space-between; }
+    .aside, .side-pr { grid-template-columns: minmax(0, 1fr); }
+    .letter { grid-template-columns: 36px minmax(0, 1fr); gap: 12px; }
+    .letter .avatar { width: 36px; height: 36px; font-size: 14px; }
+    .issue .title { font-size: 21px; }
+    .issues-head h2 { font-size: 36px; }
+    .issue { grid-template-columns: 26px minmax(0, 1fr); }
+    .issue .side { grid-column: 2; grid-row: auto; padding-top: 0; }
+    .issue .labels, .issue .sub { grid-column: 2; }
+    .issue .state { width: 22px; height: 22px; }
+    .merge-btn { width: 100%; }
+    .pr-title .n { font-size: 24px; }
+    .diff-table { font-size: 12.5px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Icon sprite. Stroke-based, drawn to match the 1.6px hairline of the rules. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-11 8"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="1"/><path d="M5 15V5h10"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+    <symbol id="i-issue-open" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></symbol>
+    <symbol id="i-issue-closed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.6L16 9.5"/></symbol>
+    <symbol id="i-comment" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+    <symbol id="i-pr" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7v10M18 17V9a3 3 0 0 0-3-3h-3"/><path d="M13 3l-2 3 2 3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="1"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-merge" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M6 8v8M18 16V10a4 4 0 0 0-4-4h-2"/></symbol>
+  </defs>
+</svg>
+
+<header class="colophon">
+  <div class="kicker">Ether design exploration · Direction 09 of 10</div>
+  <h1>The Printed Zine</h1>
+  <p>Repositories set like a small literary quarterly. Serif display on cream stock, mono for anything you would type, and every discussion laid out as a dated letter.</p>
+</header>
+
+<main class="gallery">
+
+  <!-- ============ 01 REPOSITORY CODE VIEW ============ -->
+  <section aria-labelledby="s1">
+    <h2 class="frame-label" id="s1"><b>I. Repository</b> code view</h2>
+    <article class="sheet">
+      <div class="sheet-inner">
+
+        <nav class="topbar" aria-label="Global">
+          <a class="logo" href="#" aria-label="Ether home">
+            <span class="logo-mark" aria-hidden="true">E</span>
+            <span class="wordmark">Eth<em>er</em></span>
+          </a>
+          <div class="top-actions">
+            <a class="btn btn-solid" href="#"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New repository</a>
+            <button class="user" aria-haspopup="menu" aria-label="Account menu for admin">
+              <span class="avatar av-admin" aria-hidden="true">AD</span>
+              <span>admin</span>
+              <svg class="i" aria-hidden="true"><use href="#i-chev"/></svg>
+            </button>
+          </div>
+        </nav>
+
+        <div class="crumbs">
+          <span class="owner">admin</span><span class="slash">/</span><span class="repo">ether-core</span>
+          <span class="badge"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Private</span>
+        </div>
+        <p class="desc">The Ether server and web client: git over HTTPS, invite codes, and a deliberately small review UI.</p>
+
+        <nav class="tabs" aria-label="Repository">
+          <button class="tab" aria-current="page">Code</button>
+          <button class="tab">Issues <span class="count">5</span></button>
+          <button class="tab">Pull requests <span class="count">1</span></button>
+          <button class="tab">Settings</button>
+        </nav>
+
+        <div class="repo-grid">
+          <div>
+            <div class="toolbar">
+              <button class="branch-pick" aria-label="Switch branch, current main">
+                <svg class="i" aria-hidden="true"><use href="#i-branch"/></svg>main
+                <svg class="i" aria-hidden="true"><use href="#i-chev"/></svg>
+              </button>
+              <span class="meta-note"><span class="num">3</span> branches</span>
+              <span class="spacer"></span>
+              <button class="btn btn-sm"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg>Commits <span class="count">148</span></button>
+            </div>
+
+            <div class="lastcommit">
+              <span class="avatar av-jonas" aria-hidden="true">JN</span>
+              <div class="msg"><span class="who">jonas</span> &nbsp;Port diff renderer to streaming parser</div>
+              <div class="meta"><span class="sha">a3f9c2e</span> &middot; 2 hours ago</div>
+            </div>
+
+            <table class="files">
+              <caption class="sr-only">Files in main</caption>
+              <thead>
+                <tr><th scope="col">Name</th><th scope="col" class="msg">Last change</th><th scope="col" class="when">Updated</th><th scope="col" class="size">Size</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg>src/</a></td>
+                  <td class="msg">Move session handling into src/auth</td>
+                  <td class="when">2 hours ago</td>
+                  <td class="size">&mdash;</td>
+                </tr>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg>e2e/</a></td>
+                  <td class="msg">Cover push over HTTPS with a real git client</td>
+                  <td class="when">yesterday</td>
+                  <td class="size">&mdash;</td>
+                </tr>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg>drizzle/</a></td>
+                  <td class="msg">Add invites table</td>
+                  <td class="when">3 days ago</td>
+                  <td class="size">&mdash;</td>
+                </tr>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>README.md</a></td>
+                  <td class="msg">Document tailnet-only setup</td>
+                  <td class="when">3 weeks ago</td>
+                  <td class="size num">2.1 KB</td>
+                </tr>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>package.json</a></td>
+                  <td class="msg">Bump drizzle-orm to 0.44</td>
+                  <td class="when">5 days ago</td>
+                  <td class="size num">1.4 KB</td>
+                </tr>
+                <tr>
+                  <td class="name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>tsconfig.json</a></td>
+                  <td class="msg">Initial commit</td>
+                  <td class="when">4 months ago</td>
+                  <td class="size num">512 B</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="readme" style="margin-top: 36px;">
+              <h2>ether-core</h2>
+              <p class="lede">Ether is a small, invite-only place to keep git repositories for a handful of friends. This repository holds the server and the web client.</p>
+              <h3>Running locally</h3>
+              <p>You need Bun, and a Tailscale node for the tailnet URL to resolve. Then:</p>
+              <div class="codeblock">
+                <header><span>shell</span><span>bash</span></header>
+                <pre><span class="prompt">$</span> bun install
+<span class="prompt">$</span> bun run dev
+<span class="cm"># first run creates data/ and the sqlite file</span></pre>
+              </div>
+              <h3>Notes</h3>
+              <ul>
+                <li>The first account is created with <code>bun run scripts/make-admin.ts</code>.</li>
+                <li>Invites are minted from <em>Settings &rarr; People</em> and expire after seven days.</li>
+                <li>Repositories live on disk under <code>data/repos</code>, one bare repo each.</li>
+              </ul>
+            </div>
+          </div>
+
+          <aside class="aside" aria-label="Repository sidebar">
+            <div class="aside-block">
+              <h3>Clone</h3>
+              <div class="clone">
+                <code>https://pc.tail576a27.ts.net/admin/ether-core.git</code>
+                <button aria-label="Copy clone URL"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy</button>
+              </div>
+              <p class="clone-note">Use your Ether username and an access token when git asks.</p>
+            </div>
+            <div class="aside-block about">
+              <h3>About</h3>
+              <dl>
+                <dt>Owner</dt><dd>admin</dd>
+                <dt>Visibility</dt><dd>Private, shared with mira, jonas, kat</dd>
+                <dt>Default</dt><dd><span class="mono">main</span></dd>
+                <dt>Commits</dt><dd class="num">148</dd>
+              </dl>
+            </div>
+          </aside>
+        </div>
+
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ 02 PULL REQUEST ============ -->
+  <section aria-labelledby="s2">
+    <h2 class="frame-label" id="s2"><b>II. Pull request</b> conversation</h2>
+    <article class="sheet">
+      <div class="sheet-inner">
+
+        <nav class="topbar" aria-label="Global">
+          <a class="logo" href="#" aria-label="Ether home">
+            <span class="logo-mark" aria-hidden="true">E</span>
+            <span class="wordmark">Eth<em>er</em></span>
+          </a>
+          <div class="top-actions">
+            <a class="btn btn-solid" href="#"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New repository</a>
+            <button class="user" aria-haspopup="menu" aria-label="Account menu for admin">
+              <span class="avatar av-admin" aria-hidden="true">AD</span>
+              <span>admin</span>
+              <svg class="i" aria-hidden="true"><use href="#i-chev"/></svg>
+            </button>
+          </div>
+        </nav>
+
+        <header class="pr-head">
+          <h2 class="pr-title">
+            <span class="t">Add invite-only registration</span>
+            <span class="n">#12</span>
+            <span class="badge badge-open"><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg>Open</span>
+          </h2>
+          <p class="pr-sub">
+            <span class="avatar av-admin" aria-hidden="true" style="width:24px;height:24px;font-size:10px">AD</span>
+            <span><strong>admin</strong> wants to merge <span class="chip">feature/invites</span> into <span class="chip target">main</span></span>
+          </p>
+        </header>
+
+        <nav class="tabs pr-tabs" aria-label="Pull request">
+          <button class="tab" aria-current="page">Conversation</button>
+          <button class="tab">Commits <span class="count">3</span></button>
+          <button class="tab">Files changed <span class="count">4</span></button>
+        </nav>
+
+        <div class="pr-grid">
+          <div class="thread">
+
+            <article class="letter">
+              <span class="avatar av-mira" aria-hidden="true">MK</span>
+              <div>
+                <p class="dateline"><strong>mira</strong> &middot; wrote on Tuesday, 14 October &middot; 2 days ago</p>
+                <p class="body">Should invite codes be single-use? As written, anyone holding the link can register as many accounts as they like until it expires, and I would rather not find that out from a stranger in a group chat.</p>
+                <p class="sign">&mdash; mira</p>
+              </div>
+            </article>
+
+            <article class="letter">
+              <span class="avatar av-admin" aria-hidden="true">AD</span>
+              <div>
+                <p class="dateline"><strong>admin</strong> &middot; replied on Tuesday, 14 October &middot; 2 days ago</p>
+                <p class="salutation">Good catch.</p>
+                <p class="body">Single-use is now the default. The <code>--reusable</code> flag exists on the CLI for the one group invite we ever want to hand out. I did not add a table for it yet, so it stays a boolean on the row.</p>
+                <p class="sign">&mdash; admin</p>
+              </div>
+            </article>
+
+            <div class="diff" role="region" aria-label="Diff for src/auth/invites.ts">
+              <div class="diff-head">
+                <span class="path">src/auth/invites.ts</span>
+                <span class="stat"><span class="plus">+7</span>&nbsp;&nbsp;<span class="minus">&minus;1</span></span>
+              </div>
+              <div class="diff-scroll">
+                <table class="diff-table">
+                  <colgroup><col style="width:44px"><col style="width:44px"><col style="width:28px"><col></colgroup>
+                  <tbody>
+                    <tr class="hunk"><td colspan="4">@@ -18,4 +18,10 @@ export async function createInvite(actor: User, opts: InviteOpts) {</td></tr>
+                    <tr class="ctx"><td class="ln">18</td><td class="ln">18</td><td class="sign"> </td><td class="code">  const code = randomToken(12);</td></tr>
+                    <tr class="del"><td class="ln">19</td><td class="ln"></td><td class="sign">-</td><td class="code">  await db.insert(invites).values({ code });</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">19</td><td class="sign">+</td><td class="code">  const expires = addDays(now(), opts.days ?? 7);</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">20</td><td class="sign">+</td><td class="code">  await db.insert(invites).values({</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">21</td><td class="sign">+</td><td class="code">    code,</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">22</td><td class="sign">+</td><td class="code">    createdBy: actor.id,</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">23</td><td class="sign">+</td><td class="code">    expiresAt: expires,</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">24</td><td class="sign">+</td><td class="code">    singleUse: !opts.reusable,</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">25</td><td class="sign">+</td><td class="code">  });</td></tr>
+                    <tr class="ctx"><td class="ln">20</td><td class="ln">26</td><td class="sign"> </td><td class="code">  return code;</td></tr>
+                    <tr class="ctx"><td class="ln">21</td><td class="ln">27</td><td class="sign"> </td><td class="code">}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="diff-foot">Showing 1 of 4 changed files. <a href="#">Open the full diff</a></div>
+            </div>
+
+            <form class="composer" onsubmit="return false">
+              <label for="reply">Leave a reply</label>
+              <textarea id="reply" placeholder="Write something a friend would want to read&hellip;"></textarea>
+              <div class="row"><button class="btn btn-sm" type="submit">Comment</button></div>
+            </form>
+          </div>
+
+          <aside class="side-pr" aria-label="Pull request details">
+            <div class="merge-box">
+              <div class="merge-status">
+                <svg class="i" aria-hidden="true"><use href="#i-check"/></svg>
+                <div>This branch has no conflicts with the base branch
+                  <small>Merging will close #12 and update main.</small>
+                </div>
+              </div>
+              <button class="btn merge-btn" type="button"><svg class="i" aria-hidden="true"><use href="#i-merge"/></svg>Merge pull request</button>
+              <p class="merge-foot">Squash and merge is the only option on this repository.</p>
+            </div>
+            <section>
+              <h4>Reviewers</h4>
+              <p>mira, jonas</p>
+            </section>
+            <section>
+              <h4>Labels</h4>
+              <p><span class="label enh">enhancement</span></p>
+            </section>
+            <section>
+              <h4>Linked issue</h4>
+              <p>Closes #13, <em>Let invites expire after 7 days</em></p>
+            </section>
+          </aside>
+        </div>
+
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ 03 ISSUES LIST ============ -->
+  <section aria-labelledby="s3">
+    <h2 class="frame-label" id="s3"><b>III. Issues</b> list</h2>
+    <article class="sheet">
+      <div class="sheet-inner">
+
+        <nav class="topbar" aria-label="Global">
+          <a class="logo" href="#" aria-label="Ether home">
+            <span class="logo-mark" aria-hidden="true">E</span>
+            <span class="wordmark">Eth<em>er</em></span>
+          </a>
+          <div class="top-actions">
+            <a class="btn btn-solid" href="#"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New repository</a>
+            <button class="user" aria-haspopup="menu" aria-label="Account menu for admin">
+              <span class="avatar av-admin" aria-hidden="true">AD</span>
+              <span>admin</span>
+              <svg class="i" aria-hidden="true"><use href="#i-chev"/></svg>
+            </button>
+          </div>
+        </nav>
+
+        <div class="crumbs">
+          <span class="owner">admin</span><span class="slash">/</span><span class="repo" style="font-size: clamp(24px, 3.4vw, 32px)">ether-core</span>
+        </div>
+
+        <nav class="tabs" aria-label="Repository" style="margin-top: 14px">
+          <button class="tab">Code</button>
+          <button class="tab" aria-current="page">Issues <span class="count">5</span></button>
+          <button class="tab">Pull requests <span class="count">1</span></button>
+          <button class="tab">Settings</button>
+        </nav>
+
+        <div class="issues-head">
+          <h2>Issues <span>in ether-core</span></h2>
+          <button class="btn btn-solid"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New issue</button>
+        </div>
+
+        <div class="issues-bar">
+          <div class="seg" role="group" aria-label="Filter by state">
+            <button type="button" aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-issue-open"/></svg>Open <span class="count">5</span></button>
+            <button type="button" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-issue-closed"/></svg>Closed <span class="count">9</span></button>
+          </div>
+          <label class="search">
+            <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+            <span class="sr-only">Search issues</span>
+            <input type="search" value="is:issue is:open" aria-label="Search issues">
+          </label>
+        </div>
+
+        <ol class="issue-list">
+          <li class="issue">
+            <svg class="i state open" aria-hidden="true"><use href="#i-issue-open"/></svg>
+            <div class="title-line">
+              <a class="title" href="#">Session cookie is missing SameSite on Safari</a>
+            </div>
+            <div class="side"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg><span class="num">2</span></div>
+            <div class="labels"><span class="label bug">bug</span></div>
+            <div class="sub"><span class="mono">#14</span> opened 3 days ago by kat</div>
+          </li>
+          <li class="issue">
+            <svg class="i state open" aria-hidden="true"><use href="#i-issue-open"/></svg>
+            <div class="title-line">
+              <a class="title" href="#">Let invites expire after seven days</a>
+            </div>
+            <div class="side"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg><span class="num">5</span></div>
+            <div class="labels"><span class="label enh">enhancement</span></div>
+            <div class="sub"><span class="mono">#13</span> opened 4 days ago by mira</div>
+          </li>
+          <li class="issue">
+            <svg class="i state open" aria-hidden="true"><use href="#i-issue-open"/></svg>
+            <div class="title-line">
+              <a class="title" href="#">Clone hangs on packfiles over 200 MB</a>
+            </div>
+            <div class="side"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg><span class="num">0</span></div>
+            <div class="labels"><span class="label bug">bug</span><span class="label">mirror</span></div>
+            <div class="sub"><span class="mono">#11</span> opened 1 week ago by jonas</div>
+          </li>
+          <li class="issue">
+            <svg class="i state open" aria-hidden="true"><use href="#i-issue-open"/></svg>
+            <div class="title-line">
+              <a class="title" href="#">Give the diff viewer a reading mode for long hunks</a>
+            </div>
+            <div class="side"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg><span class="num">3</span></div>
+            <div class="labels"><span class="label design">design</span></div>
+            <div class="sub"><span class="mono">#9</span> opened 2 weeks ago by kat</div>
+          </li>
+          <li class="issue">
+            <svg class="i state open" aria-hidden="true"><use href="#i-issue-open"/></svg>
+            <div class="title-line">
+              <a class="title" href="#">Document the tailnet setup for friends</a>
+            </div>
+            <div class="side"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg><span class="num">1</span></div>
+            <div class="labels"><span class="label docs">docs</span></div>
+            <div class="sub"><span class="mono">#8</span> opened 3 weeks ago by admin</div>
+          </li>
+        </ol>
+
+        <div class="list-foot">
+          <span>Sorted by newest activity &middot; last updated 12 minutes ago</span>
+          <span class="pager">
+            <button class="btn btn-sm btn-quiet" type="button" disabled>&larr; Newer</button>
+            <button class="btn btn-sm" type="button">Older &rarr;</button>
+          </span>
+        </div>
+
+      </div>
+    </article>
+  </section>
+
+</main>
+</body>
+</html>

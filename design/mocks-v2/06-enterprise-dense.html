@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+Direction 06, Enterprise dense. Ether v2 UI mock.
+Layout: top bar, a 208px project rail with icons and labels, breadcrumb bar and a page title row with actions; data as compact tables with sortable headers.
+Palette: blue-gray neutrals with one confident blue accent; green, red and violet only for state and diff meaning.
+Type: Source Sans 3 at 14px on a 12/14/16/20 scale, Source Code Pro for code, shas, paths and branch names.
+-->
+<title>Ether, direction 06: Enterprise dense</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  color-scheme:light dark;
+  --canvas:#eef1f5;--surface:#ffffff;--surface-2:#f5f7fa;--surface-3:#e3e8ef;--surface-hover:#eef3f9;
+  --border:#d5dce6;--border-strong:#aab4c3;
+  --text:#172033;--text-2:#414d60;--text-3:#5b6779;
+  --accent:#0b5cad;--accent-btn:#0b5cad;--accent-btn-hover:#094d91;--accent-soft:#e4eefa;--accent-text:#0b4f94;
+  --open:#1a7f37;--open-text:#176b30;--open-soft:#dcf1e2;
+  --merged:#6e40c9;--merged-text:#5b30a8;--merged-soft:#f0eafc;
+  --closed:#b42318;--closed-text:#a11d14;--closed-soft:#fbe7e5;
+  --add-text:#176b30;--add-soft:#e3f4e8;--del-text:#a11d14;--del-soft:#fbe9e7;
+  --focus:#0b5cad;
+  --board:#dfe4eb;--board-text:#26324a;
+  --shadow:0 1px 2px rgb(23 32 51/.08),0 4px 12px rgb(23 32 51/.08);
+  --font-ui:"Source Sans 3","Source Sans Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"Source Code Pro",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --canvas:#0f1420;--surface:#161c2b;--surface-2:#1d2536;--surface-3:#263047;--surface-hover:#202a40;
+    --border:#2e3850;--border-strong:#4a5570;
+    --text:#e6ebf3;--text-2:#b7c0cf;--text-3:#9aa6ba;
+    --accent:#6fb4ff;--accent-btn:#1f6fc4;--accent-btn-hover:#2a7ad2;--accent-soft:#15294a;--accent-text:#8dc2ff;
+    --open:#3fb950;--open-text:#7ee09a;--open-soft:#14301f;
+    --merged:#a878f0;--merged-text:#c6a7ff;--merged-soft:#2a2046;
+    --closed:#ff7b72;--closed-text:#ff9b93;--closed-soft:#3b1a1e;
+    --add-text:#7ee09a;--add-soft:#14301f;--del-text:#ff9b93;--del-soft:#3b1a1e;
+    --focus:#6fb4ff;
+    --board:#080b12;--board-text:#d5dce8;
+    --shadow:0 1px 2px rgb(0 0 0/.5),0 4px 12px rgb(0 0 0/.4);
+  }
+}
+:root[data-theme="dark"]{
+  --canvas:#0f1420;--surface:#161c2b;--surface-2:#1d2536;--surface-3:#263047;--surface-hover:#202a40;
+  --border:#2e3850;--border-strong:#4a5570;
+  --text:#e6ebf3;--text-2:#b7c0cf;--text-3:#9aa6ba;
+  --accent:#6fb4ff;--accent-btn:#1f6fc4;--accent-btn-hover:#2a7ad2;--accent-soft:#15294a;--accent-text:#8dc2ff;
+  --open:#3fb950;--open-text:#7ee09a;--open-soft:#14301f;
+  --merged:#a878f0;--merged-text:#c6a7ff;--merged-soft:#2a2046;
+  --closed:#ff7b72;--closed-text:#ff9b93;--closed-soft:#3b1a1e;
+  --add-text:#7ee09a;--add-soft:#14301f;--del-text:#ff9b93;--del-soft:#3b1a1e;
+  --focus:#6fb4ff;
+  --board:#080b12;--board-text:#d5dce8;
+  --shadow:0 1px 2px rgb(0 0 0/.5),0 4px 12px rgb(0 0 0/.4);
+}
+body{margin:0;background:var(--board);color:var(--board-text);font:400 14px/20px var(--font-ui);min-width:320px;overflow-x:hidden}
+button,input,textarea{font:inherit;color:inherit}
+a{color:inherit;text-decoration:none}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--font-mono);font-size:13px}
+.muted{color:var(--text-3)}
+
+.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;display:inline-block;vertical-align:middle}
+.i-20{width:20px;height:20px}
+
+.board{max-width:1280px;margin:0 auto;padding:28px 24px 72px;display:grid;gap:52px}
+.board-head h1{font:700 20px/28px var(--font-ui);margin:4px 0 0;color:var(--board-text)}
+.board-head p{margin:8px 0 0;max-width:75ch;opacity:.9}
+.board-kicker{font:600 12px/16px var(--font-ui);margin:0;opacity:.8}
+.board-nav{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;font-size:13px}
+.board-nav a{text-decoration:underline;text-underline-offset:3px}
+.shot{margin:0;min-width:0}
+.label{display:flex;align-items:center;gap:8px;font:600 13px/16px var(--font-ui);padding:0 0 8px;margin:0;color:var(--board-text)}
+.label .no{font-family:var(--font-mono);opacity:.75;font-weight:500}
+.frame{width:100%;max-width:1280px;overflow:clip;border:1px solid var(--border-strong);border-radius:8px;background:var(--canvas);color:var(--text);box-shadow:var(--shadow);position:relative}
+.states{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr));gap:32px 24px;align-items:start}
+.states .wide{grid-column:1/-1}
+.state-body{padding:20px;background:var(--canvas);min-height:200px}
+
+/* controls */
+.btn{height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:4px;background:var(--surface);color:var(--text);font:600 14px/1 var(--font-ui);display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;transition:background-color 150ms,border-color 150ms,color 150ms}
+.btn:hover{background:var(--surface-hover)}
+.btn:active{background:var(--surface-3)}
+.btn[aria-expanded="true"]:not(.btn-primary){background:var(--surface-3)}
+.btn-primary{background:var(--accent-btn);border-color:var(--accent-btn);color:#fff}
+.btn-primary:hover{background:var(--accent-btn-hover);border-color:var(--accent-btn-hover)}
+.btn:disabled{background:var(--surface-2);border-color:var(--border);color:var(--text-3);cursor:not-allowed}
+.btn-primary:disabled{background:var(--surface-3);border-color:var(--surface-3);color:var(--text-3)}
+.btn-sm{height:28px;padding:0 10px;font-size:13px}
+.icon-btn{width:32px;height:32px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--text-2);display:inline-grid;place-items:center;cursor:pointer;transition:background-color 150ms,color 150ms}
+.icon-btn:hover{background:var(--surface-hover);color:var(--text)}
+.icon-btn:active{background:var(--surface-3)}
+.seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:4px;overflow:hidden;background:var(--surface)}
+.seg button{height:30px;padding:0 10px;border:0;border-right:1px solid var(--border-strong);background:transparent;color:var(--text-2);font:600 14px/1 var(--font-ui);display:inline-flex;align-items:center;gap:6px;cursor:pointer;transition:background-color 150ms,color 150ms}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:var(--surface-hover);color:var(--text)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-text)}
+.field{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid var(--border-strong);border-radius:4px;background:var(--surface);color:var(--text-3);min-width:0}
+.field input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);outline:none;height:100%}
+.field input::placeholder{color:var(--text-3)}
+.field:focus-within,.field.force-focus{border-color:var(--focus);box-shadow:0 0 0 1px var(--focus)}
+.force-focus:not(.field){outline:2px solid var(--focus);outline-offset:2px}
+.link{color:var(--accent-text);text-decoration:underline;text-underline-offset:2px}
+.link:hover{color:var(--text)}
+.badge{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:4px;font:600 13px/1 var(--font-ui);white-space:nowrap;border:1px solid transparent}
+.badge .i{width:14px;height:14px}
+.badge.open{background:var(--open-soft);color:var(--open-text);border-color:color-mix(in srgb,var(--open) 40%,transparent)}
+.badge.merged{background:var(--merged-soft);color:var(--merged-text);border-color:color-mix(in srgb,var(--merged) 40%,transparent)}
+.badge.closed{background:var(--closed-soft);color:var(--closed-text);border-color:color-mix(in srgb,var(--closed) 40%,transparent)}
+.badge.private{background:transparent;color:var(--text-2);border-color:var(--border-strong)}
+.st-open{color:var(--open)}
+.st-closed{color:var(--closed)}
+.count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:18px;padding:0 6px;border-radius:3px;background:var(--surface-3);color:var(--text-2);font:600 12px/1 var(--font-ui);font-variant-numeric:tabular-nums}
+.avatar{width:20px;height:20px;border-radius:50%;background:var(--surface-3);color:var(--text-2);font:600 12px/20px var(--font-ui);text-align:center;flex:none;text-transform:uppercase}
+.avatar.md{width:28px;height:28px;font-size:14px;line-height:28px}
+
+/* top bar, rail, breadcrumb */
+.top{height:48px;display:flex;align-items:center;gap:16px;padding:0 12px 0 16px;background:var(--surface);border-bottom:1px solid var(--border)}
+.logo{display:inline-flex;align-items:center;gap:8px;font:700 16px/1 var(--font-ui);color:var(--text)}
+.logo svg{color:var(--accent)}
+.top-nav{display:flex;gap:2px;height:48px}
+.top-nav a{display:inline-flex;align-items:center;padding:0 10px;color:var(--text-2);font-weight:600;border-bottom:2px solid transparent;transition:color 150ms,border-color 150ms}
+.top-nav a:hover{color:var(--text)}
+.top-nav a[aria-current="page"]{color:var(--text);border-color:var(--accent)}
+.top-end{margin-left:auto;display:flex;align-items:center;gap:8px}
+.gsearch{width:240px;height:32px;display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;border:1px solid var(--border-strong);border-radius:4px;background:var(--surface-2);color:var(--text-3)}
+.gsearch input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);outline:none}
+.gsearch input::placeholder{color:var(--text-3)}
+.gsearch:focus-within{border-color:var(--focus);box-shadow:0 0 0 1px var(--focus)}
+.gsearch kbd{font:600 12px/1 var(--font-ui);padding:2px 5px;border:1px solid var(--border-strong);border-radius:3px;background:var(--surface);color:var(--text-2)}
+.search-btn,.menu-btn{display:none}
+
+.shell{display:grid;grid-template-columns:208px minmax(0,1fr);background:var(--canvas);min-width:0}
+.rail{background:var(--surface);border-right:1px solid var(--border);padding:12px 8px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.rail-proj{display:flex;align-items:center;gap:8px;padding:6px 8px 12px;border-bottom:1px solid var(--border);margin-bottom:8px;min-width:0}
+.rail-proj .box{width:28px;height:28px;border-radius:4px;background:var(--accent-soft);color:var(--accent-text);display:grid;place-items:center;font:700 14px/1 var(--font-ui);flex:none}
+.rail-proj strong{font:600 14px/18px var(--font-ui);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.rail-proj span{font-size:12px;color:var(--text-3);display:block}
+.rail a{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;color:var(--text-2);font-weight:600;transition:background-color 150ms,color 150ms;position:relative}
+.rail a:hover{background:var(--surface-hover);color:var(--text)}
+.rail a[aria-current="page"]{background:var(--accent-soft);color:var(--accent-text)}
+.rail a[aria-current="page"]::before{content:"";position:absolute;left:-8px;top:6px;bottom:6px;width:3px;border-radius:0 2px 2px 0;background:var(--accent)}
+.rail .count{margin-left:auto}
+.rail-label{font:600 12px/16px var(--font-ui);color:var(--text-3);padding:12px 10px 4px}
+
+.main{min-width:0;display:flex;flex-direction:column}
+.crumb-bar{height:40px;display:flex;align-items:center;gap:6px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--border);font-size:14px;color:var(--text-2);min-width:0}
+.crumb-bar a{color:var(--text-2)}
+.crumb-bar a:hover{color:var(--accent-text);text-decoration:underline}
+.crumb-bar .sep{color:var(--text-3)}
+.crumb-bar strong{color:var(--text);font-weight:600}
+.crumb-bar .badge{margin-left:4px}
+.title-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 20px 12px;background:var(--canvas)}
+.title-row h2{margin:0;font:700 20px/28px var(--font-ui);display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.title-row h2 .num{font-weight:400;color:var(--text-3)}
+.title-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.repo-tabs{display:flex;gap:0;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:thin}
+.repo-tabs a,.dtabs a{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 12px;color:var(--text-2);font-weight:600;white-space:nowrap;border-bottom:2px solid transparent;transition:color 150ms,border-color 150ms}
+.repo-tabs a:hover,.dtabs a:hover{color:var(--text)}
+.repo-tabs a[aria-current="page"],.dtabs a[aria-current="true"]{color:var(--text);border-color:var(--accent)}
+.content{padding:0 20px 28px;min-width:0}
+
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 0;min-width:0}
+.anchor{position:relative}
+.pop{position:absolute;top:calc(100% + 4px);left:0;z-index:10;width:340px;max-width:calc(100vw - 32px);background:var(--surface);border:1px solid var(--border-strong);border-radius:6px;box-shadow:var(--shadow);padding:8px}
+.pop-group{font:600 12px/16px var(--font-ui);color:var(--text-3);padding:8px 8px 4px;text-transform:uppercase;letter-spacing:.04em}
+.pop-item{width:100%;display:flex;align-items:center;gap:8px;min-height:30px;padding:4px 8px;border:0;border-radius:4px;background:transparent;text-align:left;cursor:pointer;color:var(--text);transition:background-color 150ms}
+.pop-item:hover{background:var(--surface-hover)}
+.pop-item[aria-current="true"]{background:var(--accent-soft);color:var(--accent-text)}
+.pop-item .i{color:var(--text-2)}
+.pop-item .hint{margin-left:auto;font-size:12px;color:var(--text-3)}
+.pop-item .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.pop-filter{margin-bottom:6px}
+.clone-pop{width:360px;right:0;left:auto}
+.clone-pop p{margin:4px 4px 8px;font:600 14px/20px var(--font-ui)}
+.clone-row{display:flex;gap:8px}
+.clone-row input{flex:1;min-width:0;height:32px;padding:0 10px;border:1px solid var(--border-strong);border-radius:4px;background:var(--surface-2);color:var(--text);font:400 13px/1 var(--font-mono);text-overflow:ellipsis}
+.clone-row input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.clone-pop label{display:block;font:600 12px/16px var(--font-ui);color:var(--text-2);margin:8px 0 4px}
+.hint-text{font-size:13px;line-height:18px;color:var(--text-2);margin:8px 0 4px}
+
+.dtable-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:6px;background:var(--surface);scrollbar-width:thin}
+table{border-collapse:collapse;width:100%}
+.dtable{font-size:14px}
+.dtable th{text-align:left;font:600 12px/16px var(--font-ui);color:var(--text-2);background:var(--surface-2);padding:0;height:32px;border-bottom:1px solid var(--border);white-space:nowrap}
+.dtable th button{display:inline-flex;align-items:center;gap:4px;width:100%;height:32px;padding:0 10px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;transition:color 150ms,background-color 150ms}
+.dtable th button:hover{color:var(--text);background:var(--surface-hover)}
+.dtable th button .i{width:14px;height:14px;opacity:.5}
+.dtable th[aria-sort] button .i{opacity:1;color:var(--accent-text)}
+.dtable th .plain{display:block;padding:0 10px;line-height:32px}
+.dtable td{height:36px;padding:0 10px;border-bottom:1px solid var(--border);color:var(--text-2);white-space:nowrap;vertical-align:middle}
+.dtable tr:last-child td{border-bottom:0}
+.dtable tbody tr{transition:background-color 150ms}
+.dtable tbody tr:hover{background:var(--surface-hover)}
+.dtable tbody tr[aria-selected="true"]{background:var(--accent-soft)}
+.dtable .r{text-align:right}
+.dtable .c{text-align:center}
+.dtable .w{width:100%}
+.dtable .title-cell{white-space:normal;min-width:200px}
+.dtable .title-cell a{color:var(--text);font-weight:600}
+.dtable .title-cell a:hover{color:var(--accent-text);text-decoration:underline}
+.dtable .meta{font-size:12px;color:var(--text-3);margin-top:2px}
+.dtable .ico{display:inline-flex;align-items:center;gap:8px;color:var(--text);font-weight:600}
+.dtable .ico:hover{color:var(--accent-text);text-decoration:underline}
+.dtable .ico .i{color:var(--text-2)}
+.dtable .add{color:var(--add-text);font-variant-numeric:tabular-nums}
+.dtable .del{color:var(--del-text);font-variant-numeric:tabular-nums}
+.dtable .sha{font-family:var(--font-mono);font-size:13px;color:var(--accent-text)}
+.dtable .mono{font-size:13px;color:var(--text)}
+.dtable .cnt{display:inline-flex;align-items:center;gap:4px;font-variant-numeric:tabular-nums}
+.dtable .cnt .i{width:14px;height:14px}
+.dtable tfoot td{background:var(--surface-2);font-size:13px;color:var(--text-3)}
+.table-foot{display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--border);background:var(--surface-2);font-size:13px;color:var(--text-2);flex-wrap:wrap}
+.table-foot .pager{margin-left:auto;display:flex;gap:6px;align-items:center}
+.table-foot .btn{height:28px;font-size:13px;padding:0 10px}
+
+.commit-bar{display:flex;align-items:center;gap:8px;min-height:38px;padding:6px 12px;background:var(--surface-2);border:1px solid var(--border);border-bottom:0;border-radius:6px 6px 0 0;min-width:0;flex-wrap:wrap;font-size:14px}
+.commit-msg{flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.commit-msg:hover{color:var(--accent-text);text-decoration:underline}
+.sha{font-family:var(--font-mono);font-size:13px;color:var(--accent-text)}
+.sha:hover{text-decoration:underline}
+.when{color:var(--text-3);white-space:nowrap;font-size:13px}
+.commit-count{display:inline-flex;align-items:center;gap:6px;color:var(--text-2);white-space:nowrap;font-variant-numeric:tabular-nums;font-size:13px}
+.commit-count:hover{color:var(--accent-text)}
+.files-table .name-cell a{display:inline-flex;align-items:center;gap:8px;color:var(--text);font-weight:600}
+.files-table .name-cell a:hover{color:var(--accent-text);text-decoration:underline}
+.files-table .name-cell .i{color:var(--text-2)}
+.fsize{display:none;font-size:12px;color:var(--text-3);margin-left:8px;font-variant-numeric:tabular-nums}
+
+.readme{margin-top:16px;border:1px solid var(--border);border-radius:6px;background:var(--surface);overflow:hidden}
+.readme-head{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-bottom:1px solid var(--border);background:var(--surface-2);font:600 14px/1 var(--font-ui);color:var(--text-2)}
+.prose{padding:20px 24px 24px;max-width:75ch;font-size:15px;line-height:22px;color:var(--text)}
+.prose h1{font:700 20px/28px var(--font-ui);margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.prose p{margin:0 0 12px;color:var(--text-2)}
+.prose ul{margin:0;padding-left:20px;color:var(--text-2)}
+.prose li{margin:0 0 4px}
+.prose pre{margin:0 0 14px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;overflow-x:auto;font:400 13px/20px var(--font-mono);color:var(--text)}
+
+/* PR layout */
+.pr-grid{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:20px;align-items:start}
+.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.side-card{border:1px solid var(--border);border-radius:6px;background:var(--surface);padding:12px}
+.side-card h3{margin:0 0 8px;font:600 12px/16px var(--font-ui);color:var(--text-3);text-transform:uppercase;letter-spacing:.04em}
+.side-card dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-size:13px}
+.side-card dt{color:var(--text-3)}
+.side-card dd{margin:0;color:var(--text);min-width:0;overflow-wrap:anywhere}
+.side-card .mono{font-size:12px}
+.dtabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px;overflow-x:auto;scrollbar-width:thin}
+.dtabs .count{margin-left:2px}
+.dtabs .add{color:var(--add-text);font-size:12px;font-variant-numeric:tabular-nums;margin-left:4px}
+.dtabs .del{color:var(--del-text);font-size:12px;font-variant-numeric:tabular-nums}
+.timeline{display:flex;flex-direction:column;gap:12px;min-width:0}
+.comment{border:1px solid var(--border);border-radius:6px;background:var(--surface);min-width:0}
+.comment-head{display:flex;align-items:center;gap:8px;min-height:36px;padding:6px 12px;border-bottom:1px solid var(--border);background:var(--surface-2);border-radius:6px 6px 0 0;font-size:13px;color:var(--text-2);flex-wrap:wrap}
+.comment-head strong{color:var(--text);font-weight:600}
+.comment-head .when{margin-left:auto}
+.comment-body{padding:10px 14px;color:var(--text);font-size:15px;line-height:22px;max-width:75ch}
+.comment-body p{margin:0}
+.event{display:flex;align-items:center;gap:8px;color:var(--text-2);font-size:13px;padding-left:4px;flex-wrap:wrap}
+.event .i{color:var(--text-3)}
+.event strong{color:var(--text);font-weight:600}
+.section-h{display:flex;align-items:center;gap:8px;margin:24px 0 8px;font:700 16px/24px var(--font-ui);flex-wrap:wrap}
+.section-h .add{color:var(--add-text);font:600 13px/1 var(--font-ui)}
+.section-h .del{color:var(--del-text);font:600 13px/1 var(--font-ui)}
+.diff{border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--surface);margin-top:12px}
+.diff-head{display:flex;align-items:center;gap:8px;min-height:36px;padding:6px 12px;background:var(--surface-2);border-bottom:1px solid var(--border);flex-wrap:wrap;min-width:0}
+.diff-head .mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--text)}
+.diff-head .add{color:var(--add-text);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.diff-head .del{color:var(--del-text);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.diff-scroll{overflow-x:auto;scrollbar-width:thin}
+.dl{display:grid;grid-template-columns:40px 40px 18px minmax(max-content,1fr);min-width:max-content;font:400 13px/20px var(--font-mono);color:var(--text)}
+.dl .ln{text-align:right;padding:0 6px;color:var(--text-3);background:var(--surface-2);user-select:none;font-variant-numeric:tabular-nums}
+.dl .sg{text-align:center;color:var(--text-2);user-select:none}
+.dl .cd{padding:0 12px 0 4px;white-space:pre}
+.dl.add{background:var(--add-soft)}
+.dl.add .sg{color:var(--add-text)}
+.dl.del{background:var(--del-soft)}
+.dl.del .sg{color:var(--del-text)}
+.dl.hunk{background:var(--accent-soft);color:var(--accent-text)}
+.dl.hunk .ln{background:transparent}
+.tk{color:var(--accent-text);font-weight:600}
+.merge{border:1px solid var(--border);border-radius:6px;background:var(--surface);overflow:hidden;margin:20px 0 0}
+.merge-status{display:flex;gap:10px;padding:12px 14px;align-items:flex-start;border-bottom:1px solid var(--border)}
+.merge-status .i{margin-top:2px}
+.merge-status .ok{color:var(--open)}
+.merge-status .bad{color:var(--closed)}
+.merge-status h3{margin:0;font:600 15px/20px var(--font-ui)}
+.merge-status p{margin:2px 0 0;color:var(--text-2);font-size:13px}
+.merge-actions{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface-2);flex-wrap:wrap;font-size:13px;color:var(--text-3)}
+.merge-actions .btn{margin-left:auto}
+.composer{margin-top:20px;border:1px solid var(--border);border-radius:6px;background:var(--surface);padding:12px 14px;display:grid;gap:8px}
+.composer label{font:600 13px/16px var(--font-ui);color:var(--text-2)}
+.composer textarea{width:100%;min-height:88px;padding:8px 10px;border:1px solid var(--border-strong);border-radius:4px;background:var(--surface);color:var(--text);resize:vertical;font:400 15px/22px var(--font-ui)}
+.composer textarea::placeholder{color:var(--text-3)}
+.composer textarea:focus-visible{outline:2px solid var(--focus);outline-offset:1px;border-color:var(--focus)}
+.composer .foot{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap;font-size:12px;color:var(--text-3)}
+.conflict-list{margin:8px 0 0;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);list-style:none;font-size:13px}
+.conflict-list li{display:flex;align-items:center;gap:8px;padding:2px 0}
+.conflict-list .i{color:var(--closed)}
+.skel{background:var(--surface-3);border-radius:3px;height:12px;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.skel-row{display:flex;align-items:center;gap:12px;height:36px;padding:0 10px;border-bottom:1px solid var(--border)}
+.empty{padding:36px 20px;text-align:center;color:var(--text-2)}
+.empty h3{margin:10px 0 4px;font:700 16px/24px var(--font-ui);color:var(--text)}
+.empty p{margin:0 0 12px}
+.empty .i{color:var(--text-3)}
+
+/* mobile: rail becomes a sheet under the breadcrumb bar */
+@media (max-width:1023px){
+  .gsearch{width:180px}
+}
+@media (max-width:767px){
+  .board{padding:18px 12px 44px}
+  .top{padding:0 8px 0 12px;gap:8px}
+  .top-nav,.gsearch{display:none}
+  .search-btn,.menu-btn{display:inline-grid}
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .rail{border-right:0;border-bottom:1px solid var(--border);padding:0 8px;background:var(--surface)}
+  .rail-proj{display:none}
+  .rail > nav{display:flex!important;flex-direction:row!important;gap:2px;overflow-x:auto;scrollbar-width:none;width:100%}
+  .rail > nav a{flex:none;height:44px}
+  .rail a[aria-current="page"]::before{display:none}
+  .rail .count{display:inline-flex}
+  .repo-sections{display:none}
+  .crumb-bar{padding:0 14px;overflow:hidden}
+  .crumb-bar .hide-sm{display:none}
+  .title-row{padding:12px 14px 8px}
+  .title-row h2{font-size:18px;line-height:26px}
+  .title-actions{width:100%;margin-left:0}
+  .title-actions .btn{flex:1;justify-content:center}
+  .repo-tabs{padding:0 8px}
+  .content{padding:0 14px 24px}
+  .pr-grid{grid-template-columns:minmax(0,1fr)}
+  .side{order:2}
+  .toolbar .btn{height:36px}
+  .clone-pop{position:static;width:100%;max-width:none;margin-top:8px;box-shadow:none}
+  .anchor{position:static}
+  .pop{position:static;width:100%;max-width:none;box-shadow:none;margin-top:6px}
+  .files-table .hide-sm,.dtable .hide-sm{display:none}
+  .fsize{display:inline}
+  .dtable td{height:44px}
+  .dl{grid-template-columns:34px 34px 16px minmax(max-content,1fr)}
+  .merge-actions .btn{width:100%;margin-left:0;justify-content:center}
+  .composer .foot .btn{width:100%}
+  .board-nav{font-size:12px}
+  .states{grid-template-columns:minmax(0,1fr)}
+  .state-body{padding:14px}
+  .frame{border-radius:6px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" vector-effect="non-scaling-stroke"/><path d="m20 20-3.5-3.5" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15" vector-effect="non-scaling-stroke"/><circle cx="18" cy="6" r="3" vector-effect="non-scaling-stroke"/><circle cx="6" cy="18" r="3" vector-effect="non-scaling-stroke"/><path d="M18 9a9 9 0 0 1-9 9" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-pr" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3" vector-effect="non-scaling-stroke"/><circle cx="6" cy="6" r="3" vector-effect="non-scaling-stroke"/><path d="M13 6h3a2 2 0 0 1 2 2v7" vector-effect="non-scaling-stroke"/><line x1="6" y1="9" x2="6" y2="21" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-merge" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3" vector-effect="non-scaling-stroke"/><circle cx="6" cy="6" r="3" vector-effect="non-scaling-stroke"/><path d="M6 21V9a9 9 0 0 0 9 9" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-issue" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" vector-effect="non-scaling-stroke"/><circle cx="12" cy="12" r="1" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" vector-effect="non-scaling-stroke"/><path d="m8.5 12.2 2.4 2.3 4.6-4.6" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" vector-effect="non-scaling-stroke"/><path d="m15 9-6 6" vector-effect="non-scaling-stroke"/><path d="m9 9 6 6" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-comment" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" vector-effect="non-scaling-stroke"/><path d="M14 2v4a2 2 0 0 0 2 2h4" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" vector-effect="non-scaling-stroke"/><path d="M7 11V7a5 5 0 0 1 10 0v4" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2" vector-effect="non-scaling-stroke"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" vector-effect="non-scaling-stroke"/><path d="M12 5v14" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" vector-effect="non-scaling-stroke"/><path d="M12 9v4" vector-effect="non-scaling-stroke"/><path d="M12 17h.01" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16" vector-effect="non-scaling-stroke"/><path d="M4 12h16" vector-effect="non-scaling-stroke"/><path d="M4 18h16" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" vector-effect="non-scaling-stroke"/><path d="M12 7v5l3 2" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6" vector-effect="non-scaling-stroke"/><path d="m8 6-6 6 6 6" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-commit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" vector-effect="non-scaling-stroke"/><path d="M3 12h6" vector-effect="non-scaling-stroke"/><path d="M15 12h6" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4Z" vector-effect="non-scaling-stroke"/><circle cx="7.5" cy="7.5" r="1" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1" vector-effect="non-scaling-stroke"/><circle cx="19" cy="12" r="1" vector-effect="non-scaling-stroke"/><circle cx="5" cy="12" r="1" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><path d="m7 15 5 5 5-5" vector-effect="non-scaling-stroke"/><path d="m7 9 5-5 5 5" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-sort-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7" vector-effect="non-scaling-stroke"/><path d="M12 19V5" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-sort-down" viewBox="0 0 24 24"><path d="M12 5v14" vector-effect="non-scaling-stroke"/><path d="m19 12-7 7-7-7" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><line x1="21" y1="4" x2="14" y2="4" vector-effect="non-scaling-stroke"/><line x1="10" y1="4" x2="3" y2="4" vector-effect="non-scaling-stroke"/><line x1="21" y1="12" x2="12" y2="12" vector-effect="non-scaling-stroke"/><line x1="8" y1="12" x2="3" y2="12" vector-effect="non-scaling-stroke"/><line x1="21" y1="20" x2="16" y2="20" vector-effect="non-scaling-stroke"/><line x1="12" y1="20" x2="3" y2="20" vector-effect="non-scaling-stroke"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7" vector-effect="non-scaling-stroke"/><path d="M19 12H5" vector-effect="non-scaling-stroke"/></symbol>
+  </defs>
+</svg>
+
+<main class="board">
+  <header class="board-head">
+    <p class="board-kicker">Ether v2 · Direction 06</p>
+    <h1>Enterprise dense</h1>
+    <p>Built for people who live in the tables. A project rail, breadcrumbs and title actions frame compact sortable data, with blue-gray neutrals and one blue accent. Every column earns its place.</p>
+    <nav class="board-nav" aria-label="Frames on this page">
+      <a href="#f01">01 Code view</a>
+      <a href="#f02">02 Pull request</a>
+      <a href="#f03">03 Issues table</a>
+      <a href="#states">States</a>
+    </nav>
+  </header>
+
+  <!-- 01 Code view -->
+  <figure class="shot" id="f01" aria-labelledby="l01">
+    <figcaption class="label" id="l01"><span class="no">01</span>Repository code view</figcaption>
+    <div class="frame" data-frame="code">
+      <header class="top">
+        <a class="logo" href="#" aria-label="Ether home"><svg class="i-20" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="7.25" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="10" r="2.5" fill="currentColor"/></svg>Ether</a>
+        <nav class="top-nav" aria-label="Global"><a href="#" aria-current="page">Repositories</a><a href="#">Invites</a></nav>
+        <div class="top-end">
+          <label class="gsearch"><svg class="i"><use href="#i-search"/></svg><span class="sr-only">Search or jump to</span><input type="search" placeholder="Search or jump to"><kbd>Ctrl K</kbd></label>
+          <button class="icon-btn search-btn" type="button" aria-label="Search"><svg class="i"><use href="#i-search"/></svg></button>
+          <button class="btn btn-sm" type="button" aria-haspopup="menu"><span class="avatar">a</span>admin<svg class="i"><use href="#i-chev"/></svg></button>
+          <button class="icon-btn menu-btn" type="button" aria-label="Open menu"><svg class="i"><use href="#i-menu"/></svg></button>
+        </div>
+      </header>
+
+      <div class="shell">
+        <aside class="rail" aria-label="Project">
+          <div class="rail-proj"><span class="box">e</span><div><strong>admin / ether-core</strong><span>Private</span></div></div>
+          <nav aria-label="Project navigation" style="display:flex;flex-direction:column;gap:2px">
+            <a href="#" aria-current="page"><svg class="i"><use href="#i-code"/></svg>Code</a>
+            <a href="#"><svg class="i"><use href="#i-issue"/></svg>Issues<span class="count">5</span></a>
+            <a href="#"><svg class="i"><use href="#i-pr"/></svg>Pull requests<span class="count">1</span></a>
+            <a href="#"><svg class="i"><use href="#i-sliders"/></svg>Settings</a>
+          </nav>
+        </aside>
+
+        <div class="main">
+          <nav class="crumb-bar" aria-label="Breadcrumb">
+            <a href="#">Repositories</a><span class="sep">/</span><a href="#">admin</a><span class="sep">/</span><strong>ether-core</strong>
+            <span class="badge private"><svg class="i"><use href="#i-lock"/></svg>Private</span>
+          </nav>
+          <div class="title-row">
+            <h2>ether-core <span class="num" style="font-size:14px;font-weight:400;color:var(--text-3)">Server, web client and git transport for Ether.</span></h2>
+            <div class="title-actions">
+              <div class="anchor">
+                <button class="btn btn-primary" type="button" aria-expanded="true" aria-controls="clone-pop"><svg class="i"><use href="#i-code"/></svg>Code<svg class="i"><use href="#i-chev"/></svg></button>
+                <div class="pop clone-pop" id="clone-pop">
+                  <p>Clone</p>
+                  <label for="clone-url">HTTPS</label>
+                  <div class="clone-row">
+                    <input id="clone-url" type="text" readonly value="https://pc-ltyci6a.tail576a27.ts.net/admin/ether-core.git">
+                    <button class="icon-btn" type="button" aria-label="Copy clone URL"><svg class="i"><use href="#i-copy"/></svg></button>
+                  </div>
+                  <p class="hint-text">Git authenticates with a personal access token. Your account password will not work. <a class="link" href="#">Create a token</a></p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <nav class="repo-tabs repo-sections" aria-label="Repository sections">
+            <a href="#" aria-current="page">Code</a>
+            <a href="#">Issues <span class="count">5</span></a>
+            <a href="#">Pull requests <span class="count">1</span></a>
+            <a href="#">Settings</a>
+          </nav>
+
+          <div class="content">
+            <div class="toolbar">
+              <div class="anchor">
+                <button class="btn" type="button" aria-haspopup="listbox" aria-expanded="false"><svg class="i"><use href="#i-branch"/></svg>main<svg class="i"><use href="#i-chev"/></svg></button>
+              </div>
+              <span class="muted mono" style="font-size:13px">ether-core/</span>
+            </div>
+
+            <div class="commit-bar">
+              <span class="avatar md" style="width:22px;height:22px;line-height:22px;font-size:12px">m</span>
+              <a href="#" style="font-weight:600;color:var(--text)">mira</a>
+              <a class="commit-msg" href="#">Harden session cookie rotation on login</a>
+              <a class="sha" href="#">3f9a1c2</a>
+              <span class="when">2 hours ago</span>
+              <a class="commit-count" href="#"><svg class="i"><use href="#i-clock"/></svg><span><strong>214</strong> commits</span></a>
+            </div>
+            <div class="dtable-wrap" style="border-radius:0 0 6px 6px">
+              <table class="dtable files-table">
+                <caption class="sr-only">Files at main</caption>
+                <thead>
+                  <tr>
+                    <th scope="col" aria-sort="ascending"><button type="button">Name<svg class="i"><use href="#i-sort-up"/></svg></button></th>
+                    <th scope="col" class="hide-sm"><span class="plain">Last commit</span></th>
+                    <th scope="col" class="r"><button type="button">Age<svg class="i"><use href="#i-sort"/></svg></button></th>
+                    <th scope="col" class="r hide-sm"><button type="button">Size<svg class="i"><use href="#i-sort"/></svg></button></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td class="name-cell"><a href="#"><svg class="i"><use href="#i-folder"/></svg>src</a></td><td class="hide-sm">Add invite token table and consume flow</td><td class="r">2 hours ago</td><td class="r hide-sm"></td></tr>
+                  <tr><td class="name-cell"><a href="#"><svg class="i"><use href="#i-folder"/></svg>e2e</a></td><td class="hide-sm">Cover expired invites in signup spec</td><td class="r">yesterday</td><td class="r hide-sm"></td></tr>
+                  <tr><td class="name-cell"><a href="#"><svg class="i"><use href="#i-folder"/></svg>drizzle</a></td><td class="hide-sm">Migration 0004: invites table</td><td class="r">2 hours ago</td><td class="r hide-sm"></td></tr>
+                  <tr><td class="name-cell"><a href="#"><svg class="i"><use href="#i-file"/></svg>README.md</a><span class="fsize">4.2 KB</span></td><td class="hide-sm"></td><td class="r">5 days ago</td><td class="r hide-sm">4.2 KB</td></tr>
+                  <tr><td class="name-cell"><a href="#"><svg class="i"><use href="#i-file"/></svg>package.json</a><span class="fsize">1.8 KB</span></td><td class="hide-sm"></td><td class="r">3 days ago</td><td class="r hide-sm">1.8 KB</td></tr>
+                  <tr><td class="name-cell"><a href="#"><svg class="i"><use href="#i-file"/></svg>tsconfig.json</a><span class="fsize">612 B</span></td><td class="hide-sm"></td><td class="r">3 weeks ago</td><td class="r hide-sm">612 B</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <article class="readme" aria-labelledby="readme-title">
+              <header class="readme-head"><svg class="i"><use href="#i-book"/></svg>README.md</header>
+              <div class="prose">
+                <h1 id="readme-title">ether-core</h1>
+                <p>Ether is a self-hosted, invite-only code host for a small group of trusted people. It runs inside your tailnet, serves git over HTTPS and keeps issues and pull requests in the same repository.</p>
+                <pre><code>bun install
+bun run build
+bun run ether create-admin &lt;you&gt; --password '...'
+bun run start</code></pre>
+                <ul>
+                  <li>Run the server on a machine inside your Tailscale tailnet.</li>
+                  <li>Create accounts with an invite link. Sign-up is closed otherwise.</li>
+                  <li>Clone over HTTPS with a personal access token.</li>
+                </ul>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <!-- 02 Pull request -->
+  <figure class="shot" id="f02" aria-labelledby="l02">
+    <figcaption class="label" id="l02"><span class="no">02</span>Pull request</figcaption>
+    <div class="frame" data-frame="pr">
+      <header class="top">
+        <a class="logo" href="#" aria-label="Ether home"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="7.25" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="10" r="2.5" fill="currentColor"/></svg>Ether</a>
+        <nav class="top-nav" aria-label="Global"><a href="#" aria-current="page">Repositories</a><a href="#">Invites</a></nav>
+        <div class="top-end">
+          <label class="gsearch"><svg class="i"><use href="#i-search"/></svg><span class="sr-only">Search or jump to</span><input type="search" placeholder="Search or jump to"><kbd>Ctrl K</kbd></label>
+          <button class="btn btn-sm" type="button" aria-haspopup="menu"><span class="avatar">a</span>admin<svg class="i"><use href="#i-chev"/></svg></button>
+          <button class="icon-btn menu-btn" type="button" aria-label="Open menu"><svg class="i"><use href="#i-menu"/></svg></button>
+        </div>
+      </header>
+      <div class="shell">
+        <aside class="rail" aria-label="Project">
+          <div class="rail-proj"><span class="box">e</span><div><strong>admin / ether-core</strong><span>Private</span></div></div>
+          <nav aria-label="Project navigation" style="display:flex;flex-direction:column;gap:2px">
+            <a href="#"><svg class="i"><use href="#i-code"/></svg>Code</a>
+            <a href="#"><svg class="i"><use href="#i-issue"/></svg>Issues<span class="count">5</span></a>
+            <a href="#" aria-current="page"><svg class="i"><use href="#i-pr"/></svg>Pull requests<span class="count">1</span></a>
+            <a href="#"><svg class="i"><use href="#i-sliders"/></svg>Settings</a>
+          </nav>
+        </aside>
+        <div class="main">
+          <nav class="crumb-bar" aria-label="Breadcrumb">
+            <a href="#">Repositories</a><span class="sep">/</span><a href="#">admin</a><span class="sep">/</span><a href="#">ether-core</a><span class="sep">/</span><a href="#">Pull requests</a><span class="sep">/</span><strong>#12</strong>
+          </nav>
+          <div class="title-row">
+            <h2>Add invite-only registration <span class="num">#12</span> <span class="badge open"><svg class="i"><use href="#i-pr"/></svg>Open</span></h2>
+            <div class="title-actions">
+              <button class="btn" type="button"><svg class="i"><use href="#i-copy"/></svg>Copy branch</button>
+            </div>
+          </div>
+          <nav class="repo-tabs" aria-label="Pull request sections">
+            <a href="#pr" aria-current="page">Conversation</a>
+            <a href="#pr">Commits <span class="count">3</span></a>
+            <a href="#pr">Files changed <span class="count">4</span></a>
+          </nav>
+
+          <div class="content" id="pr">
+            <div class="pr-grid" style="margin-top:16px">
+              <div style="min-width:0">
+                <div class="timeline">
+                  <div class="comment">
+                    <div class="comment-head"><span class="avatar md">a</span><strong>admin</strong><span>opened this pull request</span><span class="when">2 hours ago</span></div>
+                    <div class="comment-body"><p>Adds invite-only sign-up. An admin creates an invite, and the link can be used once. The claim is a single conditional update on the invite row, so two signups cannot both use it.</p></div>
+                  </div>
+                  <div class="event"><svg class="i"><use href="#i-commit"/></svg><strong>admin</strong> pushed 2 commits<span class="when">1 hour ago</span></div>
+                  <div class="comment">
+                    <div class="comment-head"><span class="avatar md">m</span><strong>mira</strong><span>commented</span><span class="when">52 minutes ago</span></div>
+                    <div class="comment-body"><p>Two signups that arrive at the same moment could both read <span class="mono">usedAt</span> as null before either one writes. Can we make the claim a single conditional update?</p></div>
+                  </div>
+                  <div class="comment">
+                    <div class="comment-head"><span class="avatar md">a</span><strong>admin</strong><span>commented</span><span class="when">38 minutes ago</span></div>
+                    <div class="comment-body"><p>Fixed in the latest push. The claim is now one conditional <span class="mono">UPDATE</span>, and sign-up fails with the invite error when no row changes.</p></div>
+                  </div>
+                </div>
+
+                <section aria-labelledby="changes-title">
+                  <h3 class="section-h" id="changes-title">Changes <span class="add">+148</span><span class="del">−31</span><span class="muted" style="font:400 14px/1 var(--font-ui)">4 files</span></h3>
+                  <div class="dtable-wrap">
+                    <table class="dtable" aria-describedby="changes-title">
+                      <caption class="sr-only">Changed files, sortable</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col" aria-sort="none"><button type="button">File<svg class="i"><use href="#i-sort"/></svg></button></th>
+                          <th scope="col" class="r" aria-sort="none"><button type="button">Additions<svg class="i"><use href="#i-sort"/></svg></button></th>
+                          <th scope="col" class="r" aria-sort="none"><button type="button">Deletions<svg class="i"><use href="#i-sort"/></svg></button></th>
+                          <th scope="col" class="r hide-sm" aria-sort="none"><button type="button">Change<svg class="i"><use href="#i-sort"/></svg></button></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr><td><span class="ico"><svg class="i"><use href="#i-file"/></svg><span class="mono">src/server/signup.ts</span></span></td><td class="r add">+46</td><td class="r del">−9</td><td class="r hide-sm">Modified</td></tr>
+                        <tr><td><span class="ico"><svg class="i"><use href="#i-file"/></svg><span class="mono">src/server/invites.ts</span></span></td><td class="r add">+8</td><td class="r del">−2</td><td class="r hide-sm">Modified</td></tr>
+                        <tr><td><span class="ico"><svg class="i"><use href="#i-file"/></svg><span class="mono">e2e/signup.spec.ts</span></span></td><td class="r add">+72</td><td class="r del">−20</td><td class="r hide-sm">Modified</td></tr>
+                        <tr><td><span class="ico"><svg class="i"><use href="#i-file"/></svg><span class="mono">drizzle/0004_invites.sql</span></span></td><td class="r add">+22</td><td class="r del">−0</td><td class="r hide-sm">Added</td></tr>
+                      </tbody>
+                      <tfoot><tr><td>4 files</td><td class="r add">+148</td><td class="r del">−31</td><td class="r hide-sm"></td></tr></tfoot>
+                    </table>
+                  </div>
+
+                  <div class="diff" aria-label="Diff for src/server/invites.ts">
+                    <div class="diff-head">
+                      <svg class="i"><use href="#i-file"/></svg>
+                      <span class="mono">src/server/invites.ts</span>
+                      <span class="add">+8</span><span class="del">−2</span>
+                      <button class="btn btn-sm" type="button" aria-expanded="true">Unified<svg class="i"><use href="#i-chev"/></svg></button>
+                    </div>
+                    <div class="diff-scroll">
+                      <div class="dl hunk"><span class="ln"></span><span class="ln"></span><span class="sg"></span><span class="cd">@@ -18,5 +18,11 @@ export async function claimInvite()</span></div>
+                      <div class="dl"><span class="ln">18</span><span class="ln">18</span><span class="sg"></span><span class="cd"><span class="tk">export async function</span> claimInvite(db: Db, token: string, userId: string) {</span></div>
+                      <div class="dl del"><span class="ln">19</span><span class="ln"></span><span class="sg">−</span><span class="cd">  const invite = await db.query.invites.findFirst({ where: eq(invites.token, token) });</span></div>
+                      <div class="dl del"><span class="ln">20</span><span class="ln"></span><span class="sg">−</span><span class="cd">  if (!invite || invite.usedAt) throw new InviteError("invalid");</span></div>
+                      <div class="dl add"><span class="ln"></span><span class="ln">19</span><span class="sg">+</span><span class="cd">  const claimed = await db</span></div>
+                      <div class="dl add"><span class="ln"></span><span class="ln">20</span><span class="sg">+</span><span class="cd">    .update(invites)</span></div>
+                      <div class="dl add"><span class="ln"></span><span class="ln">21</span><span class="sg">+</span><span class="cd">    .set({ usedAt: new Date(), usedBy: userId })</span></div>
+                      <div class="dl add"><span class="ln"></span><span class="ln">22</span><span class="sg">+</span><span class="cd">    .where(and(eq(invites.token, token), isNull(invites.usedAt)))</span></div>
+                      <div class="dl add"><span class="ln"></span><span class="ln">23</span><span class="sg">+</span><span class="cd">    .returning({ id: invites.id });</span></div>
+                      <div class="dl add"><span class="ln"></span><span class="ln">24</span><span class="sg">+</span><span class="cd"></span></div>
+                      <div class="dl add"><span class="ln"></span><span class="ln">25</span><span class="sg">+</span><span class="cd">  // Only one request can flip usedAt from NULL, so only one signup wins.</span></div>
+                      <div class="dl add"><span class="ln"></span><span class="ln">26</span><span class="sg">+</span><span class="cd">  if (claimed.length === 0) throw new InviteError("invalid");</span></div>
+                      <div class="dl"><span class="ln">21</span><span class="ln">27</span><span class="sg"></span><span class="cd">  await grantAccount(db, userId);</span></div>
+                      <div class="dl"><span class="ln">22</span><span class="ln">28</span><span class="sg"></span><span class="cd">  return claimed[0].id;</span></div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="merge" aria-labelledby="merge-title">
+                  <div class="merge-status">
+                    <svg class="i i-20 ok"><use href="#i-check-circle"/></svg>
+                    <div>
+                      <h3 id="merge-title">No conflicts with main</h3>
+                      <p>Merging creates a merge commit on <span class="mono">main</span> with 3 commits from <span class="mono">feature/invites</span>.</p>
+                    </div>
+                  </div>
+                  <div class="merge-actions">
+                    <span>Checked 2 minutes ago</span>
+                    <button class="btn btn-primary" type="button"><svg class="i"><use href="#i-merge"/></svg>Merge pull request</button>
+                  </div>
+                </section>
+
+                <form class="composer" action="#" onsubmit="return false">
+                  <label for="pr-comment">Comment</label>
+                  <textarea id="pr-comment" placeholder="Leave a comment"></textarea>
+                  <div class="foot"><span>Markdown is supported</span><button class="btn" type="submit">Comment</button></div>
+                </form>
+              </div>
+
+              <aside class="side" aria-label="Pull request details">
+                <section class="side-card">
+                  <h3>Details</h3>
+                  <dl>
+                    <dt>Author</dt><dd>admin</dd>
+                    <dt>Source</dt><dd class="mono">feature/invites</dd>
+                    <dt>Target</dt><dd class="mono">main</dd>
+                    <dt>Commits</dt><dd class="num">3</dd>
+                    <dt>Diff</dt><dd class="num"><span class="add">+148</span> <span class="del">−31</span></dd>
+                    <dt>Opened</dt><dd>2 hours ago</dd>
+                  </dl>
+                </section>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <!-- 03 Issues table -->
+  <figure class="shot" id="f03" aria-labelledby="l03">
+    <figcaption class="label" id="l03"><span class="no">03</span>Issues table</figcaption>
+    <div class="frame" data-frame="issues">
+      <header class="top">
+        <a class="logo" href="#" aria-label="Ether home"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="7.25" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="10" r="2.5" fill="currentColor"/></svg>Ether</a>
+        <nav class="top-nav" aria-label="Global"><a href="#" aria-current="page">Repositories</a><a href="#">Invites</a></nav>
+        <div class="top-end">
+          <label class="gsearch"><svg class="i"><use href="#i-search"/></svg><span class="sr-only">Search or jump to</span><input type="search" placeholder="Search or jump to"><kbd>Ctrl K</kbd></label>
+          <button class="btn btn-sm" type="button" aria-haspopup="menu"><span class="avatar">a</span>admin<svg class="i"><use href="#i-chev"/></svg></button>
+          <button class="icon-btn menu-btn" type="button" aria-label="Open menu"><svg class="i"><use href="#i-menu"/></svg></button>
+        </div>
+      </header>
+      <div class="shell">
+        <aside class="rail" aria-label="Project">
+          <div class="rail-proj"><span class="box">e</span><div><strong>admin / ether-core</strong><span>Private</span></div></div>
+          <nav aria-label="Project navigation" style="display:flex;flex-direction:column;gap:2px">
+            <a href="#"><svg class="i"><use href="#i-code"/></svg>Code</a>
+            <a href="#" aria-current="page"><svg class="i"><use href="#i-issue"/></svg>Issues<span class="count">5</span></a>
+            <a href="#"><svg class="i"><use href="#i-pr"/></svg>Pull requests<span class="count">1</span></a>
+            <a href="#"><svg class="i"><use href="#i-sliders"/></svg>Settings</a>
+          </nav>
+        </aside>
+        <div class="main">
+          <nav class="crumb-bar" aria-label="Breadcrumb"><a href="#">Repositories</a><span class="sep">/</span><a href="#">admin</a><span class="sep">/</span><a href="#">ether-core</a><span class="sep">/</span><strong>Issues</strong></nav>
+          <div class="title-row">
+            <h2>Issues</h2>
+            <div class="title-actions">
+              <button class="btn btn-primary" type="button"><svg class="i"><use href="#i-plus"/></svg>New issue</button>
+            </div>
+          </div>
+          <div class="content">
+            <div class="toolbar">
+              <div class="seg" role="group" aria-label="Issue state">
+                <button type="button" aria-pressed="true"><svg class="i st-open"><use href="#i-issue"/></svg>Open <span class="count">5</span></button>
+                <button type="button" aria-pressed="false"><svg class="i"><use href="#i-check-circle"/></svg>Closed <span class="count">9</span></button>
+              </div>
+              <div class="field" style="flex:1;min-width:200px;max-width:420px">
+                <svg class="i"><use href="#i-search"/></svg>
+                <label class="sr-only" for="issue-filter">Search issues</label>
+                <input id="issue-filter" type="search" value="is:issue is:open" placeholder="Search issues">
+              </div>
+            </div>
+
+            <div class="dtable-wrap">
+              <table class="dtable" aria-label="Open issues">
+                <thead>
+                  <tr>
+                    <th scope="col" aria-sort="descending"><button type="button">#<svg class="i"><use href="#i-sort-down"/></svg></button></th>
+                    <th scope="col"><span class="plain">Title</span></th>
+                    <th scope="col" class="hide-sm"><span class="plain">Author</span></th>
+                    <th scope="col" aria-sort="none"><button type="button">Opened<svg class="i"><use href="#i-sort"/></svg></button></th>
+                    <th scope="col" class="r" aria-sort="none"><button type="button">Comments<svg class="i"><use href="#i-sort"/></svg></button></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td class="num muted">21</td><td class="title-cell"><span class="ico"><svg class="i st-open"><use href="#i-issue"/></svg><a href="#">Session cookie survives logout in Safari</a></span></td><td class="hide-sm">kat</td><td>3 days ago</td><td class="r"><span class="cnt"><svg class="i"><use href="#i-comment"/></svg>4</span></td></tr>
+                  <tr><td class="num muted">19</td><td class="title-cell"><span class="ico"><svg class="i st-open"><use href="#i-issue"/></svg><a href="#">Show file sizes in the tree on narrow screens</a></span></td><td class="hide-sm">jonas</td><td>4 days ago</td><td class="r"><span class="cnt"><svg class="i"><use href="#i-comment"/></svg>1</span></td></tr>
+                  <tr aria-selected="true"><td class="num muted">17</td><td class="title-cell"><span class="ico"><svg class="i st-open"><use href="#i-issue"/></svg><a href="#">Clone hangs on packfiles over 200 MB</a></span></td><td class="hide-sm">jonas</td><td>5 days ago</td><td class="r"><span class="cnt"><svg class="i"><use href="#i-comment"/></svg>7</span></td></tr>
+                  <tr><td class="num muted">14</td><td class="title-cell"><span class="ico"><svg class="i st-open"><use href="#i-issue"/></svg><a href="#">Invite link should show who invited you</a></span></td><td class="hide-sm">mira</td><td>1 week ago</td><td class="r"><span class="cnt"><svg class="i"><use href="#i-comment"/></svg>2</span></td></tr>
+                  <tr><td class="num muted">11</td><td class="title-cell"><span class="ico"><svg class="i st-open"><use href="#i-issue"/></svg><a href="#">Document the backup command</a></span></td><td class="hide-sm">admin</td><td>2 weeks ago</td><td class="r"><span class="cnt"><svg class="i"><use href="#i-comment"/></svg>0</span></td></tr>
+                </tbody>
+              </table>
+              <div class="table-foot">
+                <span class="num">5 open issues</span>
+                <div class="pager">
+                  <span class="num">Page 1 of 1</span>
+                  <button class="btn" type="button" disabled>Previous</button>
+                  <button class="btn" type="button" disabled>Next</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <!-- States -->
+  <section id="states" aria-labelledby="states-title">
+    <h2 id="states-title" style="font:700 16px/24px var(--font-ui);margin:0 0 14px;color:var(--board-text)">States</h2>
+    <div class="states">
+
+      <figure class="shot wide" aria-labelledby="s1">
+        <figcaption class="label" id="s1"><span class="no">S1</span>Branch picker, open with filter focused</figcaption>
+        <div class="frame" data-frame="state">
+          <div class="state-body" style="min-height:420px">
+            <div class="toolbar">
+              <div class="anchor">
+                <button class="btn" type="button" aria-haspopup="listbox" aria-expanded="true" aria-controls="branches"><svg class="i"><use href="#i-branch"/></svg>main<svg class="i"><use href="#i-chev"/></svg></button>
+                <div class="pop" id="branches">
+                  <div class="pop-filter field force-focus">
+                    <svg class="i"><use href="#i-search"/></svg>
+                    <label class="sr-only" for="branch-filter">Find a branch or tag</label>
+                    <input id="branch-filter" type="search" placeholder="Find a branch or tag">
+                  </div>
+                  <p class="pop-group">Branches</p>
+                  <button class="pop-item" type="button" aria-current="true"><svg class="i"><use href="#i-check"/></svg><span class="mono">main</span><span class="hint">default</span></button>
+                  <button class="pop-item" type="button"><svg class="i" style="visibility:hidden"><use href="#i-check"/></svg><span class="mono">feature/invites</span></button>
+                  <button class="pop-item" type="button"><svg class="i" style="visibility:hidden"><use href="#i-check"/></svg><span class="mono">fix/session-rotation</span></button>
+                  <p class="pop-group">Tags</p>
+                  <button class="pop-item" type="button"><svg class="i"><use href="#i-tag"/></svg><span class="mono">v0.3.0</span></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="shot" aria-labelledby="s2">
+        <figcaption class="label" id="s2"><span class="no">S2</span>Conflict merge box</figcaption>
+        <div class="frame" data-frame="state">
+          <div class="state-body">
+            <section class="merge" style="margin:0" aria-labelledby="conflict-title">
+              <div class="merge-status">
+                <svg class="i i-20 bad"><use href="#i-alert"/></svg>
+                <div>
+                  <h3 id="conflict-title">Conflicts must be resolved before merging</h3>
+                  <p>Resolve them in your clone, push to <span class="mono">feature/invites</span>, then return to merge.</p>
+                  <ul class="conflict-list" aria-label="Conflicting files">
+                    <li><svg class="i"><use href="#i-file"/></svg><span class="mono">src/server/signup.ts</span></li>
+                  </ul>
+                </div>
+              </div>
+              <div class="merge-actions">
+                <span>Blocked until conflicts are resolved</span>
+                <button class="btn btn-primary" type="button" disabled><svg class="i"><use href="#i-merge"/></svg>Merge pull request</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="shot" aria-labelledby="s3">
+        <figcaption class="label" id="s3"><span class="no">S3</span>Loading skeleton, file table</figcaption>
+        <div class="frame" data-frame="state">
+          <div class="state-body" role="status" aria-label="Loading files" style="padding:0">
+            <div class="dtable-wrap" style="border-radius:0">
+              <div class="skel-row"><span class="skel" style="width:14px;height:14px"></span><span class="skel" style="width:160px"></span><span class="skel" style="width:70px;margin-left:auto"></span></div>
+              <div class="skel-row"><span class="skel" style="width:14px;height:14px"></span><span class="skel" style="width:120px"></span><span class="skel" style="width:70px;margin-left:auto"></span></div>
+              <div class="skel-row"><span class="skel" style="width:14px;height:14px"></span><span class="skel" style="width:190px"></span><span class="skel" style="width:70px;margin-left:auto"></span></div>
+              <div class="skel-row"><span class="skel" style="width:14px;height:14px"></span><span class="skel" style="width:96px"></span><span class="skel" style="width:70px;margin-left:auto"></span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="shot" aria-labelledby="s4">
+        <figcaption class="label" id="s4"><span class="no">S4</span>Empty state, closed issues with a focused button</figcaption>
+        <div class="frame" data-frame="state">
+          <div class="state-body" style="padding:0">
+            <div class="toolbar" style="padding:12px">
+              <div class="seg" role="group" aria-label="Issue state">
+                <button type="button" aria-pressed="false">Open <span class="count">5</span></button>
+                <button type="button" aria-pressed="true">Closed <span class="count">9</span></button>
+              </div>
+              <div class="field" style="flex:1;min-width:160px;max-width:300px">
+                <svg class="i"><use href="#i-search"/></svg>
+                <label class="sr-only" for="closed-filter">Search closed issues</label>
+                <input id="closed-filter" type="search" value="packfile" placeholder="Search issues">
+              </div>
+            </div>
+            <div class="empty">
+              <svg class="i i-20"><use href="#i-search"/></svg>
+              <h3>No closed issues match</h3>
+              <p>Nothing closed matches “packfile”. Try another word or clear the search.</p>
+              <button class="btn force-focus" type="button">Clear search</button>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  // Sortable headers: cycle none, ascending, descending on click and mark aria-sort.
+  document.querySelectorAll('.dtable th[aria-sort] button').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var th = button.closest('th');
+      var next = th.getAttribute('aria-sort') === 'ascending' ? 'descending' : 'ascending';
+      th.parentElement.querySelectorAll('th[aria-sort]').forEach(function (other) {
+        if (other !== th) other.setAttribute('aria-sort', 'none');
+      });
+      th.setAttribute('aria-sort', next);
+    });
+  });
+})();
+</script>
+</body>
+</html>

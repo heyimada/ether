@@ -1,0 +1,1073 @@
+<!doctype html>
+<!--
+  Direction 04: Split code view. Ether, round 2.
+  Layout: repository pages use a persistent file-tree pane on the left and the content on the right. Issues use full width. Phones turn the tree into a drawer behind a Files button.
+  Palette: slate neutrals with a single teal accent. Semantic green, violet and red are kept separate from the accent.
+  Type: IBM Plex Sans for UI and prose, IBM Plex Mono for code, shas, paths and branch names. Steps of 12, 14, 16, 20, 24 on an 8px grid.
+  Distinct: the tree is the navigation. The file pane and diff stay visible while you move between files, like an IDE.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ether, direction 04: Split code view</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Tokens: light is the default. Dark is repeated twice, once for the OS preference and once for an explicit choice. */
+  :root {
+    --bg: #ffffff;
+    --bg-subtle: #f8fafc;
+    --bg-muted: #f1f5f9;
+    --hover: #f1f5f9;
+    --active: #e2e8f0;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --control-border: #7c8799;
+    --fg: #0f172a;
+    --fg-2: #475569;
+    --fg-3: #5b6678;
+    --accent: #0f766e;
+    --accent-hover: #115e59;
+    --accent-bg: #f0fdfa;
+    --accent-line: #0d9488;
+    --accent-fg: #115e59;
+    --primary: #0f766e;
+    --primary-fg: #ffffff;
+    --open: #15803d;
+    --open-bg: #f0fdf4;
+    --merged: #7e22ce;
+    --merged-bg: #faf5ff;
+    --closed: #b91c1c;
+    --closed-bg: #fef2f2;
+    --add: #166534;
+    --add-bg: #ecfdf3;
+    --del: #991b1b;
+    --del-bg: #fef2f2;
+    --shadow: 0 10px 28px rgba(15, 23, 42, 0.12), 0 0 0 1px var(--border);
+    --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-line);
+
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px; --s8: 32px;
+    --t-meta: 12px; --t-body: 14px; --t-section: 16px; --t-title: 20px; --t-doc: 24px;
+    --radius: 6px;
+    --radius-lg: 8px;
+    --ease: 160ms ease;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b1120;
+      --bg-subtle: #0f172a;
+      --bg-muted: #131d33;
+      --hover: #17223b;
+      --active: #1e2a45;
+      --border: #22304a;
+      --border-strong: #334155;
+      --control-border: #5f6e86;
+      --fg: #e2e8f0;
+      --fg-2: #a3b1c6;
+      --fg-3: #8593a8;
+      --accent: #2dd4bf;
+      --accent-hover: #5eead4;
+      --accent-bg: #0d2b29;
+      --accent-line: #2dd4bf;
+      --accent-fg: #5eead4;
+      --primary: #14b8a6;
+      --primary-fg: #04201d;
+      --open: #4ade80;
+      --open-bg: #0d2219;
+      --merged: #c084fc;
+      --merged-bg: #241536;
+      --closed: #f87171;
+      --closed-bg: #2e1517;
+      --add: #86efac;
+      --add-bg: #0d2219;
+      --del: #fca5a5;
+      --del-bg: #2e1517;
+      --shadow: 0 14px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border);
+      --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-line);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b1120;
+    --bg-subtle: #0f172a;
+    --bg-muted: #131d33;
+    --hover: #17223b;
+    --active: #1e2a45;
+    --border: #22304a;
+    --border-strong: #334155;
+    --control-border: #5f6e86;
+    --fg: #e2e8f0;
+    --fg-2: #a3b1c6;
+    --fg-3: #8593a8;
+    --accent: #2dd4bf;
+    --accent-hover: #5eead4;
+    --accent-bg: #0d2b29;
+    --accent-line: #2dd4bf;
+    --accent-fg: #5eead4;
+    --primary: #14b8a6;
+    --primary-fg: #04201d;
+    --open: #4ade80;
+    --open-bg: #0d2219;
+    --merged: #c084fc;
+    --merged-bg: #241536;
+    --closed: #f87171;
+    --closed-bg: #2e1517;
+    --add: #86efac;
+    --add-bg: #0d2219;
+    --del: #fca5a5;
+    --del-bg: #2e1517;
+    --shadow: 0 14px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border);
+    --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-line);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: var(--t-body);
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+    overflow-wrap: anywhere;
+  }
+  h1, h2, h3, p, ul, ol, figure { margin: 0; }
+  ul, ol { padding: 0; list-style: none; }
+  a { color: var(--accent); text-decoration: none; cursor: pointer; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled, input:disabled { cursor: not-allowed; }
+  :focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--radius); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .mono, code, .sha, .path { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .num { font-variant-numeric: tabular-nums; }
+  .muted { color: var(--fg-3); }
+  .meta { font-size: var(--t-meta); line-height: 16px; color: var(--fg-3); font-variant-numeric: tabular-nums; }
+  .strong { font-weight: 600; color: var(--fg); }
+  .only-sm { display: none !important; }
+
+  .i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .i-20 { width: 20px; height: 20px; }
+
+  .stage { max-width: 1280px; margin: 0 auto; padding: var(--s8) var(--s6) 96px; display: flex; flex-direction: column; gap: 56px; }
+  .stage-head { display: flex; flex-direction: column; gap: var(--s2); }
+  .stage-head h1 { font-size: var(--t-section); font-weight: 600; }
+  .frame { min-width: 0; display: flex; flex-direction: column; gap: var(--s3); }
+  .frame-label { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--s2); font-size: var(--t-meta); line-height: 16px; color: var(--fg-3); }
+  .frame-label strong { color: var(--fg); font-weight: 600; font-size: var(--t-body); }
+  .app { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); overflow: hidden; }
+  .state-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s6); align-items: start; }
+  .state-card { min-width: 0; display: flex; flex-direction: column; gap: var(--s3); }
+  .state-well { min-width: 0; border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); padding: var(--s6); background: var(--bg-subtle); min-height: 180px; }
+
+  /* Global header */
+  .gh { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); height: 56px; padding: 0 var(--s4); background: var(--bg-subtle); border-bottom: 1px solid var(--border); min-width: 0; }
+  .gh-left, .gh-right { display: flex; align-items: center; gap: var(--s4); min-width: 0; }
+  .logo { display: inline-flex; align-items: center; gap: var(--s2); color: var(--fg); font-weight: 600; font-size: 16px; }
+  .logo:hover { text-decoration: none; }
+  .logo-mark { width: 20px; height: 20px; border-radius: 5px; background: var(--accent); position: relative; flex: none; }
+  .logo-mark::after { content: ""; position: absolute; left: 6px; top: 6px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--bg); }
+  .gnav { display: flex; align-items: center; gap: var(--s1); }
+  .gnav a { display: inline-flex; align-items: center; height: 32px; padding: 0 var(--s2); border-radius: var(--radius); color: var(--fg-2); transition: color var(--ease), background-color var(--ease); }
+  .gnav a:hover { color: var(--fg); background: var(--hover); text-decoration: none; }
+  .gnav a[aria-current="page"] { color: var(--fg); font-weight: 600; }
+  .search { position: relative; display: flex; align-items: center; width: 248px; min-width: 0; }
+  .search .i { position: absolute; left: var(--s3); color: var(--fg-3); pointer-events: none; }
+  .search input { width: 100%; height: 32px; padding: 0 56px 0 36px; border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--bg); transition: border-color var(--ease); }
+  .search input::placeholder { color: var(--fg-3); }
+  .search input:hover { border-color: var(--control-border); }
+  .search kbd { position: absolute; right: var(--s2); font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: var(--t-meta); line-height: 16px; color: var(--fg-3); border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 var(--s1); background: var(--bg); }
+  .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--fg-2); transition: background-color var(--ease), color var(--ease); flex: none; }
+  .icon-btn:hover { background: var(--hover); color: var(--fg); }
+  .icon-btn:active { background: var(--active); }
+  .user { display: inline-flex; align-items: center; gap: var(--s2); height: 32px; padding: 0 var(--s2) 0 var(--s1); border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--fg); transition: background-color var(--ease); }
+  .user:hover { background: var(--hover); }
+  .avatar { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-bg); color: var(--accent-fg); font-size: var(--t-meta); font-weight: 600; flex: none; border: 1px solid var(--border); }
+  .user-name { font-size: var(--t-body); }
+
+  /* Repo header and tabs */
+  .repo-head { display: flex; flex-direction: column; gap: var(--s1); padding: var(--s4) var(--s6) 0; min-width: 0; }
+  .crumb { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2); font-size: var(--t-section); line-height: 24px; min-width: 0; }
+  .crumb a { color: var(--accent); }
+  .crumb .sep { color: var(--fg-3); }
+  .crumb .current { font-weight: 600; color: var(--fg); }
+  .badge-private { display: inline-flex; align-items: center; gap: var(--s1); height: 20px; padding: 0 var(--s2); border-radius: var(--radius); background: var(--bg-muted); border: 1px solid var(--border); font-size: var(--t-meta); color: var(--fg-2); font-weight: 500; }
+  .repo-desc { color: var(--fg-2); }
+  .tabs { display: flex; gap: var(--s1); padding: 0 var(--s6); margin-top: var(--s3); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs a { display: inline-flex; align-items: center; gap: var(--s2); height: 40px; padding: 0 var(--s3); margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--fg-2); font-weight: 500; white-space: nowrap; transition: color var(--ease), background-color var(--ease); border-radius: var(--radius) var(--radius) 0 0; }
+  .tabs a:hover { color: var(--fg); background: var(--hover); text-decoration: none; }
+  .tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent-line); }
+  .count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--bg-muted); color: var(--fg-2); font-size: var(--t-meta); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .tabs a[aria-current="page"] .count { background: var(--accent-bg); color: var(--accent-fg); }
+
+  /* Buttons and inputs */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--s2); height: 32px; padding: 0 var(--s3); border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--bg); color: var(--fg); font-weight: 500; white-space: nowrap; transition: background-color var(--ease), border-color var(--ease), color var(--ease); }
+  .btn:hover { background: var(--hover); border-color: var(--control-border); }
+  .btn:active { background: var(--active); }
+  .btn .i { color: var(--fg-2); }
+  .btn.btn-primary { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); }
+  .btn.btn-primary .i { color: inherit; }
+  .btn.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--primary-fg); }
+  .btn.btn-primary:active { opacity: 0.9; }
+  .btn.is-focus, .icon-btn.is-focus { box-shadow: var(--focus); }
+  .btn:disabled, .btn:disabled:hover { opacity: 0.45; background: var(--bg); border-color: var(--border-strong); }
+  .btn.btn-primary:disabled, .btn.btn-primary:disabled:hover { background: var(--primary); border-color: var(--primary); }
+  .btn[aria-expanded="true"]:not(.btn-primary) { background: var(--active); }
+  .btn-ghost { border-color: transparent; background: transparent; }
+  .btn-ghost:hover { background: var(--hover); border-color: transparent; }
+
+  .input { display: flex; align-items: stretch; min-width: 0; height: 32px; border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--bg); transition: border-color var(--ease); }
+  .input:hover { border-color: var(--control-border); }
+  .input:focus-within { box-shadow: var(--focus); }
+  .input .lbl { display: inline-flex; align-items: center; padding: 0 var(--s2) 0 var(--s3); color: var(--fg-3); font-size: var(--t-meta); font-weight: 500; white-space: nowrap; }
+  .input .lead { position: relative; display: flex; align-items: center; flex: 1 1 auto; min-width: 0; }
+  .input .lead .i { position: absolute; left: var(--s2); color: var(--fg-3); pointer-events: none; }
+  .input input { flex: 1 1 auto; width: 100%; min-width: 0; height: 30px; padding: 0 var(--s3); border: 0; background: transparent; outline: none; border-radius: var(--radius); }
+  .input .lead input { padding-left: 32px; }
+  .input input::placeholder { color: var(--fg-3); }
+  .input input:focus-visible { box-shadow: none; }
+  .input-lbl-row { font-size: var(--t-meta); font-weight: 500; color: var(--fg-2); margin-bottom: var(--s1); display: block; }
+  .help { font-size: var(--t-meta); line-height: 16px; color: var(--fg-3); }
+  .textarea { width: 100%; min-height: 96px; padding: var(--s3); border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--bg); resize: vertical; transition: border-color var(--ease); }
+  .textarea:hover { border-color: var(--control-border); }
+  .textarea:focus-visible { outline: none; box-shadow: var(--focus); }
+
+  .toggle { display: inline-flex; align-items: center; gap: var(--s1); padding: 2px; border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--bg-subtle); }
+  .toggle button { display: inline-flex; align-items: center; gap: var(--s2); height: 28px; padding: 0 var(--s3); border: 0; border-radius: 4px; background: transparent; color: var(--fg-2); font-weight: 500; white-space: nowrap; transition: background-color var(--ease), color var(--ease); }
+  .toggle button:hover { color: var(--fg); background: var(--hover); }
+  .toggle button[aria-pressed="true"] { background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--control-border); }
+  .toggle button:disabled { opacity: 0.45; }
+  .toggle .count { background: transparent; min-width: 0; padding: 0; }
+  .toggle button[aria-pressed="true"] .count { color: var(--fg); }
+
+  /* State badges */
+  .badge { display: inline-flex; align-items: center; gap: var(--s1); height: 24px; padding: 0 var(--s2); border-radius: var(--radius); font-size: var(--t-meta); font-weight: 600; white-space: nowrap; }
+  .badge .i { width: 16px; height: 16px; }
+  .badge-open { color: var(--open); background: var(--open-bg); }
+  .badge-merged { color: var(--merged); background: var(--merged-bg); }
+  .badge-closed { color: var(--closed); background: var(--closed-bg); }
+  .st-open { color: var(--open); }
+  .st-closed { color: var(--closed); }
+  .branch { display: inline-flex; align-items: center; height: 22px; padding: 0 var(--s2); border-radius: 4px; background: var(--accent-bg); color: var(--accent-fg); font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; max-width: 100%; overflow-wrap: anywhere; }
+
+  /* Popovers */
+  .anchor { position: relative; }
+  .popover { position: absolute; top: calc(100% + var(--s2)); z-index: 20; width: min(320px, calc(100vw - 32px)); border-radius: var(--radius-lg); background: var(--bg); box-shadow: var(--shadow); padding: var(--s2); }
+  .popover.static { position: relative; top: auto; width: 100%; }
+  .popover.right { right: 0; }
+  .popover.left { left: 0; }
+  .pop-filter { margin-bottom: var(--s2); }
+  .pop-tabs { display: flex; gap: var(--s4); padding: 0 var(--s1); border-bottom: 1px solid var(--border); margin-bottom: var(--s1); }
+  .pop-tabs button { height: 32px; padding: 0; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--fg-2); font-weight: 500; transition: color var(--ease); }
+  .pop-tabs button:hover { color: var(--fg); }
+  .pop-tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent-line); }
+  .pop-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
+  .pop-item { display: flex; align-items: center; gap: var(--s2); min-height: 32px; padding: var(--s1) var(--s2); border-radius: var(--radius); color: var(--fg); transition: background-color var(--ease); cursor: pointer; }
+  .pop-item:hover { background: var(--hover); }
+  .pop-item[aria-selected="true"] { background: var(--accent-bg); }
+  .pop-item .check { width: 16px; color: var(--accent); }
+  .pop-item .mono { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pop-item .meta { margin-left: auto; white-space: nowrap; }
+  .clone-pop { width: min(360px, calc(100vw - 32px)); padding: var(--s4); display: flex; flex-direction: column; gap: var(--s3); }
+  .clone-title { font-weight: 600; }
+
+  /* Repo layout: tree pane + content */
+  .repo-layout { display: grid; grid-template-columns: 280px 8px minmax(0, 1fr); margin-top: var(--s4); border-top: 1px solid var(--border); min-width: 0; align-items: stretch; }
+  .tree-pane { min-width: 0; display: flex; flex-direction: column; background: var(--bg-subtle); border-right: 0; }
+  .tree-top { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3); border-bottom: 1px solid var(--border); }
+  .tree-top .branch-btn { width: 100%; justify-content: flex-start; height: 32px; }
+  .tree-top .branch-btn .mono { font-size: 13px; }
+  .tree-top .branch-btn .spacer { margin-left: auto; display: inline-flex; }
+  .tree-list { display: flex; flex-direction: column; padding: var(--s2) var(--s1); overflow-y: auto; max-height: 520px; }
+  .tree-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--s2); min-height: 28px; padding: 0 var(--s2); border-radius: var(--radius); color: var(--fg-2); transition: background-color var(--ease), color var(--ease); }
+  .tree-row:hover { background: var(--hover); color: var(--fg); }
+  .tree-row[aria-current="true"] { background: var(--accent-bg); color: var(--accent-fg); box-shadow: inset 2px 0 0 var(--accent-line); }
+  .tree-row .name { display: flex; align-items: center; gap: var(--s2); min-width: 0; font-size: 13px; color: inherit; text-decoration: none; }
+  .tree-row .name:hover { text-decoration: none; }
+  .tree-row .name .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+  .tree-row[aria-current="true"] .name .mono { color: var(--accent-fg); font-weight: 500; }
+  .tree-row .sz { font-size: var(--t-meta); color: var(--fg-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tree-row .i { color: var(--fg-3); }
+  .tree-row .chev { width: 16px; height: 16px; color: var(--fg-3); }
+  .tree-row.child .name { padding-left: 20px; }
+  .tree-row.child2 .name { padding-left: 40px; }
+  .tree-row .counts { display: inline-flex; gap: var(--s2); font-size: var(--t-meta);  font-variant-numeric: tabular-nums; }
+  .tree-filter { padding: var(--s2) var(--s3) var(--s3); }
+  .tree-foot { padding: var(--s2) var(--s3); border-top: 1px solid var(--border); font-size: var(--t-meta); color: var(--fg-3); }
+  .handle { position: relative; cursor: col-resize; background: transparent; }
+  .handle::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--border); transition: background-color var(--ease); }
+  .handle:hover::before { width: 2px; background: var(--accent-line); }
+  .handle:focus-visible { box-shadow: none; }
+  .handle:focus-visible::before { width: 2px; background: var(--accent-line); }
+  .content-pane { min-width: 0; display: flex; flex-direction: column; border-left: 0; }
+  .pane-head { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2); padding: var(--s2) var(--s4); min-height: 48px; border-bottom: 1px solid var(--border); }
+  .pane-head .crumb-path { display: flex; align-items: center; gap: var(--s1); min-width: 0; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; color: var(--fg-2); }
+  .pane-head .crumb-path .current { color: var(--fg); font-weight: 600; }
+  .pane-head .spacer { flex: 1 1 0; }
+  .files-toggle { display: none; }
+  .pane-body { padding: var(--s4); display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
+  .commit-bar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2) var(--s3); padding: var(--s2) var(--s3); min-width: 0; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+  .commit-bar .msg { color: var(--fg); font-weight: 500; min-width: 0; }
+  .commit-bar .count-link { margin-left: auto; color: var(--fg-2); display: inline-flex; align-items: center; gap: var(--s1); white-space: nowrap; }
+  .commit-bar .count-link:hover { color: var(--fg); text-decoration: none; }
+  .sha { font-size: 13px; color: var(--accent-fg); background: var(--accent-bg); border-radius: 4px; padding: 0 var(--s1); }
+
+  /* Readme */
+  .readme { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .readme-head { display: flex; align-items: center; gap: var(--s2); height: 40px; padding: 0 var(--s3); background: var(--bg-subtle); border-bottom: 1px solid var(--border); font-size: 13px; color: var(--fg-2); }
+  .readme-head .mono { color: var(--fg); }
+  .prose { padding: var(--s6) var(--s6) var(--s8); max-width: 75ch; color: var(--fg); }
+  .prose h1 { font-size: var(--t-doc); line-height: 32px; font-weight: 600; margin-bottom: var(--s4); padding-bottom: var(--s2); border-bottom: 1px solid var(--border); }
+  .prose p { line-height: 24px; color: var(--fg-2); margin-bottom: var(--s4); }
+  .prose pre { margin: 0 0 var(--s4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-subtle); overflow: hidden; }
+  .prose pre .pre-head { display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 var(--s2) 0 var(--s3); border-bottom: 1px solid var(--border); font-size: var(--t-meta); color: var(--fg-3); }
+  .prose pre code { display: block; padding: var(--s3) var(--s4); font-size: 13px; line-height: 20px; color: var(--fg); white-space: pre; overflow-x: auto; }
+  .prose ul { list-style: disc; padding-left: var(--s6); color: var(--fg-2); }
+  .prose li { line-height: 24px; margin-bottom: var(--s1); }
+
+  /* Issues (full width) */
+  .issues-body { padding: var(--s4) var(--s6) var(--s8); display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
+  .issues-bar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s3); }
+  .issues-bar .input { flex: 1 1 280px; max-width: 560px; }
+  .issues-bar .btn-primary { margin-left: auto; }
+  .issue-list { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .issue-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); border-top: 1px solid var(--border); transition: background-color var(--ease); }
+  .issue-row:first-child { border-top: 0; }
+  .issue-row:hover { background: var(--hover); }
+  .issue-row .title { color: var(--fg); font-weight: 500; }
+  .issue-row .title:hover { color: var(--accent); }
+  .issue-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .issue-comments { display: inline-flex; align-items: center; gap: var(--s1); min-width: 32px; justify-content: flex-end; color: var(--fg-3); font-size: var(--t-meta); font-variant-numeric: tabular-nums; }
+  .issue-comments .i { width: 16px; height: 16px; }
+  .pager { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--s3); }
+  .pager .btns { display: flex; gap: var(--s2); }
+  .empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--s2); padding: var(--s8) var(--s4); }
+  .empty .icon-wrap { width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--radius-lg); background: var(--bg-muted); color: var(--fg-2); margin-bottom: var(--s1); }
+  .empty h3 { font-size: var(--t-section); font-weight: 600; }
+  .empty p { color: var(--fg-2); max-width: 36ch; }
+
+  /* Pull request */
+  .pr-head { padding: var(--s4) var(--s6) 0; display: flex; flex-direction: column; gap: var(--s2); }
+  .pr-title { font-size: var(--t-title); line-height: 28px; font-weight: 600; }
+  .pr-title .num { color: var(--fg-3); font-weight: 400; }
+  .pr-sum { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); color: var(--fg-2); }
+  .pr-body { padding: var(--s6); display: flex; flex-direction: column; gap: var(--s6); min-width: 0; max-width: 960px; }
+
+  .timeline { position: relative; display: flex; flex-direction: column; gap: var(--s4); min-width: 0; padding-left: 0; }
+  .timeline::before { content: ""; position: absolute; left: 15px; top: 16px; bottom: 16px; width: 1px; background: var(--border-strong); }
+  .tl-item { position: relative; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: var(--s3); min-width: 0; }
+  .tl-item .avatar { width: 32px; height: 32px; font-size: 14px; position: relative; z-index: 1; background: var(--bg-muted); color: var(--fg-2); }
+  .tl-card { border: 1px solid var(--border); border-radius: var(--radius-lg); min-width: 0; }
+  .tl-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2); padding: var(--s2) var(--s3); background: var(--bg-subtle); border-bottom: 1px solid var(--border); border-radius: var(--radius-lg) var(--radius-lg) 0 0; min-height: 40px; }
+  .tl-head a { color: var(--fg); font-weight: 600; }
+  .tl-head .role { font-size: var(--t-meta); padding: 0 var(--s2); border-radius: var(--radius); border: 1px solid var(--border-strong); color: var(--fg-2); height: 20px; display: inline-flex; align-items: center; }
+  .tl-head .meta { margin-left: auto; }
+  .tl-body { padding: var(--s3) var(--s4); display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
+  .tl-body p { color: var(--fg); line-height: 24px; max-width: 75ch; }
+  .tl-body code { font-size: 13px; padding: 0 var(--s1); border-radius: 4px; background: var(--bg-muted); border: 1px solid var(--border); }
+
+  .merge-box { border: 1px solid var(--border-strong); border-radius: var(--radius-lg); overflow: hidden; min-width: 0; }
+  .merge-row { display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--s4); padding: var(--s4); min-width: 0; }
+  .merge-row + .merge-row { border-top: 1px solid var(--border); }
+  .merge-row .status { display: flex; gap: var(--s3); align-items: flex-start; flex: 1 1 280px; min-width: 0; }
+  .merge-row .status strong { display: block; font-weight: 600; }
+  .merge-row .status p { color: var(--fg-2); margin-top: 2px; }
+  .merge-row .action { display: flex; flex-direction: column; align-items: flex-end; gap: var(--s2); }
+  .merge-ok .status > .i { color: var(--open); margin-top: 2px; }
+  .merge-conflict .status > .i { color: var(--closed); margin-top: 2px; }
+  .conflict-list { margin-top: var(--s2); display: flex; flex-direction: column; gap: var(--s1); }
+  .conflict-list li { display: flex; align-items: center; gap: var(--s2); font-size: 13px; color: var(--fg-2); min-width: 0; }
+  .conflict-list .mono { color: var(--fg); overflow-wrap: anywhere; }
+  .composer { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; min-width: 0; }
+  .composer-body { padding: var(--s3); display: flex; flex-direction: column; gap: var(--s2); }
+  .composer-foot { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: var(--s2); padding: var(--s2) var(--s3); border-top: 1px solid var(--border); background: var(--bg-subtle); }
+
+  /* Diff */
+  .diff-file { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; min-width: 0; }
+  .diff-head { display: flex; align-items: center; gap: var(--s2); min-height: 40px; padding: 0 var(--s3); background: var(--bg-subtle); border-bottom: 1px solid var(--border); min-width: 0; }
+  .diff-head .path { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; color: var(--fg); min-width: 0; overflow-wrap: anywhere; }
+  .diff-head .counts { margin-left: auto; }
+  .counts { display: inline-flex; align-items: center; gap: var(--s2);  font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .add { color: var(--add); }
+  .del { color: var(--del); }
+  .diff-scroll { overflow-x: auto; }
+  table.diff { width: 100%; min-width: 560px; border-collapse: collapse; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; line-height: 20px; }
+  table.diff td { padding: 0; vertical-align: top; white-space: pre; }
+  table.diff .ln { width: 1%; min-width: 40px; padding: 0 var(--s2); text-align: right; color: var(--fg-3); font-variant-numeric: tabular-nums; user-select: none; background: var(--bg-subtle); border-right: 1px solid var(--border); }
+  table.diff .sign { width: 24px; text-align: center; user-select: none; color: var(--fg-2); }
+  table.diff .code { padding: 0 var(--s3) 0 var(--s1); color: var(--fg); }
+  table.diff tr.add td { background: var(--add-bg); }
+  table.diff tr.add .sign { color: var(--add); font-weight: 600; }
+  table.diff tr.del td { background: var(--del-bg); }
+  table.diff tr.del .sign { color: var(--del); font-weight: 600; }
+  table.diff tr.add .ln, table.diff tr.del .ln { background: var(--bg-subtle); }
+  .diff-stack { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
+
+  .section-title { font-size: var(--t-section); font-weight: 600; }
+
+  /* Skeleton */
+  .skel { display: block; height: 10px; border-radius: 4px; background: var(--bg-muted); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+  /* Drawer toggle is only meaningful on phones */
+  @media (max-width: 767px) {
+    .stage { padding: var(--s6) var(--s4) 64px; gap: 40px; }
+    .gh { padding: 0 var(--s3); gap: var(--s2); }
+    .gnav, .search, .user-name { display: none; }
+    .only-sm { display: inline-flex !important; }
+    .repo-head { padding: var(--s4) var(--s4) 0; }
+    .tabs { padding: 0 var(--s4); }
+    .repo-layout { grid-template-columns: minmax(0, 1fr); }
+    .handle { display: none; }
+    .tree-pane { display: none; border-bottom: 1px solid var(--border); }
+    .repo-layout[data-tree="open"] .tree-pane { display: flex; }
+    .repo-layout[data-tree="open"] .tree-list { max-height: 300px; }
+    .files-toggle { display: inline-flex; }
+    .pane-head .anchor { position: static; }
+    .pane-head .clone-pop { left: 0; right: 0; width: auto; }
+    .pane-head { padding: var(--s2) var(--s3); }
+    .pane-body { padding: var(--s3); }
+    .commit-bar .count-link { margin-left: 0; }
+    .prose { padding: var(--s4); }
+    .prose h1 { font-size: var(--t-section); line-height: 24px; }
+    .pr-head { padding: var(--s4) var(--s4) 0; }
+    .pr-body { padding: var(--s4); }
+    .issues-body { padding: var(--s4); }
+    .issues-bar .btn-primary { margin-left: 0; width: 100%; }
+    .issues-bar .input { max-width: none; flex-basis: 100%; }
+    .merge-row .action { align-items: stretch; width: 100%; }
+    .merge-row .action .btn { width: 100%; }
+    .state-grid { grid-template-columns: minmax(0, 1fr); }
+    .issue-row { padding: var(--s3); }
+    table.diff { min-width: 520px; }
+  }
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .repo-layout { grid-template-columns: 232px 8px minmax(0, 1fr); }
+    .state-grid { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-branch" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="i-pr" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" x2="6" y1="9" y2="21"/></symbol>
+  <symbol id="i-issue" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-commit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></symbol>
+  <symbol id="i-comment" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="9" x2="9" y1="3" y2="21"/></symbol>
+  <symbol id="i-columns" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="12" x2="12" y1="3" y2="21"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+</svg>
+
+<main class="stage">
+  <header class="stage-head">
+    <h1>Ether, direction 04: Split code view</h1>
+    <p class="meta">Repository pages keep the file tree beside the content. Issues run full width. Light and dark follow the OS setting.</p>
+  </header>
+
+  <!-- ===================== 01 Repository code view ===================== -->
+  <figure class="frame" aria-labelledby="f01">
+    <figcaption id="f01" class="frame-label"><strong>01 Repository code view</strong><span>1280 px</span></figcaption>
+    <div class="app">
+      <header class="gh">
+        <div class="gh-left">
+          <a class="logo" href="#" aria-label="Ether home"><span class="logo-mark" aria-hidden="true"></span>Ether</a>
+          <nav class="gnav" aria-label="Global">
+            <a href="#" aria-current="page">Repositories</a>
+            <a href="#">Invites</a>
+          </nav>
+        </div>
+        <div class="gh-right"><button class="icon-btn only-sm" aria-label="Open menu"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+          <label class="search">
+            <span class="sr">Search repositories, issues and code</span>
+            <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+            <input type="search" placeholder="Search or jump to">
+            <kbd>Ctrl K</kbd>
+          </label>
+          <button class="icon-btn only-sm" aria-label="Search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button class="user" aria-label="Account menu for admin"><span class="avatar">A</span><span class="user-name">admin</span></button>
+        </div>
+      </header>
+
+      <div class="repo-head">
+        <div class="crumb">
+          <a href="#">admin</a><span class="sep">/</span><span class="current">ether-core</span>
+          <span class="badge-private"><svg class="i" aria-hidden="true" ><use href="#i-lock"/></svg>Private</span>
+        </div>
+        <p class="repo-desc">Server, web client and git transport for Ether.</p>
+      </div>
+      <nav class="tabs" aria-label="Repository">
+        <a href="#" aria-current="page">Code</a>
+        <a href="#">Issues <span class="count">5</span></a>
+        <a href="#">Pull requests <span class="count">1</span></a>
+        <a href="#">Settings</a>
+      </nav>
+
+      <div class="repo-layout" data-tree="closed" id="layout-01">
+        <aside class="tree-pane" aria-label="Files">
+          <div class="tree-top">
+            <button class="btn branch-btn" aria-haspopup="listbox" aria-expanded="false">
+              <svg class="i" aria-hidden="true"><use href="#i-branch"/></svg>
+              <span class="mono">main</span>
+              <span class="spacer"><svg class="i" aria-hidden="true"><use href="#i-chev-down"/></svg></span>
+            </button>
+            <label class="input">
+              <span class="lbl">Filter</span>
+              <span class="lead"><svg class="i" aria-hidden="true"><use href="#i-filter"/></svg><input type="search" placeholder="Filter files" aria-label="Filter files"></span>
+            </label>
+          </div>
+          <ul class="tree-list" aria-label="Files at main">
+            <li class="tree-row" aria-current="false">
+              <a class="name" href="#"><svg class="i chev" aria-hidden="true"><use href="#i-chev-right"/></svg><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="mono">src</span></a>
+              <span></span>
+            </li>
+            <li class="tree-row">
+              <a class="name" href="#"><svg class="i chev" aria-hidden="true"><use href="#i-chev-right"/></svg><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="mono">e2e</span></a>
+              <span></span>
+            </li>
+            <li class="tree-row">
+              <a class="name" href="#"><svg class="i chev" aria-hidden="true"><use href="#i-chev-right"/></svg><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="mono">drizzle</span></a>
+              <span></span>
+            </li>
+            <li class="tree-row" aria-current="true">
+              <a class="name" href="#"><svg class="i" aria-hidden="true" style="margin-left:16px"><use href="#i-file"/></svg><span class="mono">README.md</span></a>
+              <span class="sz">4.2 KB</span>
+            </li>
+            <li class="tree-row">
+              <a class="name" href="#"><svg class="i" aria-hidden="true" style="margin-left:16px"><use href="#i-file"/></svg><span class="mono">package.json</span></a>
+              <span class="sz">1.8 KB</span>
+            </li>
+            <li class="tree-row">
+              <a class="name" href="#"><svg class="i" aria-hidden="true" style="margin-left:16px"><use href="#i-file"/></svg><span class="mono">tsconfig.json</span></a>
+              <span class="sz">612 B</span>
+            </li>
+          </ul>
+          <div class="tree-foot"><span class="num">3</span> folders, <span class="num">3</span> files · 214 commits</div>
+        </aside>
+        <div class="handle" role="separator" aria-orientation="vertical" aria-label="Resize file tree" tabindex="0" aria-valuenow="280" aria-valuemin="200" aria-valuemax="420"></div>
+
+        <div class="content-pane">
+          <div class="pane-head">
+            <div class="crumb-path"><span class="current">ether-core</span><span class="muted">/</span><span class="muted">root</span></div>
+            <div class="spacer"></div>
+            <button class="btn files-toggle" aria-controls="layout-01" aria-expanded="false" data-tree-toggle>
+              <svg class="i" aria-hidden="true"><use href="#i-panel"/></svg>Files
+            </button>
+            <div class="anchor">
+              <button class="btn btn-primary" aria-haspopup="dialog" aria-expanded="true">
+                Code
+                <svg class="i" aria-hidden="true"><use href="#i-chev-down"/></svg>
+              </button>
+              <div class="popover right clone-pop" role="dialog" aria-label="Clone repository">
+                <span class="clone-title">Clone</span>
+                <div>
+                  <label class="input-lbl-row" for="clone-url-04">HTTPS</label>
+                  <div class="input">
+                    <input id="clone-url-04" class="mono" readonly value="https://pc-ltyci6a.tail576a27.ts.net/admin/ether-core.git" style="font-size:13px">
+                    <button class="icon-btn" aria-label="Copy clone URL" style="height:30px"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button>
+                  </div>
+                </div>
+                <p class="help">Git asks for your username and a personal access token. Your account password does not work for Git.</p>
+                <p class="help">Reachable from inside your Tailscale network only.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="pane-body">
+            <div class="commit-bar">
+              <span class="avatar">M</span>
+              <a class="strong" href="#">mira</a>
+              <a class="msg" href="#">Harden session cookie rotation on login</a>
+              <span class="sha">3f9a1c2</span>
+              <span class="meta">2 hours ago</span>
+              <a class="count-link" href="#"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg><span class="num">214</span>&nbsp;commits</a>
+            </div>
+
+            <article class="readme" aria-label="README.md">
+              <div class="readme-head"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg><span class="mono">README.md</span></div>
+              <div class="prose">
+                <h1>ether-core</h1>
+                <p>Ether is a self-hosted code host for a small group of trusted people. It keeps private Git repositories on your own machine, serves a web client for code, issues and pull requests, and speaks Git over HTTPS. Accounts are created from one-time invite links, and Git clients authenticate with a personal access token.</p>
+                <pre><span class="pre-head"><span>sh</span></span><code>bun install
+bun run build
+bun run ether create-admin &lt;you&gt; --password '...'
+bun run start</code></pre>
+                <ul>
+                  <li>Repositories are private. Collaborators get Read or Write access.</li>
+                  <li>Sign-up works only through invite links that an admin creates.</li>
+                  <li>Git runs over HTTPS at <code class="mono">/&lt;owner&gt;/&lt;repo&gt;.git</code>.</li>
+                </ul>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================== 02 Pull request, conversation ===================== -->
+  <figure class="frame" aria-labelledby="f02">
+    <figcaption id="f02" class="frame-label"><strong>02 Pull request</strong><span>Conversation, 1280 px</span></figcaption>
+    <div class="app">
+      <header class="gh">
+        <div class="gh-left">
+          <a class="logo" href="#" aria-label="Ether home"><span class="logo-mark" aria-hidden="true"></span>Ether</a>
+          <nav class="gnav" aria-label="Global"><a href="#" aria-current="page">Repositories</a><a href="#">Invites</a></nav>
+        </div>
+        <div class="gh-right"><button class="icon-btn only-sm" aria-label="Open menu"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+          <label class="search"><span class="sr">Search repositories, issues and code</span><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input type="search" placeholder="Search or jump to"><kbd>Ctrl K</kbd></label>
+          <button class="icon-btn only-sm" aria-label="Search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button class="user" aria-label="Account menu for admin"><span class="avatar">A</span><span class="user-name">admin</span></button>
+        </div>
+      </header>
+
+      <div class="repo-head">
+        <div class="crumb">
+          <a href="#">admin</a><span class="sep">/</span><span class="current">ether-core</span>
+          <span class="badge-private"><svg class="i" aria-hidden="true" ><use href="#i-lock"/></svg>Private</span>
+        </div>
+      </div>
+      <nav class="tabs" aria-label="Repository">
+        <a href="#">Code</a>
+        <a href="#">Issues <span class="count">5</span></a>
+        <a href="#" aria-current="page">Pull requests <span class="count">1</span></a>
+        <a href="#">Settings</a>
+      </nav>
+
+      <div class="pr-head">
+        <h1 class="pr-title">Add invite-only registration <span class="num">#12</span></h1>
+        <div class="pr-sum">
+          <span class="badge badge-open"><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg>Open</span>
+          <span><strong class="strong">admin</strong> wants to merge 3 commits into <span class="branch">main</span> from <span class="branch">feature/invites</span></span>
+        </div>
+      </div>
+      <nav class="tabs" aria-label="Pull request" style="margin-top:16px">
+        <a href="#" aria-current="page">Conversation</a>
+        <a href="#">Commits <span class="count">3</span></a>
+        <a href="#">Files changed <span class="count">4</span></a>
+      </nav>
+
+      <div class="pr-body">
+        <ol class="timeline" aria-label="Conversation">
+          <li class="tl-item">
+            <span class="avatar" aria-hidden="true">A</span>
+            <div class="tl-card">
+              <header class="tl-head"><a href="#">admin</a><span class="role">Author</span><span class="meta">opened 2 days ago</span></header>
+              <div class="tl-body"><p>Adds sign-up through one-time invite links. An admin creates an invite, and it can be claimed once. The claim is a conditional update, so a link cannot be used twice.</p></div>
+            </div>
+          </li>
+          <li class="tl-item">
+            <span class="avatar" aria-hidden="true">M</span>
+            <div class="tl-card">
+              <header class="tl-head"><a href="#">mira</a><span class="meta">commented yesterday</span></header>
+              <div class="tl-body"><p>Can we make the invite claim atomic? Two requests could both pass the <code class="mono">usedAt</code> check before either one writes.</p></div>
+            </div>
+          </li>
+          <li class="tl-item">
+            <span class="avatar" aria-hidden="true">A</span>
+            <div class="tl-card">
+              <header class="tl-head"><a href="#">admin</a><span class="role">Author</span><span class="meta">replied 3 hours ago</span></header>
+              <div class="tl-body"><p>Fixed. The claim is now a single conditional UPDATE, and the handler checks the row count before it creates the account.</p></div>
+            </div>
+          </li>
+        </ol>
+
+        <section class="merge-box merge-ok" aria-label="Merge">
+          <div class="merge-row">
+            <div class="status">
+              <svg class="i i-20" aria-hidden="true"><use href="#i-check-circle"/></svg>
+              <div><strong>No conflicts with main</strong><p>This branch can be merged automatically.</p></div>
+            </div>
+            <div class="action">
+              <button class="btn btn-primary">Merge pull request</button>
+              <span class="help">Creates a merge commit on main.</span>
+            </div>
+          </div>
+        </section>
+
+        <form class="composer" aria-label="Add a comment" onsubmit="return false">
+          <div class="composer-body">
+            <label class="input-lbl-row" for="pr-comment-04">Comment</label>
+            <textarea id="pr-comment-04" class="textarea" placeholder="Leave a comment"></textarea>
+          </div>
+          <div class="composer-foot">
+            <span class="help">Markdown supported</span>
+            <button type="button" class="btn">Comment</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================== 03 Pull request, Files changed (split) ===================== -->
+  <figure class="frame" aria-labelledby="f03">
+    <figcaption id="f03" class="frame-label"><strong>03 Pull request, Files changed</strong><span>Tree with +/− counts and inline diff, 1280 px. Also at 375 px with the Files drawer open.</span></figcaption>
+    <div class="app">
+      <header class="gh">
+        <div class="gh-left">
+          <a class="logo" href="#" aria-label="Ether home"><span class="logo-mark" aria-hidden="true"></span>Ether</a>
+          <nav class="gnav" aria-label="Global"><a href="#" aria-current="page">Repositories</a><a href="#">Invites</a></nav>
+        </div>
+        <div class="gh-right"><button class="icon-btn only-sm" aria-label="Open menu"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+          <label class="search"><span class="sr">Search repositories, issues and code</span><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input type="search" placeholder="Search or jump to"><kbd>Ctrl K</kbd></label>
+          <button class="icon-btn only-sm" aria-label="Search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button class="user" aria-label="Account menu for admin"><span class="avatar">A</span><span class="user-name">admin</span></button>
+        </div>
+      </header>
+
+      <div class="repo-head">
+        <div class="crumb">
+          <a href="#">admin</a><span class="sep">/</span><span class="current">ether-core</span>
+          <span class="badge-private"><svg class="i" aria-hidden="true" ><use href="#i-lock"/></svg>Private</span>
+        </div>
+      </div>
+      <nav class="tabs" aria-label="Repository">
+        <a href="#">Code</a>
+        <a href="#">Issues <span class="count">5</span></a>
+        <a href="#" aria-current="page">Pull requests <span class="count">1</span></a>
+        <a href="#">Settings</a>
+      </nav>
+      <div class="pr-head" style="padding-top:16px">
+        <h1 class="pr-title">Add invite-only registration <span class="num">#12</span></h1>
+        <div class="pr-sum">
+          <span class="badge badge-open"><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg>Open</span>
+          <span><strong class="strong">admin</strong> wants to merge 3 commits into <span class="branch">main</span> from <span class="branch">feature/invites</span></span>
+        </div>
+      </div>
+      <nav class="tabs" aria-label="Pull request" style="margin-top:16px">
+        <a href="#">Conversation</a>
+        <a href="#">Commits <span class="count">3</span></a>
+        <a href="#" aria-current="page">Files changed <span class="count">4</span></a>
+      </nav>
+
+      <div class="repo-layout" data-tree="closed" id="layout-03">
+        <aside class="tree-pane" aria-label="Changed files">
+          <div class="tree-top">
+            <div class="sums" style="display:flex; gap:12px; align-items:center; font-size:12px; color:var(--fg-3)">
+              <span class="num">4 files changed</span>
+              <span class="counts"><span class="add">+148</span><span class="del">−31</span></span>
+            </div>
+            <label class="input">
+              <span class="lbl">Filter</span>
+              <span class="lead"><svg class="i" aria-hidden="true"><use href="#i-filter"/></svg><input type="search" placeholder="Filter files" aria-label="Filter changed files"></span>
+            </label>
+          </div>
+          <ul class="tree-list" aria-label="Changed files tree">
+            <li class="tree-row">
+              <a class="name" href="#"><svg class="i chev" aria-hidden="true"><use href="#i-chev-right"/></svg><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="mono">src</span></a>
+              <span class="counts"><span class="add">+104</span><span class="del">−26</span></span>
+            </li>
+            <li class="tree-row child">
+              <a class="name" href="#"><svg class="i chev" aria-hidden="true"><use href="#i-chev-right"/></svg><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="mono">server</span></a>
+              <span class="counts"><span class="add">+8</span><span class="del">−2</span></span>
+            </li>
+            <li class="tree-row child2" aria-current="true">
+              <a class="name" href="#"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg><span class="mono">invites.ts</span></a>
+              <span class="counts"><span class="add">+8</span><span class="del">−2</span></span>
+            </li>
+            <li class="tree-row child">
+              <a class="name" href="#"><svg class="i" aria-hidden="true" style="margin-left:16px"><use href="#i-file"/></svg><span class="mono">web/routes/signup.tsx</span></a>
+              <span class="counts"><span class="add">+96</span><span class="del">−24</span></span>
+            </li>
+            <li class="tree-row">
+              <a class="name" href="#"><svg class="i chev" aria-hidden="true"><use href="#i-chev-right"/></svg><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="mono">drizzle</span></a>
+              <span class="counts"><span class="add">+21</span><span class="del">−0</span></span>
+            </li>
+            <li class="tree-row child">
+              <a class="name" href="#"><svg class="i" aria-hidden="true" style="margin-left:16px"><use href="#i-file"/></svg><span class="mono">0004_invites.sql</span></a>
+              <span class="counts"><span class="add">+21</span><span class="del">−0</span></span>
+            </li>
+            <li class="tree-row">
+              <a class="name" href="#"><svg class="i chev" aria-hidden="true"><use href="#i-chev-right"/></svg><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="mono">e2e</span></a>
+              <span class="counts"><span class="add">+23</span><span class="del">−5</span></span>
+            </li>
+            <li class="tree-row child">
+              <a class="name" href="#"><svg class="i" aria-hidden="true" style="margin-left:16px"><use href="#i-file"/></svg><span class="mono">signup.spec.ts</span></a>
+              <span class="counts"><span class="add">+23</span><span class="del">−5</span></span>
+            </li>
+          </ul>
+          <div class="tree-foot">Totals match the PR: <span class="num">+148 −31</span></div>
+        </aside>
+        <div class="handle" role="separator" aria-orientation="vertical" aria-label="Resize file tree" tabindex="0" aria-valuenow="280" aria-valuemin="200" aria-valuemax="420"></div>
+
+        <div class="content-pane">
+          <div class="pane-head">
+            <div class="crumb-path"><span class="current">src/server/invites.ts</span></div>
+            <div class="spacer"></div>
+            <button class="btn files-toggle" aria-controls="layout-03" aria-expanded="false" data-tree-toggle>
+              <svg class="i" aria-hidden="true"><use href="#i-panel"/></svg>Files
+            </button>
+            <div class="toggle" role="group" aria-label="Diff view">
+              <button aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-columns"/></svg>Unified</button>
+              <button aria-pressed="false">Split</button>
+            </div>
+          </div>
+          <div class="pane-body">
+            <div class="diff-file">
+              <header class="diff-head">
+                <svg class="i" aria-hidden="true"><use href="#i-file"/></svg>
+                <span class="path">src/server/invites.ts</span>
+                <span class="counts"><span class="add">+8</span><span class="del">−2</span></span>
+              </header>
+              <div class="diff-scroll">
+                <table class="diff" aria-label="Diff for src/server/invites.ts">
+                  <tbody>
+                    <tr><td class="ln">12</td><td class="ln">12</td><td class="sign"> </td><td class="code">import { and, eq, isNull } from "drizzle-orm";</td></tr>
+                    <tr><td class="ln">13</td><td class="ln">13</td><td class="sign"> </td><td class="code">import { invites } from "../db/schema";</td></tr>
+                    <tr><td class="ln">14</td><td class="ln">14</td><td class="sign"> </td><td class="code"></td></tr>
+                    <tr><td class="ln">15</td><td class="ln">15</td><td class="sign"> </td><td class="code">export async function claimInvite(db: Db, token: string, username: string) {</td></tr>
+                    <tr class="del"><td class="ln">16</td><td class="ln"></td><td class="sign">−</td><td class="code">  const invite = await db.query.invites.findFirst({ where: eq(invites.token, token) });</td></tr>
+                    <tr class="del"><td class="ln">17</td><td class="ln"></td><td class="sign">−</td><td class="code">  if (!invite || invite.usedAt) throw new InviteError("invalid");</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">16</td><td class="sign">+</td><td class="code">  const claimed = await db</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">17</td><td class="sign">+</td><td class="code">    .update(invites)</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">18</td><td class="sign">+</td><td class="code">    .set({ usedAt: new Date(), usedBy: username })</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">19</td><td class="sign">+</td><td class="code">    .where(and(eq(invites.token, token), isNull(invites.usedAt)))</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">20</td><td class="sign">+</td><td class="code">    .returning({ id: invites.id });</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">21</td><td class="sign">+</td><td class="code">  if (claimed.length === 0) throw new InviteError("invalid");</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">22</td><td class="sign">+</td><td class="code"></td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">23</td><td class="sign">+</td><td class="code">  // One conditional UPDATE: only one request can set usedAt on an unused invite.</td></tr>
+                    <tr><td class="ln">18</td><td class="ln">24</td><td class="sign"> </td><td class="code">  return createAccount(db, username);</td></tr>
+                    <tr><td class="ln">19</td><td class="ln">25</td><td class="sign"> </td><td class="code">}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================== 04 Issues list ===================== -->
+  <figure class="frame" aria-labelledby="f04">
+    <figcaption id="f04" class="frame-label"><strong>04 Issues list</strong><span>Full width, no tree, 1280 px</span></figcaption>
+    <div class="app">
+      <header class="gh">
+        <div class="gh-left">
+          <a class="logo" href="#" aria-label="Ether home"><span class="logo-mark" aria-hidden="true"></span>Ether</a>
+          <nav class="gnav" aria-label="Global"><a href="#" aria-current="page">Repositories</a><a href="#">Invites</a></nav>
+        </div>
+        <div class="gh-right"><button class="icon-btn only-sm" aria-label="Open menu"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+          <label class="search"><span class="sr">Search repositories, issues and code</span><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input type="search" placeholder="Search or jump to"><kbd>Ctrl K</kbd></label>
+          <button class="icon-btn only-sm" aria-label="Search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button class="user" aria-label="Account menu for admin"><span class="avatar">A</span><span class="user-name">admin</span></button>
+        </div>
+      </header>
+
+      <div class="repo-head">
+        <div class="crumb">
+          <a href="#">admin</a><span class="sep">/</span><span class="current">ether-core</span>
+          <span class="badge-private"><svg class="i" aria-hidden="true" ><use href="#i-lock"/></svg>Private</span>
+        </div>
+      </div>
+      <nav class="tabs" aria-label="Repository">
+        <a href="#">Code</a>
+        <a href="#" aria-current="page">Issues <span class="count">5</span></a>
+        <a href="#">Pull requests <span class="count">1</span></a>
+        <a href="#">Settings</a>
+      </nav>
+
+      <div class="issues-body">
+        <div class="issues-bar">
+          <div class="toggle" role="group" aria-label="Issue state">
+            <button aria-pressed="true"><svg class="i st-open" aria-hidden="true"><use href="#i-issue"/></svg>Open <span class="count num">5</span></button>
+            <button aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Closed <span class="count num">9</span></button>
+          </div>
+          <label class="input">
+            <span class="lbl">Filter</span>
+            <span class="lead" style="flex:1"><svg class="i" aria-hidden="true"><use href="#i-filter"/></svg><input type="search" value="is:issue is:open" aria-label="Filter issues"></span>
+          </label>
+          <button class="btn btn-primary"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New issue</button>
+        </div>
+
+        <ul class="issue-list" aria-label="Open issues">
+          <li class="issue-row">
+            <svg class="i st-open" aria-hidden="true"><use href="#i-issue"/></svg>
+            <div class="issue-main">
+              <a class="title" href="#">Session cookie survives logout in Safari</a>
+              <span class="meta"><span class="sr">Open. </span>#21 opened 3 days ago by kat</span>
+            </div>
+            <a class="issue-comments" href="#" aria-label="4 comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>4</a>
+          </li>
+          <li class="issue-row">
+            <svg class="i st-open" aria-hidden="true"><use href="#i-issue"/></svg>
+            <div class="issue-main">
+              <a class="title" href="#">Show file sizes in the tree on narrow screens</a>
+              <span class="meta"><span class="sr">Open. </span>#19 opened 4 days ago by jonas</span>
+            </div>
+            <a class="issue-comments" href="#" aria-label="1 comment"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>1</a>
+          </li>
+          <li class="issue-row">
+            <svg class="i st-open" aria-hidden="true"><use href="#i-issue"/></svg>
+            <div class="issue-main">
+              <a class="title" href="#">Clone hangs on packfiles over 200 MB</a>
+              <span class="meta"><span class="sr">Open. </span>#17 opened 5 days ago by jonas</span>
+            </div>
+            <a class="issue-comments" href="#" aria-label="6 comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>6</a>
+          </li>
+          <li class="issue-row">
+            <svg class="i st-open" aria-hidden="true"><use href="#i-issue"/></svg>
+            <div class="issue-main">
+              <a class="title" href="#">Invite link should show who invited you</a>
+              <span class="meta"><span class="sr">Open. </span>#14 opened 1 week ago by mira</span>
+            </div>
+            <a class="issue-comments" href="#" aria-label="2 comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>2</a>
+          </li>
+          <li class="issue-row">
+            <svg class="i st-open" aria-hidden="true"><use href="#i-issue"/></svg>
+            <div class="issue-main">
+              <a class="title" href="#">Document the backup command</a>
+              <span class="meta"><span class="sr">Open. </span>#11 opened 2 weeks ago by admin</span>
+            </div>
+            <a class="issue-comments" href="#" aria-label="0 comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>0</a>
+          </li>
+        </ul>
+
+        <nav class="pager" aria-label="Pagination">
+          <span class="meta">Showing <span class="num">1–5</span> of <span class="num">5</span> open issues</span>
+          <div class="btns">
+            <button class="btn" disabled><svg class="i" aria-hidden="true"><use href="#i-chev-left"/></svg>Previous</button>
+            <button class="btn" disabled>Next<svg class="i" aria-hidden="true"><use href="#i-chev-right"/></svg></button>
+          </div>
+        </nav>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================== States ===================== -->
+  <section class="frame" aria-labelledby="states-04">
+    <h2 id="states-04" class="frame-label"><strong>States</strong><span>Each labelled. Shown at 1280 px.</span></h2>
+    <div class="state-grid">
+
+      <div class="state-card">
+        <span class="frame-label"><strong>A. Branch picker open</strong><span>Filter field and tabs</span></span>
+        <div class="state-well">
+          <div class="anchor" style="display:block; width:min(320px, 100%)">
+            <button class="btn branch-btn" aria-haspopup="listbox" aria-expanded="true" style="width:100%; justify-content:flex-start">
+              <svg class="i" aria-hidden="true"><use href="#i-branch"/></svg>
+              <span class="mono" style="font-size:13px">main</span>
+              <span style="margin-left:auto; display:inline-flex"><svg class="i" aria-hidden="true"><use href="#i-chev-down"/></svg></span>
+            </button>
+            <div class="popover left static" role="listbox" aria-label="Switch branch" style="margin-top:8px">
+              <div class="pop-filter">
+                <label class="input"><span class="lbl">Find</span><span class="lead"><svg class="i" aria-hidden="true"><use href="#i-filter"/></svg><input type="search" placeholder="Find a branch" aria-label="Find a branch"></span></label>
+              </div>
+              <div class="pop-tabs" role="tablist" aria-label="Refs">
+                <button role="tab" aria-selected="true">Branches <span class="count num">3</span></button>
+                <button role="tab" aria-selected="false">Tags <span class="count num">1</span></button>
+              </div>
+              <div class="pop-list">
+                <div class="pop-item" role="option" aria-selected="true"><svg class="i check" aria-hidden="true"><use href="#i-check"/></svg><span class="mono">main</span><span class="meta">default</span></div>
+                <div class="pop-item" role="option" aria-selected="false"><span class="check"></span><span class="mono">feature/invites</span><span class="meta">2 hours ago</span></div>
+                <div class="pop-item" role="option" aria-selected="false"><span class="check"></span><span class="mono">fix/session-rotation</span><span class="meta">yesterday</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="state-card">
+        <span class="frame-label"><strong>B. File tree loading</strong><span>Skeleton rows in the pane</span></span>
+        <div class="state-well" style="padding:0; background:var(--bg-subtle)">
+          <div style="padding:12px; display:flex; flex-direction:column; gap:12px" aria-busy="true" aria-label="Loading file tree">
+            <span class="skel" style="width:60%"></span>
+            <span class="skel" style="width:82%"></span>
+            <span class="skel" style="width:70%"></span>
+            <span class="skel" style="width:76%"></span>
+            <span class="skel" style="width:48%"></span>
+            <span class="skel" style="width:66%"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="state-card">
+        <span class="frame-label"><strong>C. Empty filter result</strong><span>Issues, closed view</span></span>
+        <div class="state-well" style="padding:0">
+          <div class="empty">
+            <span class="icon-wrap" aria-hidden="true"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg></span>
+            <h3>No closed issues match</h3>
+            <p>Check the filter, or switch back to open issues.</p>
+            <button class="btn" style="margin-top:8px">Show open issues</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="state-card">
+        <span class="frame-label"><strong>D. Conflict merge box</strong><span>Merge blocked</span></span>
+        <div class="state-well" style="padding:16px">
+          <section class="merge-box merge-conflict" aria-label="Merge blocked">
+            <div class="merge-row">
+              <div class="status">
+                <svg class="i i-20" aria-hidden="true"><use href="#i-alert"/></svg>
+                <div>
+                  <strong>Merge blocked: 2 files have conflicts</strong>
+                  <p>Resolve them on feature/invites, push, then merge again.</p>
+                  <ul class="conflict-list">
+                    <li><span class="mono">src/server/invites.ts</span></li>
+                    <li><span class="mono">drizzle/0004_invites.sql</span></li>
+                  </ul>
+                </div>
+              </div>
+              <div class="action">
+                <button class="btn btn-primary" disabled>Merge pull request</button>
+                <span class="help">Merge commits only. Blocked until conflicts are gone.</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="state-card">
+        <span class="frame-label"><strong>E. Keyboard focus and disabled</strong><span>2 px ring, never removed</span></span>
+        <div class="state-well" style="display:flex; flex-wrap:wrap; gap:16px; align-items:center">
+          <button class="btn is-focus">Code</button>
+          <button class="btn">Copy</button>
+          <button class="btn btn-primary">Merge</button>
+          <button class="btn btn-primary" disabled>Merge</button>
+          <button class="icon-btn is-focus" aria-label="Copy clone URL"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<script>
+  // Files drawer on phones. Each repo layout has its own toggle and starts closed.
+  document.querySelectorAll('[data-tree-toggle]').forEach(function (btn) {
+    var layout = document.getElementById(btn.getAttribute('aria-controls'));
+    btn.addEventListener('click', function () {
+      var open = layout.getAttribute('data-tree') !== 'open';
+      layout.setAttribute('data-tree', open ? 'open' : 'closed');
+      btn.setAttribute('aria-expanded', String(open));
+    });
+  });
+</script>
+</body>
+</html>
