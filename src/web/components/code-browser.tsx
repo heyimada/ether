@@ -5,6 +5,7 @@ import formatSize from "pretty-bytes";
 import { api, repoApi, shortSha, timeAgo, type Commit, type RepoInfo, type TreeEntry } from "../lib/api";
 import { CodeView, Markdown } from "./content";
 import { RefPicker } from "./ref-picker";
+import type { Release } from "./releases";
 import { Avatar, CopyButton } from "./ui";
 
 export type TreeData = { sha: string; path: string; entries: TreeEntry[]; lastCommit: Commit | null; commitCount: number | null; readme: string | null };
@@ -82,7 +83,21 @@ export function Breadcrumb({ info, gitRef, path }: { info: RepoInfo; gitRef: str
   );
 }
 
-export function TreeView({ info, gitRef, data, top, side }: { info: RepoInfo; gitRef: string; data: TreeData; top?: ReactNode; side?: ReactNode }) {
+export function TreeView({
+  info,
+  gitRef,
+  data,
+  top,
+  side,
+  releases,
+}: {
+  info: RepoInfo;
+  gitRef: string;
+  data: TreeData;
+  top?: ReactNode;
+  side?: ReactNode;
+  releases?: Release[];
+}) {
   const params = { owner: info.repo.owner, repo: info.repo.name };
   const parent = [gitRef, data.path.split("/").slice(0, -1).join("/")].filter(Boolean).join("/");
   return (
@@ -179,18 +194,36 @@ export function TreeView({ info, gitRef, data, top, side }: { info: RepoInfo; gi
         </section>
         {side}
         <section className="side-section" aria-labelledby="side-releases">
-          <h3 id="side-releases">Releases</h3>
-          {info.tags.length ? (
+          <h3 id="side-releases">
+            <Link to="/$owner/$repo/releases" params={params} className="heading-link">
+              Releases
+            </Link>{" "}
+            {releases && releases.length > 0 && <span className="count">{releases.length}</span>}
+          </h3>
+          {releases?.length ? (
+            <div className="side-text release">
+              <Tag size={16} aria-hidden className="muted" />
+              <Link to="/$owner/$repo/releases/tag/$tag" params={{ ...params, tag: releases[0].tag }}>
+                {releases[0].title}
+              </Link>
+              <span className="pill">Latest</span>
+              <span className="muted mono">{releases[0].tag}</span>
+            </div>
+          ) : info.tags.length ? (
             <div className="side-text release">
               <Tag size={16} aria-hidden className="muted" />
               <Link to="/$owner/$repo/tree/$" params={{ ...params, _splat: info.tags[0] }} className="mono">
                 {info.tags[0]}
               </Link>
-              <span className="pill">Latest</span>
               <span className="muted num">{info.tags.length === 1 ? "1 tag" : `${info.tags.length} tags`}</span>
             </div>
           ) : (
-            <p className="side-text muted">No tags yet.</p>
+            <p className="side-text muted">No releases yet.</p>
+          )}
+          {info.role !== "read" && (
+            <Link to="/$owner/$repo/releases/new" params={params} className="side-text">
+              Create a release
+            </Link>
           )}
         </section>
       </aside>

@@ -56,7 +56,7 @@ test("repo home: file rows carry their last commit, sidebar shows about and rele
   const releases = page.getByRole("region", { name: "Releases" });
   await expect(releases).toContainText("2 tags");
   // Newest by creation, not by name: v0.10.0 sorts before v0.9.0 as text.
-  await expect(releases.getByRole("link").first()).toHaveText("v0.10.0");
+  await expect(releases.getByRole("link", { name: /^v0\.\d+\.0$/ })).toHaveText("v0.10.0");
 
   await expect(page.getByRole("textbox", { name: "Clone URL" })).toHaveValue(cloneUrl("admin", name));
   await info.attach("repo-home", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
@@ -135,17 +135,23 @@ test("theme choice persists and paints before the session check returns", async 
   // On a later visit the saved theme and accent are on screen while /api/me is still pending.
   let release!: () => void;
   const held = new Promise<void>((r) => (release = r));
-  await fresh.route("**/api/me", async (route) => {
-    await held;
-    await route.continue();
-  });
+  // Hold exactly one /api/me request; the route then removes itself.
+  await fresh.route(
+    "**/api/me",
+    async (route) => {
+      await held;
+      await route.continue();
+    },
+    { times: 1 },
+  );
   await fresh.goto(`${baseURL()}/settings`, { waitUntil: "domcontentloaded" });
   expect(await fresh.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(1, 4, 9)");
   const accent = await fresh.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim());
   expect(accent).not.toBe("#4fc3d9");
   expect(accent).not.toBe("");
+  const answered = fresh.waitForResponse("**/api/me");
   release();
-  await fresh.unroute("**/api/me");
+  await answered;
 
   // Signing out clears it for whoever uses the browser next.
   await fresh.getByRole("button", { name: "Account menu" }).click();
