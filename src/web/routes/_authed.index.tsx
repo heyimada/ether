@@ -6,20 +6,22 @@ import { api } from "../lib/api";
 
 type RepoRow = { owner: string; name: string; description: string; visibility: "private" | "public"; relation: "owner" | "org" | "collaborator" | "public" };
 type OrgRow = { name: string; role: "owner" | "member" };
+type ReviewRow = { owner: string; repo: string; number: number; title: string };
 
 export const Route = createFileRoute("/_authed/")({
   loader: async ({ context: { me } }) => {
-    const [{ repos }, { orgs }] = await Promise.all([
+    const [{ repos }, { orgs }, { pulls }] = await Promise.all([
       api<{ repos: RepoRow[] }>("/api/repos"),
       me ? api<{ orgs: OrgRow[] }>("/api/me/orgs") : Promise.resolve({ orgs: [] as OrgRow[] }),
+      me ? api<{ pulls: ReviewRow[] }>("/api/me/review-requests") : Promise.resolve({ pulls: [] as ReviewRow[] }),
     ]);
-    return { repos, orgs };
+    return { repos, orgs, reviews: pulls };
   },
   component: Dashboard,
 });
 
 function Dashboard() {
-  const { repos, orgs } = Route.useLoaderData();
+  const { repos, orgs, reviews } = Route.useLoaderData();
   const { me } = Route.useRouteContext();
   const by = (relation: RepoRow["relation"]) => repos.filter((r) => r.relation === relation);
   if (!me)
@@ -44,6 +46,27 @@ function Dashboard() {
           <Building2 size={16} aria-hidden /> New organization
         </Link>
       </div>
+      {reviews.length > 0 && (
+        <section className="card" aria-labelledby="waiting-review">
+          <header>
+            <h2 id="waiting-review" style={{ margin: 0 }}>
+              Waiting for your review
+            </h2>
+          </header>
+          <ul className="list">
+            {reviews.map((p) => (
+              <li key={`${p.owner}/${p.repo}#${p.number}`}>
+                <Link to="/$owner/$repo/pull/$number" params={{ owner: p.owner, repo: p.repo, number: String(p.number) }}>
+                  {p.title}
+                </Link>
+                <span className="muted">
+                  {p.owner}/{p.repo}#{p.number}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <RepoSection
         title="Your repositories"
         repos={by("owner")}

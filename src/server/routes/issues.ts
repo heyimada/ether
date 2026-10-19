@@ -6,6 +6,7 @@ import { HttpError, allows, readerOrVisitor, requireRepo, requireUser, type Repo
 import { db } from "../db/client";
 import { comment, issue, issueAssignee, issueLabel, label, repo, user } from "../db/schema";
 import * as git from "../git";
+import { reviewSummary } from "./reviews";
 
 const merges = new Mutex();
 const mergedByUser = alias(user, "merged_by_user");
@@ -78,7 +79,7 @@ const present = (r: NonNullable<IssueRow>) => ({
   updatedAt: r.issue.updatedAt,
 });
 
-function findIssue(a: RepoAccess, number: string) {
+export function findIssue(a: RepoAccess, number: string) {
   const row = issueRows(a.repo.id).where(and(eq(issue.repoId, a.repo.id), eq(issue.number, Number(number)))).get();
   if (!row) throw new HttpError(404, "No such issue or pull request");
   return row;
@@ -140,7 +141,7 @@ function listIssues(a: RepoAccess, isPull: boolean, q: Record<string, string | u
   return { items: presentAll(rows), open, closed };
 }
 
-async function pullStatus(a: RepoAccess, row: NonNullable<IssueRow>) {
+export async function pullStatus(a: RepoAccess, row: NonNullable<IssueRow>) {
   const base = row.issue.baseRef!;
   const head = row.issue.headRef!;
   if (row.issue.state === "merged" && row.issue.mergeCommit) {
@@ -225,7 +226,14 @@ export const issueRoutes = new Elysia()
     const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
     const row = findIssue(a, params.number);
     if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
-    return { pull: presentAll([row])[0], comments: listComments(row.issue.id), role: a.role, ...(await pullStatus(a, row)) };
+    return {
+      pull: presentAll([row])[0],
+      comments: listComments(row.issue.id),
+      role: a.role,
+      requireApproval: a.repo.requireApproval,
+      ...reviewSummary(row.issue.id),
+      ...(await pullStatus(a, row)),
+    };
   })
   .post("/repos/:owner/:repo/pulls/:number/merge", async ({ request, params }) => {
     const viewer = await requireUser(request);
@@ -234,6 +242,9 @@ export const issueRoutes = new Elysia()
       const row = findIssue(a, params.number);
       if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
       if (row.issue.state !== "open") throw new HttpError(409, "This pull request is not open");
+      // With protection on, merging needs an approval and no outstanding request for changes.
+      const decision = reviewSummary(row.issue.id).reviewDecision;
+      if (a.repo.requireApproval && decision !== "approved") throw new HttpError(409, "Merging requires an approving review");
       const result = await git.mergeBranches(
         a.path,
         row.issue.baseRef!,

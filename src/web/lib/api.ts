@@ -30,7 +30,7 @@ export const repoApi = (owner: string, repo: string) => `/api/repos/${encodeURIC
 export type Me = { username: string; isAdmin: boolean; accent: string | null; theme: "light" | "dark" | null };
 
 export type RepoInfo = {
-  repo: { owner: string; name: string; description: string; visibility: "private" | "public"; defaultBranch: string; empty: boolean };
+  repo: { owner: string; name: string; description: string; visibility: "private" | "public"; requireApproval: boolean; defaultBranch: string; empty: boolean };
   role: "owner" | "write" | "read";
   stars: number;
   starred: boolean;
