@@ -235,6 +235,18 @@ export async function authorTimes(repo: string, rev: string, since: Date): Promi
     });
 }
 
+// Author emails of the commits reachable from `after` but from none of `before`, i.e. what a
+// push brought in. Bounded so a huge import can't stall the response.
+export async function newAuthorEmails(repo: string, before: string[], after: string[]): Promise<string[]> {
+  const fresh = after.filter((sha) => !before.includes(sha));
+  if (fresh.length === 0) return [];
+  const out = await gitText(repo, ["log", "--no-merges", "--format=%ae", "-n", "10000", ...fresh, "--not", ...before, "--"]);
+  return out
+    .split("\n")
+    .filter(Boolean)
+    .map((e) => e.toLowerCase());
+}
+
 export async function rangeCommits(repo: string, base: string, head: string): Promise<Commit[]> {
   return parseLog(await gitText(repo, ["log", `--format=${LOG_FORMAT}`, "--end-of-options", `${base}..${head}`]));
 }

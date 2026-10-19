@@ -16,6 +16,7 @@ export type MyProfile = {
     avatarVersion: number | null;
   };
   emails: string[];
+  pushEmails: { email: string; commits: number; yours: boolean }[];
   pins: string[];
 };
 
@@ -204,6 +205,42 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
           <Field id="emails" label="Commit emails" hint="One per line. Commits authored with these addresses count towards your contribution graph. An address can belong to one account only.">
             <textarea id="emails" value={emails} onChange={(e) => setEmails(e.target.value)} style={{ minHeight: 72 }} className="mono" />
           </Field>
+          {data.pushEmails.some((p) => !p.yours) && (
+            <div className="stack-sm" style={{ gap: 6 }}>
+              <span className="hint" style={{ margin: 0 }}>
+                Found in commits you pushed. Add the ones that are yours.
+              </span>
+              <ul className="list card" aria-label="Emails in your pushes">
+                {data.pushEmails
+                  .filter((p) => !p.yours)
+                  .map((p) => {
+                    const listed = emails.split(/[\s,]+/).includes(p.email);
+                    return (
+                      <li key={p.email} style={{ padding: "8px 12px" }}>
+                        <span className="mono" style={{ overflowWrap: "anywhere", minWidth: 0 }}>
+                          {p.email}
+                        </span>
+                        <span className="muted num">
+                          {p.commits} {p.commits === 1 ? "commit" : "commits"}
+                        </span>
+                        <span className="spacer" />
+                        <button
+                          type="button"
+                          className="small"
+                          disabled={listed}
+                          onClick={() => {
+                            setEmails([...emails.split(/[\s,]+/).filter(Boolean), p.email].join("\n"));
+                            setEmailStatus("");
+                          }}
+                        >
+                          {listed ? "Added" : "Add"}
+                        </button>
+                      </li>
+                    );
+                  })}
+              </ul>
+            </div>
+          )}
           <div className="row">
             <button disabled={saveEmails.pending}>Save commit emails</button>
             <Status text={emailStatus} />
