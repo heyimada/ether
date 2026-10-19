@@ -418,3 +418,8 @@ img.avatar { object-fit: cover; background: var(--surface-3); }
 .star-button { font-size: 13px; }
 .star-button .starred { color: #d4a72c; }
 .repo-head { flex-wrap: wrap; }
+.team-card { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.team-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 640px) { .team-grid { grid-template-columns: minmax(0, 1fr); } }
+.chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: 13px; }

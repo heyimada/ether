@@ -232,3 +232,46 @@ export const star = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.repoId] }), index("star_repo_idx").on(t.repoId)],
 );
+
+// Teams group organization members and grant them a role on chosen org repositories,
+// on top of the organization's base permission.
+export const team = sqliteTable(
+  "team",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("team_org_name_idx").on(t.orgId, t.name)],
+);
+
+export const teamMember = sqliteTable(
+  "team_member",
+  {
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => team.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.teamId, t.userId] }), index("team_member_user_idx").on(t.userId)],
+);
+
+export const teamRepo = sqliteTable(
+  "team_repo",
+  {
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => team.id, { onDelete: "cascade" }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["read", "write"] }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.teamId, t.repoId] })],
+);
