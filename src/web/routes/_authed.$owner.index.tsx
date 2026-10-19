@@ -110,6 +110,7 @@ function Profile() {
 
 function ProfileCard({ data }: { data: ProfileData }) {
   const router = useRouter();
+  const signedIn = !!Route.useRouteContext().me;
   const { owner } = Route.useParams();
   const p = data.profile;
   const toggle = useAction(async () => {
@@ -137,7 +138,7 @@ function ProfileCard({ data }: { data: ProfileData }) {
       )}
       {p.bio && <p className="profile-bio">{p.bio}</p>}
       <ErrorNote error={toggle.error} />
-      {data.isSelf ? (
+      {!signedIn ? null : data.isSelf ? (
         <Link to="/settings" className="button wide-link">
           Edit profile
         </Link>

@@ -275,3 +275,9 @@ export const teamRepo = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.teamId, t.repoId] })],
 );
+
+// Instance-wide settings an admin changes at runtime, as key/value JSON.
+export const instanceSetting = sqliteTable("instance_setting", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});

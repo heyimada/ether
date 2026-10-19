@@ -8,6 +8,8 @@ import {
   findUser,
   inviteIsUsable,
   markInviteUsed,
+  anonymousRead,
+  readerOrVisitor,
   requireAdmin,
   requireUser,
 } from "../access";
@@ -15,7 +17,7 @@ import { auth, placeholderEmail } from "../auth";
 import { USERNAME_RE } from "../auth-plugins";
 import { config } from "../config";
 import { db } from "../db/client";
-import { accessToken, invite, profile, user, userPref } from "../db/schema";
+import { accessToken, instanceSetting, invite, profile, user, userPref } from "../db/schema";
 
 const MIN_PASSWORD = 10;
 // The accent ends up inside a stylesheet, so nothing but a plain hex colour is stored.
@@ -46,6 +48,18 @@ export const accountRoutes = new Elysia()
       return { user: { username: created.username } };
     });
   })
+  // Public: tells the web app whether signed-out visitors may browse public repositories.
+  .get("/instance", () => ({ anonymousRead: anonymousRead() }))
+  .put("/admin/settings", async ({ request, body }) => {
+    await requireAdmin(request);
+    const { anonymousRead: allow } = (body ?? {}) as { anonymousRead?: unknown };
+    if (typeof allow !== "boolean") throw new HttpError(400, "anonymousRead must be true or false");
+    db.insert(instanceSetting)
+      .values({ key: "anonymousRead", value: String(allow) })
+      .onConflictDoUpdate({ target: instanceSetting.key, set: { value: String(allow) } })
+      .run();
+    return { anonymousRead: allow };
+  })
   .get("/me", async ({ request }) => {
     const viewer = await requireUser(request);
     const pref = db.select().from(userPref).where(eq(userPref.userId, viewer.id)).get();
@@ -70,7 +84,7 @@ export const accountRoutes = new Elysia()
     return { accent: pref?.accent ?? null, theme: pref?.theme ?? null };
   })
   .get("/users", async ({ request }) => {
-    await requireUser(request);
+    await readerOrVisitor(request);
     const users = db
       .select({ username: user.username, role: user.role, displayName: profile.displayName, avatarVersion: profile.avatarVersion })
       .from(user)

@@ -17,7 +17,7 @@ function IssuePage() {
   return (
     <div style={{ maxWidth: 900 }}>
       <IssueHeader issue={issue} />
-      <Conversation info={info} issue={issue} comments={comments} me={me.username} />
+      <Conversation info={info} issue={issue} comments={comments} me={me?.username ?? null} />
     </div>
   );
 }

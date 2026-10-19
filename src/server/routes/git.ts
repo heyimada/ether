@@ -1,23 +1,27 @@
 import { Elysia } from "elysia";
-import { allows, repoAccess, tokenUser, type RepoAccess, type Viewer } from "../access";
+import { VISITOR, allows, anonymousRead, repoAccess, tokenUser, type RepoAccess, type Viewer } from "../access";
 import { recordPush } from "../contrib";
 import { NAME_RE, listRefs, newAuthorEmails, repoExists } from "../git";
 import { advertiseRefs, basicCredentials, challenge, runService, type Service } from "../smart-http";
 
 const SERVICES = new Set<Service>(["git-upload-pack", "git-receive-pack"]);
 
-// Git authenticates with username + personal access token over HTTP Basic. Every request,
-// reads included, is challenged until it carries valid credentials.
+// Git authenticates with username + personal access token over HTTP Basic. Every request is
+// challenged until it carries valid credentials, except reads of public repositories when an
+// admin lets visitors without an account read them.
 function authorize(req: Request, owner: string, repoParam: string, service: Service): (RepoAccess & { viewer: Viewer }) | Response {
   if (!repoParam.endsWith(".git")) return new Response("Not found\n", { status: 404 });
   const name = repoParam.slice(0, -4);
   if (!NAME_RE.test(owner) || !NAME_RE.test(name) || name.startsWith(".")) return new Response("Not found\n", { status: 404 });
 
   const creds = basicCredentials(req);
-  const viewer = creds && tokenUser(creds.username, creds.secret);
+  // Without credentials, reads of public repositories may proceed as the visitor when the
+  // admin allows it; anything else is challenged so git asks for a token.
+  const viewer = creds ? tokenUser(creds.username, creds.secret) : service === "git-upload-pack" && anonymousRead() ? VISITOR : null;
   if (!viewer) return challenge();
 
   const access = repoAccess(viewer, owner, name);
+  if (!access && viewer === VISITOR) return challenge();
   if (!access || !repoExists(access.path)) return new Response("Repository not found\n", { status: 404 });
   const need = service === "git-receive-pack" ? "write" : "read";
   if (!allows(access.role, need)) return new Response(`You need ${need} access to this repository\n`, { status: 403 });
