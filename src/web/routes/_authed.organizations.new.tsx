@@ -2,8 +2,12 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { post } from "../lib/api";
+import { requireAccount } from "../lib/require-account";
 
-export const Route = createFileRoute("/_authed/organizations/new")({ component: NewOrg });
+export const Route = createFileRoute("/_authed/organizations/new")({
+  beforeLoad: ({ context, location }) => requireAccount(context.me, location.href),
+  component: NewOrg,
+});
 
 function NewOrg() {
   const router = useRouter();

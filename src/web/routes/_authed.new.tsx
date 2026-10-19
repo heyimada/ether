@@ -3,8 +3,10 @@ import { Globe, Lock } from "lucide-react";
 import { useState } from "react";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { api, post } from "../lib/api";
+import { requireAccount } from "../lib/require-account";
 
 export const Route = createFileRoute("/_authed/new")({
+  beforeLoad: ({ context, location }) => requireAccount(context.me, location.href),
   loader: () => api<{ orgs: { name: string; role: "owner" | "member" }[] }>("/api/me/orgs"),
   component: NewRepo,
 });

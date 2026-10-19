@@ -2,7 +2,7 @@ import { Mutex } from "async-mutex";
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { Elysia } from "elysia";
-import { HttpError, allows, requireRepo, requireUser, type RepoAccess, type Viewer } from "../access";
+import { HttpError, allows, readerOrVisitor, requireRepo, requireUser, type RepoAccess, type Viewer } from "../access";
 import { db } from "../db/client";
 import { comment, issue, repo, user } from "../db/schema";
 import * as git from "../git";
@@ -112,7 +112,7 @@ async function pullStatus(a: RepoAccess, row: NonNullable<IssueRow>) {
 export const issueRoutes = new Elysia()
   // ---------- issues ----------
   .get("/repos/:owner/:repo/issues", async ({ request, params, query }) => {
-    const a = requireRepo(await requireUser(request), params.owner, params.repo, "read");
+    const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
     return listIssues(a, false, (query as Record<string, string>).state);
   })
   .post("/repos/:owner/:repo/issues", async ({ request, params, body }) => {
@@ -125,7 +125,7 @@ export const issueRoutes = new Elysia()
     return { issue: { number } };
   })
   .get("/repos/:owner/:repo/issues/:number", async ({ request, params }) => {
-    const a = requireRepo(await requireUser(request), params.owner, params.repo, "read");
+    const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
     const row = findIssue(a, params.number);
     return { issue: present(row), comments: listComments(row.issue.id), role: a.role };
   })
@@ -157,7 +157,7 @@ export const issueRoutes = new Elysia()
   })
   // ---------- pull requests ----------
   .get("/repos/:owner/:repo/pulls", async ({ request, params, query }) => {
-    const a = requireRepo(await requireUser(request), params.owner, params.repo, "read");
+    const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
     return listIssues(a, true, (query as Record<string, string>).state);
   })
   .post("/repos/:owner/:repo/pulls", async ({ request, params, body }) => {
@@ -175,7 +175,7 @@ export const issueRoutes = new Elysia()
     return { pull: { number } };
   })
   .get("/repos/:owner/:repo/pulls/:number", async ({ request, params }) => {
-    const a = requireRepo(await requireUser(request), params.owner, params.repo, "read");
+    const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
     const row = findIssue(a, params.number);
     if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
     return { pull: present(row), comments: listComments(row.issue.id), role: a.role, ...(await pullStatus(a, row)) };

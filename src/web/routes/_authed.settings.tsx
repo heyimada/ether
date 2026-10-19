@@ -4,10 +4,12 @@ import { ProfileSettings, loadMyProfile } from "../components/profile-settings";
 import { CopyButton, ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { ACCENT_PRESETS, DEFAULT_ACCENT, applyAccent, type Theme } from "../lib/accent";
 import { api, del, post, put, timeAgo } from "../lib/api";
+import { requireAccount } from "../lib/require-account";
 
 type Token = { id: number; name: string; createdAt: string; lastUsedAt: string | null };
 
 export const Route = createFileRoute("/_authed/settings")({
+  beforeLoad: ({ context, location }) => requireAccount(context.me, location.href),
   loader: async () => {
     const [{ tokens }, profile, { repos }] = await Promise.all([
       api<{ tokens: Token[] }>("/api/tokens"),

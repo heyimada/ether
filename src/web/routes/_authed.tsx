@@ -15,10 +15,14 @@ export const Route = createFileRoute("/_authed")({
   beforeLoad: async ({ location }) => {
     try {
       const [{ user }, { users }] = await Promise.all([api<{ user: Me }>("/api/me"), api<{ users: Person[] }>("/api/users")]);
-      return { me: user, people: users };
+      return { me: user as Me | null, people: users };
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) throw redirect({ to: "/login", search: { next: location.href } });
-      throw e;
+      if (!(e instanceof ApiError && e.status === 401)) throw e;
+      // Signed out: browse public repositories as a visitor if the admin allows it.
+      const { anonymousRead } = await api<{ anonymousRead: boolean }>("/api/instance");
+      if (!anonymousRead) throw redirect({ to: "/login", search: { next: location.href } });
+      const { users } = await api<{ users: Person[] }>("/api/users");
+      return { me: null as Me | null, people: users };
     }
   },
   component: AuthedLayout,
@@ -27,7 +31,9 @@ export const Route = createFileRoute("/_authed")({
 function AuthedLayout() {
   const { me, people } = Route.useRouteContext();
   const directory = useMemo(() => new Map(people.map((p) => [p.username.toLowerCase(), p])), [people]);
-  useEffect(() => applyAppearance({ accent: me.accent, theme: me.theme }), [me.accent, me.theme]);
+  useEffect(() => {
+    if (me) applyAppearance({ accent: me.accent, theme: me.theme });
+  }, [me]);
   return (
     <PeopleContext.Provider value={directory}>
       <header className="topbar">
@@ -36,7 +42,13 @@ function AuthedLayout() {
           Ether
         </Link>
         <JumpBox />
-        <UserMenu me={me} displayName={directory.get(me.username)?.displayName ?? ""} />
+        {me ? (
+          <UserMenu me={me} displayName={directory.get(me.username)?.displayName ?? ""} />
+        ) : (
+          <Link to="/login" className="button primary small sign-in">
+            Sign in
+          </Link>
+        )}
       </header>
       <Outlet />
     </PeopleContext.Provider>

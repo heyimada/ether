@@ -2,7 +2,7 @@ import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { HttpError, findUser, readableRepos, requireUser, type ReadableRepo } from "../access";
+import { HttpError, findUser, readableRepos, readerOrVisitor, requireUser, type ReadableRepo } from "../access";
 import { config } from "../config";
 import { db } from "../db/client";
 import { comment, commitEmail, follow, issue, orgMember, organization, pin, profile, star, user } from "../db/schema";
@@ -222,7 +222,7 @@ async function emailSuggestions(userId: string) {
 
 export const profileRoutes = new Elysia()
   .get("/users/:name/profile", async ({ request, params }) => {
-    const viewer = await requireUser(request);
+    const viewer = await readerOrVisitor(request);
     const target = requireTarget(params.name);
     const readable = readableRepos(viewer.id);
     const row = profileRow(target.id);
@@ -288,12 +288,12 @@ export const profileRoutes = new Elysia()
     };
   })
   .get("/users/:name/followers", async ({ request, params }) => {
-    await requireUser(request);
+    await readerOrVisitor(request);
     const target = requireTarget(params.name);
     return { users: people(db.select({ id: follow.followerId }).from(follow).where(eq(follow.followeeId, target.id)).all().map((f) => f.id)) };
   })
   .get("/users/:name/following", async ({ request, params }) => {
-    await requireUser(request);
+    await readerOrVisitor(request);
     const target = requireTarget(params.name);
     return { users: people(db.select({ id: follow.followeeId }).from(follow).where(eq(follow.followerId, target.id)).all().map((f) => f.id)) };
   })
@@ -311,7 +311,7 @@ export const profileRoutes = new Elysia()
     return { ok: true };
   })
   .get("/users/:name/avatar", async ({ request, params }) => {
-    await requireUser(request);
+    await readerOrVisitor(request);
     const target = requireTarget(params.name);
     const row = profileRow(target.id);
     const file = join(avatarDir(), target.id);

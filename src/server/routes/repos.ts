@@ -1,6 +1,6 @@
 import { and, count, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-import { HttpError, findUser, isOrg, readableRepos, requireRepo, requireUser } from "../access";
+import { HttpError, findUser, isOrg, readableRepos, requireRepo, requireUser, readerOrVisitor } from "../access";
 import { db } from "../db/client";
 import { collaborator, orgMember, repo, star, user } from "../db/schema";
 import * as git from "../git";
@@ -22,7 +22,7 @@ const cleanPath = (p: string | undefined) => {
 
 export const repoRoutes = new Elysia()
   .get("/repos", async ({ request }) => {
-    const viewer = await requireUser(request);
+    const viewer = await readerOrVisitor(request);
     return {
       repos: readableRepos(viewer.id).map((r) => ({
         owner: r.owner,
@@ -62,7 +62,7 @@ export const repoRoutes = new Elysia()
     return { repo: { owner: ownerRow.username, name: lower } };
   })
   .get("/repos/:owner/:repo", async ({ request, params }) => {
-    const viewer = await requireUser(request);
+    const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const refs = await git.listRefs(a.path);
     const defaultBranch = await git.headBranch(a.path);
@@ -146,7 +146,7 @@ export const repoRoutes = new Elysia()
   })
   // ---------- browsing ----------
   .get("/repos/:owner/:repo/tree", async ({ request, params, query }) => {
-    const viewer = await requireUser(request);
+    const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const q = query as Q;
     const sha = await resolveRev(a.path, q.ref);
@@ -163,7 +163,7 @@ export const repoRoutes = new Elysia()
     };
   })
   .get("/repos/:owner/:repo/blob", async ({ request, params, query }) => {
-    const viewer = await requireUser(request);
+    const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const q = query as Q;
     const sha = await resolveRev(a.path, q.ref);
@@ -173,7 +173,7 @@ export const repoRoutes = new Elysia()
     return { sha, path, ...blob };
   })
   .get("/repos/:owner/:repo/raw", async ({ request, params, query }) => {
-    const viewer = await requireUser(request);
+    const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const q = query as Q;
     const sha = await resolveRev(a.path, q.ref);
@@ -191,7 +191,7 @@ export const repoRoutes = new Elysia()
     });
   })
   .get("/repos/:owner/:repo/commits", async ({ request, params, query }) => {
-    const viewer = await requireUser(request);
+    const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const q = query as Q;
     const sha = await resolveRev(a.path, q.ref);
@@ -200,13 +200,13 @@ export const repoRoutes = new Elysia()
     return { commits: commits.slice(0, 30), hasMore: commits.length > 30 };
   })
   .get("/repos/:owner/:repo/activity", async ({ request, params }) => {
-    const viewer = await requireUser(request);
+    const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const sha = await git.resolveCommit(a.path, await git.headBranch(a.path));
     return sha ? git.activity(a.path, sha) : { since: null, weeks: [], total: 0, authors: [] };
   })
   .get("/repos/:owner/:repo/commit/:sha", async ({ request, params }) => {
-    const viewer = await requireUser(request);
+    const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     if (!/^[0-9a-f]{4,64}$/i.test(params.sha)) throw new HttpError(400, "Invalid commit id");
     const sha = await git.resolveCommit(a.path, params.sha);
@@ -214,7 +214,7 @@ export const repoRoutes = new Elysia()
     return git.showCommit(a.path, sha);
   })
   .get("/repos/:owner/:repo/compare", async ({ request, params, query }) => {
-    const viewer = await requireUser(request);
+    const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const q = query as Q;
     const base = await resolveRev(a.path, q.base);

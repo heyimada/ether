@@ -61,7 +61,7 @@ function PullPage() {
         </section>
       ) : (
         <div style={{ maxWidth: 900 }} className="timeline">
-          <Conversation info={info} issue={pull} comments={data.comments} me={me.username} />
+          <Conversation info={info} issue={pull} comments={data.comments} me={me?.username ?? null} />
           <MergeBox data={data} />
         </div>
       )}

@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { auth } from "./auth";
 import { db } from "./db/client";
-import { accessToken, collaborator, invite, orgMember, organization, repo, teamMember, teamRepo, user } from "./db/schema";
+import { accessToken, collaborator, instanceSetting, invite, orgMember, organization, repo, teamMember, teamRepo, user } from "./db/schema";
 import { repoPath } from "./git";
 
 export class HttpError extends Error {
@@ -27,6 +27,22 @@ export async function requireUser(req: Request): Promise<Viewer> {
   const viewer = await currentUser(req);
   if (!viewer) throw new HttpError(401, "Sign in required");
   return viewer;
+}
+
+// Signed-out visitors, when an admin allows them, get this identity: it owns nothing and is in
+// no org, team or collaborator list, so the resolver can only grant it read on public repos.
+export const VISITOR: Viewer = { id: "", username: "", isAdmin: false };
+
+export function anonymousRead(): boolean {
+  return db.select().from(instanceSetting).where(eq(instanceSetting.key, "anonymousRead")).get()?.value === "true";
+}
+
+// For read-only endpoints: the signed-in user, or the visitor identity when allowed.
+export async function readerOrVisitor(req: Request): Promise<Viewer> {
+  const viewer = await currentUser(req);
+  if (viewer) return viewer;
+  if (anonymousRead()) return VISITOR;
+  throw new HttpError(401, "Sign in required");
 }
 
 export async function requireAdmin(req: Request): Promise<Viewer> {
@@ -165,7 +181,8 @@ export function readableRepos(viewerId: string): ReadableRepo[] {
 // Repositories the viewer cannot read are reported as missing, not forbidden.
 export function requireRepo(viewer: Viewer, ownerName: string, repoName: string, need: Role): RepoAccess {
   const access = repoAccess(viewer, ownerName, repoName);
-  if (!access) throw new HttpError(404, "Repository not found");
+  // A visitor might be able to see it after signing in, so ask them to.
+  if (!access) throw viewer.id === "" ? new HttpError(401, "Sign in required") : new HttpError(404, "Repository not found");
   if (!allows(access.role, need)) throw new HttpError(403, `Requires ${need} access`);
   return access;
 }

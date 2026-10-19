@@ -1,18 +1,22 @@
-import { Link, Outlet, createFileRoute, useRouter } from "@tanstack/react-router";
+import { Link, Outlet, createFileRoute, redirect, useRouteContext, useRouter } from "@tanstack/react-router";
 import { Star as StarIcon } from "lucide-react";
 import { useAction } from "../components/ui";
-import { api, del, put, repoApi, type Issue, type RepoInfo } from "../lib/api";
+import { ApiError, api, del, put, repoApi, type Issue, type RepoInfo } from "../lib/api";
 
 type Counts = { open: number; items: Issue[] };
 
 export const Route = createFileRoute("/_authed/$owner/$repo")({
-  beforeLoad: async ({ params }) => {
+  beforeLoad: async ({ params, location }) => {
     const base = repoApi(params.owner, params.repo);
     const [info, issues, pulls] = await Promise.all([
       api<RepoInfo>(base),
       api<Counts>(`${base}/issues`),
       api<Counts>(`${base}/pulls`),
-    ]);
+    ]).catch((e) => {
+      // A visitor asking for something only accounts can see.
+      if (e instanceof ApiError && e.status === 401) throw redirect({ to: "/login", search: { next: location.href } });
+      throw e;
+    });
     return { info, counts: { issues: issues.open, pulls: pulls.open }, latest: { issue: issues.items[0] ?? null, pull: pulls.items[0] ?? null } };
   },
   component: RepoLayout,
@@ -62,11 +66,18 @@ function RepoLayout() {
 
 function StarButton({ info }: { info: RepoInfo }) {
   const router = useRouter();
+  const { me } = useRouteContext({ from: "/_authed" });
   const toggle = useAction(async () => {
     const url = `${repoApi(info.repo.owner, info.repo.name)}/star`;
     await (info.starred ? del(url) : put(url, {}));
     await router.invalidate();
   });
+  if (!me)
+    return (
+      <span className="pill" title="Stars">
+        <StarIcon size={14} aria-hidden /> {info.stars}
+      </span>
+    );
   return (
     <button className="star-button" onClick={() => toggle.run()} disabled={toggle.pending} aria-pressed={info.starred}>
       <StarIcon size={16} aria-hidden fill={info.starred ? "currentColor" : "none"} className={info.starred ? "starred" : ""} />

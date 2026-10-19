@@ -8,8 +8,11 @@ type RepoRow = { owner: string; name: string; description: string; visibility: "
 type OrgRow = { name: string; role: "owner" | "member" };
 
 export const Route = createFileRoute("/_authed/")({
-  loader: async () => {
-    const [{ repos }, { orgs }] = await Promise.all([api<{ repos: RepoRow[] }>("/api/repos"), api<{ orgs: OrgRow[] }>("/api/me/orgs")]);
+  loader: async ({ context: { me } }) => {
+    const [{ repos }, { orgs }] = await Promise.all([
+      api<{ repos: RepoRow[] }>("/api/repos"),
+      me ? api<{ orgs: OrgRow[] }>("/api/me/orgs") : Promise.resolve({ orgs: [] as OrgRow[] }),
+    ]);
     return { repos, orgs };
   },
   component: Dashboard,
@@ -19,6 +22,19 @@ function Dashboard() {
   const { repos, orgs } = Route.useLoaderData();
   const { me } = Route.useRouteContext();
   const by = (relation: RepoRow["relation"]) => repos.filter((r) => r.relation === relation);
+  if (!me)
+    return (
+      <main className="page stack">
+        <div className="row">
+          <h1 style={{ margin: 0 }}>Public repositories</h1>
+          <span className="spacer" />
+          <Link to="/login" className="button primary small">
+            Sign in
+          </Link>
+        </div>
+        <RepoSection title="Public repositories" repos={by("public")} empty="Nothing public yet." />
+      </main>
+    );
   return (
     <main className="page stack">
       <div className="row">

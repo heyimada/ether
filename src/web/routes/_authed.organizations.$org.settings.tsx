@@ -3,12 +3,14 @@ import { useState } from "react";
 import { Avatar, ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { Teams, type Team } from "../components/teams";
 import { api, del, patch, put } from "../lib/api";
+import { requireAccount } from "../lib/require-account";
 
 type Member = { username: string; role: "owner" | "member"; displayName: string; avatarVersion: number | null };
 type Org = { name: string; basePermission: "read" | "write"; viewerRole: "owner" | "member" | null; members: Member[] };
 type OrgProfile = { profile: { displayName: string; bio: string; location: string; website: string } };
 
 export const Route = createFileRoute("/_authed/organizations/$org/settings")({
+  beforeLoad: ({ context, location }) => requireAccount(context.me, location.href),
   loader: async ({ params }) => {
     const base = `/api/orgs/${encodeURIComponent(params.org)}`;
     const [org, prof, teams, repos] = await Promise.all([

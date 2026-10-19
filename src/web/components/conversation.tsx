@@ -1,4 +1,4 @@
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link, useRouteContext, useRouter } from "@tanstack/react-router";
 import { MessageSquare } from "lucide-react";
 import { useState } from "react";
 import { patch, post, repoApi, timeAgo, type Comment, type Issue, type RepoInfo } from "../lib/api";
@@ -8,7 +8,8 @@ import { Avatar, ErrorNote, StateBadge, StateIcon, onSubmit, useAction } from ".
 export function IssueList({ info, kind, data, state }: { info: RepoInfo; kind: "issues" | "pulls"; data: { items: Issue[]; open: number; closed: number }; state: "open" | "closed" }) {
   const params = { owner: info.repo.owner, repo: info.repo.name };
   const listTo = kind === "issues" ? "/$owner/$repo/issues" : "/$owner/$repo/pulls";
-  const canCreate = kind === "issues" || info.role !== "read";
+  const { me } = useRouteContext({ from: "/_authed" });
+  const canCreate = !!me && (kind === "issues" || info.role !== "read");
   return (
     <section className="card">
       <header>
@@ -95,7 +96,7 @@ function CommentCard({ author, at, body }: { author: string; at: string; body: s
 }
 
 // The opening post, its comments, the reply box, and close/reopen.
-export function Conversation({ info, issue, comments, me }: { info: RepoInfo; issue: Issue; comments: Comment[]; me: string }) {
+export function Conversation({ info, issue, comments, me }: { info: RepoInfo; issue: Issue; comments: Comment[]; me: string | null }) {
   const router = useRouter();
   const [body, setBody] = useState("");
   const base = `${repoApi(info.repo.owner, info.repo.name)}/issues/${issue.number}`;
@@ -108,7 +109,7 @@ export function Conversation({ info, issue, comments, me }: { info: RepoInfo; is
     await patch(base, { state });
     await router.invalidate();
   });
-  const canToggle = issue.state !== "merged" && (issue.author === me || info.role !== "read");
+  const canToggle = !!me && issue.state !== "merged" && (issue.author === me || info.role !== "read");
   const noun = issue.isPull ? "pull request" : "issue";
 
   return (
@@ -117,6 +118,11 @@ export function Conversation({ info, issue, comments, me }: { info: RepoInfo; is
       {comments.map((c) => (
         <CommentCard key={c.id} author={c.author} at={c.createdAt} body={c.body} />
       ))}
+      {!me ? (
+        <p className="card body muted" style={{ margin: 0 }}>
+          <Link to="/login">Sign in</Link> to join the conversation.
+        </p>
+      ) : (
       <form className="card body stack-sm" onSubmit={onSubmit(comment.run)}>
         <ErrorNote error={comment.error ?? setState.error} />
         <label htmlFor="comment">Comment</label>
@@ -138,6 +144,7 @@ export function Conversation({ info, issue, comments, me }: { info: RepoInfo; is
           </button>
         </div>
       </form>
+      )}
     </div>
   );
 }
