@@ -44,7 +44,9 @@ On a tailnet, first share the machine with the person in the Tailscale admin con
 
 Forgotten password (anyone's): `bun run ether reset-password <username> --password '<new password>'`. It signs that account out everywhere; their access tokens keep working.
 
-Backups: `bun run ether backup <dir>` writes a consistent SQLite snapshot (`VACUUM INTO`), the bare repos and the auth secret.
+Backups: `bun run ether backup <dir>` writes a timestamped snapshot while the server keeps running: a consistent SQLite copy (`VACUUM INTO`), every bare repo copied refs-first (so a push during the backup can't leave refs pointing at missing objects), avatars and the auth secret.
+
+Restore: stop Ether, then `ETHER_DATA=<empty folder> bun run ether restore <dir>/<timestamp>` and start Ether with that `ETHER_DATA`. Restore refuses to write into a folder that already holds Ether data.
 
 ## Tests
 

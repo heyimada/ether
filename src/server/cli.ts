@@ -1,16 +1,14 @@
-import { eq } from "drizzle-orm";
+import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { createInvite, findUser, isOrg } from "./access";
-import { auth, placeholderEmail } from "./auth";
 import { config } from "./config";
-import { db } from "./db/client";
-import { user } from "./db/schema";
 
 const usage = `Usage:
   bun src/server/cli.ts create-admin <username> --password <password>
   bun src/server/cli.ts reset-password <username> --password <new-password>
   bun src/server/cli.ts invite --by <admin-username>
-  bun src/server/cli.ts backup <dest-dir>`;
+  bun src/server/cli.ts backup <dest-dir>
+  bun src/server/cli.ts restore <backup-dir>     (server stopped, into an empty ETHER_DATA)`;
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -19,6 +17,35 @@ const { positionals, values } = parseArgs({
 
 const [command, arg] = positionals;
 const MIN_PASSWORD = 10;
+
+// Copies a bare repository refs-first. Objects are only ever added, so every ref in the copy
+// points at objects that are copied after it, even if a push lands mid-copy.
+function copyRepoConsistently(from: string, to: string) {
+  mkdirSync(to, { recursive: true });
+  for (const entry of readdirSync(from)) if (entry !== "objects") cpSync(join(from, entry), join(to, entry), { recursive: true });
+  if (existsSync(join(from, "objects"))) cpSync(join(from, "objects"), join(to, "objects"), { recursive: true });
+}
+
+const DATA_FILES = ["ether.db", "repos", "avatars", "auth-secret"];
+
+// Restore never imports the database layer: that would create a fresh ether.db first.
+if (command === "restore") {
+  if (!arg || !existsSync(join(arg, "ether.db"))) throw new Error(`${usage}
+
+That folder has no ether.db; point at one snapshot folder made by backup.`);
+  if (DATA_FILES.some((f) => existsSync(join(config.dataDir, f))))
+    throw new Error(`${config.dataDir} already has Ether data. Stop the server and point ETHER_DATA at an empty folder (or move the old data aside) first.`);
+  mkdirSync(config.dataDir, { recursive: true });
+  for (const f of DATA_FILES) if (existsSync(join(arg, f))) cpSync(join(arg, f), join(config.dataDir, f), { recursive: true });
+  console.log(`Restored ${arg} into ${config.dataDir}. Start Ether with ETHER_DATA=${config.dataDir}.`);
+  process.exit(0);
+}
+
+const { eq } = await import("drizzle-orm");
+const { createInvite, findUser, isOrg } = await import("./access");
+const { auth, placeholderEmail } = await import("./auth");
+const { db } = await import("./db/client");
+const { user } = await import("./db/schema");
 
 switch (command) {
   case "create-admin": {
@@ -54,16 +81,19 @@ switch (command) {
     break;
   }
   case "backup": {
-    const { mkdirSync, cpSync } = await import("node:fs");
-    const { join } = await import("node:path");
     if (!arg) throw new Error(usage);
     const dest = join(arg, new Date().toISOString().replace(/[:.]/g, "-"));
     mkdirSync(dest, { recursive: true });
     // VACUUM INTO gives a consistent snapshot while the server keeps running.
     const { Database } = await import("bun:sqlite");
     new Database(join(config.dataDir, "ether.db")).exec(`VACUUM INTO '${join(dest, "ether.db").replaceAll("'", "''")}'`);
-    cpSync(join(config.dataDir, "repos"), join(dest, "repos"), { recursive: true });
-    cpSync(join(config.dataDir, "auth-secret"), join(dest, "auth-secret"));
+    const repos = join(config.dataDir, "repos");
+    if (existsSync(repos))
+      for (const owner of readdirSync(repos))
+        for (const repo of readdirSync(join(repos, owner))) copyRepoConsistently(join(repos, owner, repo), join(dest, "repos", owner, repo));
+    if (existsSync(join(config.dataDir, "avatars"))) cpSync(join(config.dataDir, "avatars"), join(dest, "avatars"), { recursive: true });
+    if (existsSync(join(config.dataDir, "auth-secret"))) cpSync(join(config.dataDir, "auth-secret"), join(dest, "auth-secret"));
+    else console.warn("No auth-secret file (BETTER_AUTH_SECRET is set in the environment); keep that value with this backup.");
     console.log(`Backed up to ${dest}`);
     break;
   }
