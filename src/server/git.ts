@@ -224,8 +224,8 @@ export async function activity(repo: string, rev: string, now = Date.now()) {
 }
 
 // Author email and commit time of every non-merge commit on rev since the given time.
-export async function authorTimes(repo: string, rev: string, since: Date): Promise<{ email: string; at: number }[]> {
-  const out = await gitText(repo, ["log", "--no-merges", "--format=%ae%x1f%ct", `--since=${since.toISOString()}`, "--end-of-options", rev, "--"]);
+export async function authorTimes(repo: string, rev: string, since: Date, limit = 20000): Promise<{ email: string; at: number }[]> {
+  const out = await gitText(repo, ["log", "--no-merges", "--format=%ae%x1f%ct", `--since=${since.toISOString()}`, "-n", String(limit), "--end-of-options", rev, "--"]);
   return out
     .split("\n")
     .filter(Boolean)
