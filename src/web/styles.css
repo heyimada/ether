@@ -423,3 +423,16 @@ img.avatar { object-fit: cover; background: var(--surface-3); }
 @media (max-width: 640px) { .team-grid { grid-template-columns: minmax(0, 1fr); } }
 .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: 13px; }
+
+/* ---------- labels ---------- */
+.label-pill { display: inline-flex; align-items: center; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 20px; white-space: nowrap; }
+a.label-pill:hover { text-decoration: none; filter: brightness(0.95); }
+.label-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.row-labels { display: inline-flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.assignee-stack { display: inline-flex; gap: 2px; }
+.filter-chip { padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--text); }
+.issue-layout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 24px; align-items: start; }
+@media (max-width: 860px) { .issue-layout { grid-template-columns: minmax(0, 1fr); } }
+.issue-sidebar { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.side-head h3 { margin: 0; }

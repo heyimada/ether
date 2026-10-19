@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Conversation, IssueHeader } from "../components/conversation";
+import { IssueSidebar } from "../components/labels";
 import { api, repoApi, type Comment, type Issue } from "../lib/api";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/issues/$number")({
@@ -15,9 +16,12 @@ function IssuePage() {
   const { info, me } = Route.useRouteContext();
   const { issue, comments } = Route.useLoaderData();
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div>
       <IssueHeader issue={issue} />
-      <Conversation info={info} issue={issue} comments={comments} me={me?.username ?? null} />
+      <div className="issue-layout">
+        <Conversation info={info} issue={issue} comments={comments} me={me?.username ?? null} />
+        <IssueSidebar info={info} issue={issue} />
+      </div>
     </div>
   );
 }

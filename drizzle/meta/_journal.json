@@ -57,6 +57,13 @@
       "when": 1792445251373,
       "tag": "0007_instance_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792446208362,
+      "tag": "0008_labels",
+      "breakpoints": true
     }
   ]
 }

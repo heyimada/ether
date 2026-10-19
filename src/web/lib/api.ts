@@ -62,7 +62,11 @@ export type Issue = {
   comments: number;
   createdAt: string;
   updatedAt: string;
+  labels: Label[];
+  assignees: string[];
 };
+
+export type Label = { name: string; color: string; description: string };
 
 export type Comment = { id: number; body: string; author: string; createdAt: string };
 
