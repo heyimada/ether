@@ -125,6 +125,7 @@ export const repoRoutes = new Elysia()
     const a = requireRepo(viewer, params.owner, params.repo, "owner");
     db.delete(repo).where(eq(repo.id, a.repo.id)).run();
     git.removeRepo(a.path);
+    git.removeRepo(git.wikiPath(a.path));
     return { ok: true };
   })
   // ---------- collaborators ----------
