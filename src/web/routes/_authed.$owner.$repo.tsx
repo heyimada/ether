@@ -1,5 +1,7 @@
-import { Link, Outlet, createFileRoute } from "@tanstack/react-router";
-import { api, repoApi, type Issue, type RepoInfo } from "../lib/api";
+import { Link, Outlet, createFileRoute, useRouter } from "@tanstack/react-router";
+import { Star as StarIcon } from "lucide-react";
+import { useAction } from "../components/ui";
+import { api, del, put, repoApi, type Issue, type RepoInfo } from "../lib/api";
 
 type Counts = { open: number; items: Issue[] };
 
@@ -33,6 +35,8 @@ function RepoLayout() {
             {info.repo.name}
           </Link>
         </span>
+        <span className="spacer" />
+        <StarButton info={info} />
       </div>
       {info.repo.description && <p className="muted" style={{ margin: 0 }}>{info.repo.description}</p>}
       <nav className="tabs" aria-label="Repository">
@@ -53,5 +57,21 @@ function RepoLayout() {
       </nav>
       <Outlet />
     </main>
+  );
+}
+
+function StarButton({ info }: { info: RepoInfo }) {
+  const router = useRouter();
+  const toggle = useAction(async () => {
+    const url = `${repoApi(info.repo.owner, info.repo.name)}/star`;
+    await (info.starred ? del(url) : put(url, {}));
+    await router.invalidate();
+  });
+  return (
+    <button className="star-button" onClick={() => toggle.run()} disabled={toggle.pending} aria-pressed={info.starred}>
+      <StarIcon size={16} aria-hidden fill={info.starred ? "currentColor" : "none"} className={info.starred ? "starred" : ""} />
+      {info.starred ? "Unstar" : "Star"}
+      <span className="count">{info.stars}</span>
+    </button>
   );
 }

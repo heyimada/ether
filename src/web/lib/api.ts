@@ -32,6 +32,8 @@ export type Me = { username: string; isAdmin: boolean; accent: string | null; th
 export type RepoInfo = {
   repo: { owner: string; name: string; description: string; visibility: "private" | "public"; defaultBranch: string; empty: boolean };
   role: "owner" | "write" | "read";
+  stars: number;
+  starred: boolean;
   branches: string[];
   tags: string[];
 };

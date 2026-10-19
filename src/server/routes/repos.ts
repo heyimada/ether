@@ -1,8 +1,8 @@
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, findUser, isOrg, readableRepos, requireRepo, requireUser } from "../access";
 import { db } from "../db/client";
-import { collaborator, orgMember, repo, user } from "../db/schema";
+import { collaborator, orgMember, repo, star, user } from "../db/schema";
 import * as git from "../git";
 
 type Q = Record<string, string | undefined>;
@@ -68,6 +68,8 @@ export const repoRoutes = new Elysia()
     const defaultBranch = await git.headBranch(a.path);
     return {
       repo: { owner: a.owner, name: a.repo.name, description: a.repo.description, visibility: a.repo.visibility, defaultBranch, empty: refs.length === 0 },
+      stars: db.select({ n: count() }).from(star).where(eq(star.repoId, a.repo.id)).get()!.n,
+      starred: !!db.select().from(star).where(and(eq(star.repoId, a.repo.id), eq(star.userId, viewer.id))).get(),
       role: a.role,
       branches: refs.filter((r) => r.kind === "branch").map((r) => r.name),
       tags: refs.filter((r) => r.kind === "tag").map((r) => r.name),
@@ -86,6 +88,18 @@ export const repoRoutes = new Elysia()
       if (!(await git.resolveCommit(a.path, `refs/heads/${defaultBranch}`))) throw new HttpError(400, "No such branch");
       await git.gitText(a.path, ["symbolic-ref", "HEAD", `refs/heads/${defaultBranch}`]);
     }
+    return { ok: true };
+  })
+  .put("/repos/:owner/:repo/star", async ({ request, params }) => {
+    const viewer = await requireUser(request);
+    const a = requireRepo(viewer, params.owner, params.repo, "read");
+    db.insert(star).values({ userId: viewer.id, repoId: a.repo.id }).onConflictDoNothing().run();
+    return { ok: true };
+  })
+  .delete("/repos/:owner/:repo/star", async ({ request, params }) => {
+    const viewer = await requireUser(request);
+    const a = requireRepo(viewer, params.owner, params.repo, "read");
+    db.delete(star).where(and(eq(star.repoId, a.repo.id), eq(star.userId, viewer.id))).run();
     return { ok: true };
   })
   .delete("/repos/:owner/:repo", async ({ request, params }) => {

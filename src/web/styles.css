@@ -415,3 +415,6 @@ img.avatar { object-fit: cover; background: var(--surface-3); }
 .legend span { width: 11px; height: 11px; border-radius: 2px; }
 .legend span:first-of-type { margin-left: 4px; }
 .legend span:last-of-type { margin-right: 4px; }
+.star-button { font-size: 13px; }
+.star-button .starred { color: #d4a72c; }
+.repo-head { flex-wrap: wrap; }

@@ -218,3 +218,17 @@ export const pushEmail = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.email] })],
 );
+
+export const star = sqliteTable(
+  "star",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.repoId] }), index("star_repo_idx").on(t.repoId)],
+);
