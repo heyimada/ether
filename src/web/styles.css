@@ -436,3 +436,5 @@ a.label-pill:hover { text-decoration: none; filter: brightness(0.95); }
 .issue-sidebar { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .side-head h3 { margin: 0; }
+.release-card > header h1, .release-card > header h2 { overflow-wrap: anywhere; }
+.pill-accent { border-color: var(--accent); color: var(--link); }

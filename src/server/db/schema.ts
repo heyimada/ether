@@ -322,3 +322,37 @@ export const issueAssignee = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.issueId, t.userId] }), index("issue_assignee_user_idx").on(t.userId)],
 );
+
+export const release = sqliteTable(
+  "release",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    tag: text("tag").notNull(),
+    title: text("title").notNull(),
+    notes: text("notes").notNull().default(""),
+    prerelease: integer("prerelease", { mode: "boolean" }).notNull().default(false),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("release_repo_tag_idx").on(t.repoId, t.tag)],
+);
+
+// Files attached to a release; bytes live under data/releases/<release id>/<asset id>.
+export const releaseAsset = sqliteTable(
+  "release_asset",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    releaseId: integer("release_id")
+      .notNull()
+      .references(() => release.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    size: integer("size").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("release_asset_name_idx").on(t.releaseId, t.name)],
+);
