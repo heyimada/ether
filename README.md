@@ -69,7 +69,7 @@ jobs:
         shell: bash                # bash (default when installed), sh, pwsh, powershell or cmd
 ```
 
-Every push to a branch runs the workflow of its new commit, one job at a time, in a fresh checkout. Steps get a minimal environment (`PATH`, `HOME`/`TEMP` and `CI`, `CI_REPOSITORY`, `CI_COMMIT_SHA`, `CI_REF`), never Ether's own settings or secrets. Runs and logs are under the repository's **CI** tab; pull requests show their head commit's checks, and **Require passing checks before merging** blocks merges until they pass.
+Every push to a branch runs the workflow of its new commit, one job at a time, in a fresh checkout. Steps get a minimal environment (`PATH`, `HOME`/`TEMP` and `CI`, `CI_REPOSITORY`, `CI_COMMIT_SHA`, `CI_REF`) without Ether's settings. They still run as the same OS user as Ether, so a workflow can read Ether's data folder, including the database and auth secret: turning CI on gives everyone with write access to that repository full control of the server. Runs and logs are under the repository's **CI** tab; pull requests show their head commit's checks, and **Require passing checks before merging** blocks merges until they pass.
 
 ## Command-line client
 

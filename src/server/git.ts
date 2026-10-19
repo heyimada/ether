@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { reposDir } from "./config";
 
@@ -270,7 +271,8 @@ export async function wikiCommit(
   author: { name: string; email: string },
 ): Promise<string> {
   const head = await resolveCommit(wiki, "refs/heads/main");
-  const index = join(dirname(wiki), `.${Date.now()}-${Math.random().toString(36).slice(2)}.index`);
+  // Outside repos/ so an interrupted edit can never leave stray files among the repositories.
+  const index = join(tmpdir(), `ether-wiki-${Date.now()}-${Math.random().toString(36).slice(2)}.index`);
   const env = { GIT_INDEX_FILE: index };
   try {
     if (head) await gitOk(wiki, ["read-tree", head], env);
