@@ -8,21 +8,23 @@ import { applyAppearance, clearAppearance } from "../lib/accent";
 import { ApiError, api, type Me } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 
+export type Instance = { anonymousRead: boolean; sshBase: string | null };
+
 // Every signed-in page lives under this pathless layout. It runs only in the browser so the
 // prerendered SPA shell never bakes in a signed-out session.
 export const Route = createFileRoute("/_authed")({
   ssr: false,
   beforeLoad: async ({ location }) => {
     try {
-      const [{ user }, { users }] = await Promise.all([api<{ user: Me }>("/api/me"), api<{ users: Person[] }>("/api/users")]);
-      return { me: user as Me | null, people: users };
+      const [{ user }, { users }, instance] = await Promise.all([api<{ user: Me }>("/api/me"), api<{ users: Person[] }>("/api/users"), api<Instance>("/api/instance")]);
+      return { me: user as Me | null, people: users, instance };
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 401)) throw e;
       // Signed out: browse public repositories as a visitor if the admin allows it.
-      const { anonymousRead } = await api<{ anonymousRead: boolean }>("/api/instance");
-      if (!anonymousRead) throw redirect({ to: "/login", search: { next: location.href } });
+      const instance = await api<Instance>("/api/instance");
+      if (!instance.anonymousRead) throw redirect({ to: "/login", search: { next: location.href } });
       const { users } = await api<{ users: Person[] }>("/api/users");
-      return { me: null as Me | null, people: users };
+      return { me: null as Me | null, people: users, instance };
     }
   },
   component: AuthedLayout,

@@ -450,3 +450,4 @@ a.label-pill:hover { text-decoration: none; filter: brightness(0.95); }
 .line-comment { display: grid; grid-template-columns: minmax(0, 2fr) 90px minmax(0, 3fr) auto; gap: 8px; }
 @media (max-width: 640px) { .line-comment { grid-template-columns: minmax(0, 1fr); } }
 .active-page { font-weight: 700; color: var(--text); }
+.clone-tabs { padding: 0; }

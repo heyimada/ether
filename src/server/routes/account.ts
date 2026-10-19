@@ -49,7 +49,11 @@ export const accountRoutes = new Elysia()
     });
   })
   // Public: tells the web app whether signed-out visitors may browse public repositories.
-  .get("/instance", () => ({ anonymousRead: anonymousRead() }))
+  .get("/instance", () => ({
+    anonymousRead: anonymousRead(),
+    // Base for ssh:// clone URLs, or null when git over SSH is off.
+    sshBase: config.sshPort ? `ssh://git@${config.sshHost}${config.sshPort === 22 ? "" : `:${config.sshPort}`}` : null,
+  }))
   .put("/admin/settings", async ({ request, body }) => {
     await requireAdmin(request);
     const { anonymousRead: allow } = (body ?? {}) as { anonymousRead?: unknown };
