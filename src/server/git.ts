@@ -247,6 +247,60 @@ export async function newAuthorEmails(repo: string, before: string[], after: str
     .map((e) => e.toLowerCase());
 }
 
+// ---------- wikis ----------
+// Each repository's wiki is a sibling bare repo of Markdown files on `main`, like GitHub's.
+
+export const wikiPath = (repo: string) => repo.replace(/\.git$/, ".wiki.git");
+
+export async function ensureWiki(repo: string): Promise<string> {
+  const path = wikiPath(repo);
+  if (!existsSync(path)) await initBare(path);
+  return path;
+}
+
+export class WikiConflict extends Error {}
+
+// Writes (or with content null, deletes) one file in a single commit on main, without a working
+// tree: a private index file is built from main, edited, and committed. The ref only moves if
+// main is still where we started, so concurrent edits fail instead of losing each other.
+export async function wikiCommit(
+  wiki: string,
+  change: { file: string; content: string | null; renameFrom?: string },
+  message: string,
+  author: { name: string; email: string },
+): Promise<string> {
+  const head = await resolveCommit(wiki, "refs/heads/main");
+  const index = join(dirname(wiki), `.${Date.now()}-${Math.random().toString(36).slice(2)}.index`);
+  const env = { GIT_INDEX_FILE: index };
+  try {
+    if (head) await gitOk(wiki, ["read-tree", head], env);
+    if (change.renameFrom && change.renameFrom !== change.file) await gitOk(wiki, ["update-index", "--force-remove", "--", change.renameFrom], env);
+    if (change.content === null) await gitOk(wiki, ["update-index", "--force-remove", "--", change.file], env);
+    else {
+      const blob = new TextDecoder().decode((await gitOkOut(wiki, ["hash-object", "-w", "--stdin"], env, new TextEncoder().encode(change.content)))).trim();
+      await gitOk(wiki, ["update-index", "--add", "--cacheinfo", `100644,${blob},${change.file}`], env);
+    }
+    const tree = new TextDecoder().decode(await gitOkOut(wiki, ["write-tree"], env)).trim();
+    const who = { GIT_AUTHOR_NAME: author.name, GIT_AUTHOR_EMAIL: author.email, GIT_COMMITTER_NAME: author.name, GIT_COMMITTER_EMAIL: author.email };
+    const commit = new TextDecoder().decode(await gitOkOut(wiki, ["commit-tree", tree, ...(head ? ["-p", head] : []), "-m", message], who)).trim();
+    const moved = await git(wiki, ["update-ref", "refs/heads/main", commit, head ?? ""]);
+    if (moved.code !== 0) throw new WikiConflict("The wiki changed while you were editing; reload and try again");
+    return commit;
+  } finally {
+    rmSync(index, { force: true });
+  }
+}
+
+async function gitOk(repo: string, args: string[], env: Record<string, string>) {
+  await gitOkOut(repo, args, env);
+}
+
+async function gitOkOut(repo: string, args: string[], env: Record<string, string>, stdin?: Uint8Array) {
+  const res = await git(repo, args, { env, stdin });
+  if (res.code !== 0) throw new GitError(args, res.stderr);
+  return res.stdout;
+}
+
 export async function rangeCommits(repo: string, base: string, head: string): Promise<Commit[]> {
   return parseLog(await gitText(repo, ["log", `--format=${LOG_FORMAT}`, "--end-of-options", `${base}..${head}`]));
 }

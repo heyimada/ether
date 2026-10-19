@@ -53,6 +53,9 @@ function RepoLayout() {
         <Link to="/$owner/$repo/pulls" params={params}>
           Pull requests<span className="count">{counts.pulls}</span>
         </Link>
+        <Link to="/$owner/$repo/wiki" params={params}>
+          Wiki
+        </Link>
         {info.role === "owner" && (
           <Link to="/$owner/$repo/settings" params={params}>
             Settings
