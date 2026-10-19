@@ -208,7 +208,8 @@ async function emailSuggestions(userId: string) {
   for (const r of readableRepos(userId).filter((x) => x.relation === "owner")) {
     const head = await git.resolveCommit(r.path, await git.headBranch(r.path));
     if (!head) continue;
-    for (const c of await git.authorTimes(r.path, head, new Date(0))) counts.set(c.email, (counts.get(c.email) ?? 0) + 1);
+    // Recent history is enough to find someone's address.
+    for (const c of await git.authorTimes(r.path, head, new Date(0), 2000)) counts.set(c.email, (counts.get(c.email) ?? 0) + 1);
   }
   if (counts.size === 0) return [];
   const owners = new Map(db.select().from(commitEmail).where(inArray(commitEmail.email, [...counts.keys()])).all().map((c) => [c.email, c.userId]));
