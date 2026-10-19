@@ -28,6 +28,12 @@ function RepoSettings() {
   const [role, setRole] = useState<"read" | "write">("write");
   const [confirm, setConfirm] = useState("");
   const [confirmVisibility, setConfirmVisibility] = useState(false);
+  const [requireApproval, setRequireApproval] = useState(info.repo.requireApproval);
+  const protect = useAction(async (on: boolean) => {
+    setRequireApproval(on);
+    await patch(base, { requireApproval: on });
+    await router.invalidate();
+  });
   const next = info.repo.visibility === "public" ? "private" : "public";
   const changeVisibility = useAction(async () => {
     await patch(base, { visibility: next });
@@ -76,6 +82,18 @@ function RepoSettings() {
           Save
         </button>
       </form>
+
+      <section className="card body stack-sm">
+        <h2 style={{ margin: 0 }}>Pull requests</h2>
+        <ErrorNote error={protect.error} />
+        <label className="radio">
+          <input type="checkbox" checked={requireApproval} onChange={(e) => protect.run(e.target.checked)} disabled={protect.pending} />
+          Require an approving review before merging
+        </label>
+        <span className="hint" style={{ margin: 0 }}>
+          Someone with write access other than the author has to approve, and nobody may have outstanding requested changes.
+        </span>
+      </section>
 
       <section className="card body stack-sm">
         <h2 style={{ margin: 0 }}>Visibility</h2>

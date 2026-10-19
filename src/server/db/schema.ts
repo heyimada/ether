@@ -49,6 +49,8 @@ export const repo = sqliteTable(
     nextNumber: integer("next_number").notNull().default(1),
     // Public means readable by every account on this server; writes still need a role.
     visibility: text("visibility", { enum: ["private", "public"] }).notNull().default("private"),
+    // Branch protection for pull requests: merging needs an approving review.
+    requireApproval: integer("require_approval", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("repo_owner_name_idx").on(t.ownerId, t.name)],
@@ -355,4 +357,47 @@ export const releaseAsset = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("release_asset_name_idx").on(t.releaseId, t.name)],
+);
+
+export const review = sqliteTable(
+  "review",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    issueId: integer("issue_id")
+      .notNull()
+      .references(() => issue.id, { onDelete: "cascade" }),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => user.id),
+    state: text("state", { enum: ["approved", "changes_requested", "commented"] }).notNull(),
+    body: text("body").notNull().default(""),
+    // The head commit the review looked at.
+    commitSha: text("commit_sha").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("review_issue_idx").on(t.issueId)],
+);
+
+// A comment on one line of the new side of the diff.
+export const reviewComment = sqliteTable("review_comment", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  reviewId: integer("review_id")
+    .notNull()
+    .references(() => review.id, { onDelete: "cascade" }),
+  path: text("path").notNull(),
+  line: integer("line").notNull(),
+  body: text("body").notNull(),
+});
+
+export const reviewRequest = sqliteTable(
+  "review_request",
+  {
+    issueId: integer("issue_id")
+      .notNull()
+      .references(() => issue.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.issueId, t.userId] }), index("review_request_user_idx").on(t.userId)],
 );

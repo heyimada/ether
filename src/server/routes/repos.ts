@@ -71,7 +71,15 @@ export const repoRoutes = new Elysia()
     const refs = await git.listRefs(a.path);
     const defaultBranch = await git.headBranch(a.path);
     return {
-      repo: { owner: a.owner, name: a.repo.name, description: a.repo.description, visibility: a.repo.visibility, defaultBranch, empty: refs.length === 0 },
+      repo: {
+        owner: a.owner,
+        name: a.repo.name,
+        description: a.repo.description,
+        visibility: a.repo.visibility,
+        requireApproval: a.repo.requireApproval,
+        defaultBranch,
+        empty: refs.length === 0,
+      },
       stars: db.select({ n: count() }).from(star).where(eq(star.repoId, a.repo.id)).get()!.n,
       starred: !!db.select().from(star).where(and(eq(star.repoId, a.repo.id), eq(star.userId, viewer.id))).get(),
       role: a.role,
@@ -82,7 +90,13 @@ export const repoRoutes = new Elysia()
   .patch("/repos/:owner/:repo", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "owner");
-    const { description, defaultBranch, visibility } = (body ?? {}) as { description?: unknown; defaultBranch?: unknown; visibility?: unknown };
+    const { description, defaultBranch, visibility, requireApproval } = (body ?? {}) as {
+      description?: unknown;
+      defaultBranch?: unknown;
+      visibility?: unknown;
+      requireApproval?: unknown;
+    };
+    if (typeof requireApproval === "boolean") db.update(repo).set({ requireApproval }).where(eq(repo.id, a.repo.id)).run();
     if (visibility !== undefined) {
       if (visibility !== "private" && visibility !== "public") throw new HttpError(400, "Visibility must be private or public");
       db.update(repo).set({ visibility }).where(eq(repo.id, a.repo.id)).run();

@@ -2,10 +2,11 @@ import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { DiffView } from "../components/content";
 import { Conversation, IssueHeader } from "../components/conversation";
 import { IssueSidebar } from "../components/labels";
+import { ReviewList, ReviewPanel, ReviewersSection, type ReviewData } from "../components/reviews";
 import { ErrorNote, useAction } from "../components/ui";
 import { api, post, repoApi, shortSha, type Comment, type Commit, type Issue } from "../lib/api";
 
-type PullData = {
+type PullData = ReviewData & {
   pull: Issue;
   comments: Comment[];
   role: "owner" | "write" | "read";
@@ -45,7 +46,10 @@ function PullPage() {
         </Link>
       </nav>
       {tab === "files" ? (
-        <DiffView diff={data.diff} truncated={data.truncated} />
+        <div className="stack-md">
+          {me && pull.state === "open" && <ReviewPanel info={info} pull={pull} diff={data.diff} me={me.username} />}
+          <DiffView diff={data.diff} truncated={data.truncated} />
+        </div>
       ) : tab === "commits" ? (
         <section className="card">
           <ul className="list">
@@ -64,9 +68,12 @@ function PullPage() {
         <div className="issue-layout">
           <div className="timeline">
             <Conversation info={info} issue={pull} comments={data.comments} me={me?.username ?? null} />
+            <ReviewList reviews={data.reviews} />
             <MergeBox data={data} />
           </div>
-          <IssueSidebar info={info} issue={pull} />
+          <IssueSidebar info={info} issue={pull}>
+            <ReviewersSection info={info} pull={pull} data={data} />
+          </IssueSidebar>
         </div>
       )}
     </div>
@@ -91,6 +98,7 @@ function MergeBox({ data }: { data: PullData }) {
   if (pull.state === "closed") return <section className="card body merge-box blocked">This pull request is closed.</section>;
 
   const canMerge = data.role !== "read";
+  const needsApproval = data.requireApproval && data.reviewDecision !== "approved";
   const blocked = !data.mergeable;
   return (
     <section className={`card body merge-box ${blocked ? "blocked conflict" : ""}`}>
@@ -118,8 +126,15 @@ function MergeBox({ data }: { data: PullData }) {
           <strong>This branch has no conflicts with the base branch.</strong>
         </p>
       )}
+      {data.reviewDecision === "changes_requested" && <p className="review-note review-changes_requested">Changes were requested in a review.</p>}
+      {data.reviewDecision === "approved" && <p className="review-note review-approved">Approved in review.</p>}
+      {needsApproval && (
+        <p className="review-note">
+          <strong>Merging requires an approving review</strong> because this repository protects its pull requests.
+        </p>
+      )}
       {canMerge ? (
-        <button className="primary" onClick={() => merge.run()} disabled={blocked || merge.pending}>
+        <button className="primary" onClick={() => merge.run()} disabled={blocked || needsApproval || merge.pending}>
           Merge pull request
         </button>
       ) : (

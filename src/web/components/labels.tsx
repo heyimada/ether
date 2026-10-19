@@ -2,7 +2,7 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Link, useRouter } from "@tanstack/react-router";
 import { colord } from "colord";
 import { Check, Settings2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { api, put, repoApi, type Issue, type Label, type RepoInfo } from "../lib/api";
 import { Avatar, ErrorNote, useAction } from "./ui";
 
@@ -31,7 +31,7 @@ export function LabelPill({ label, info }: { label: Label; info?: RepoInfo }) {
 }
 
 // Labels and assignees beside an issue or pull request; writers edit them from menus.
-export function IssueSidebar({ info, issue }: { info: RepoInfo; issue: Issue }) {
+export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue: Issue; children?: ReactNode }) {
   const router = useRouter();
   const base = `${repoApi(info.repo.owner, info.repo.name)}/issues/${issue.number}`;
   const canEdit = info.role !== "read";
@@ -66,6 +66,7 @@ export function IssueSidebar({ info, issue }: { info: RepoInfo; issue: Issue }) 
 
   return (
     <aside className="issue-sidebar">
+      {children}
       <ErrorNote error={save.error} />
       <section className="side-section">
         <div className="side-head">

@@ -438,3 +438,14 @@ a.label-pill:hover { text-decoration: none; filter: brightness(0.95); }
 .side-head h3 { margin: 0; }
 .release-card > header h1, .release-card > header h2 { overflow-wrap: anywhere; }
 .pill-accent { border-color: var(--accent); color: var(--link); }
+
+/* ---------- reviews ---------- */
+.review-state { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.review-approved { color: var(--open); }
+.review-changes_requested { color: var(--danger); }
+.review-card.review-approved { border-left: 3px solid var(--open); color: inherit; }
+.review-card.review-changes_requested { border-left: 3px solid var(--danger); color: inherit; }
+.review-comments > li { flex-direction: column; align-items: stretch; }
+.review-note { margin: 0 0 12px; }
+.line-comment { display: grid; grid-template-columns: minmax(0, 2fr) 90px minmax(0, 3fr) auto; gap: 8px; }
+@media (max-width: 640px) { .line-comment { grid-template-columns: minmax(0, 1fr); } }
