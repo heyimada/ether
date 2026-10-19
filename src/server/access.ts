@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { auth } from "./auth";
 import { db } from "./db/client";
-import { accessToken, collaborator, invite, orgMember, organization, repo, user } from "./db/schema";
+import { accessToken, collaborator, invite, orgMember, organization, repo, teamMember, teamRepo, user } from "./db/schema";
 import { repoPath } from "./git";
 
 export class HttpError extends Error {
@@ -55,7 +55,7 @@ export type Relation = "owner" | "org" | "collaborator" | "public";
 const rank: Record<Role, number> = { read: 1, write: 2, owner: 3 };
 const higher = (a: Role | null, b: Role | null): Role | null => (!a ? b : !b ? a : rank[a] >= rank[b] ? a : b);
 
-type Memberships = { orgs: Map<string, Role>; collabs: Map<number, Role> };
+type Memberships = { orgs: Map<string, Role>; collabs: Map<number, Role>; teams: Map<number, Role> };
 
 // The viewer's org memberships (already mapped to the role they grant) and collaborator roles.
 function memberships(viewerId: string): Memberships {
@@ -76,7 +76,16 @@ function memberships(viewerId: string): Memberships {
       .all()
       .map((c) => [c.repoId, c.role]),
   );
-  return { orgs, collabs };
+  // Team grants, highest per repository when someone is in several teams.
+  const teams = new Map<number, Role>();
+  for (const t of db
+    .select({ repoId: teamRepo.repoId, role: teamRepo.role })
+    .from(teamMember)
+    .innerJoin(teamRepo, eq(teamRepo.teamId, teamMember.teamId))
+    .where(eq(teamMember.userId, viewerId))
+    .all())
+    teams.set(t.repoId, higher(teams.get(t.repoId) ?? null, t.role)!);
+  return { orgs, collabs, teams };
 }
 
 // The single place that decides access: the highest role from ownership, org membership,
@@ -85,10 +94,11 @@ function resolve(r: typeof repo.$inferSelect, viewerId: string, m: Memberships):
   const own: Role | null = r.ownerId === viewerId ? "owner" : null;
   const org = m.orgs.get(r.ownerId) ?? null;
   const collab = m.collabs.get(r.id) ?? null;
+  const viaTeam = m.teams.get(r.id) ?? null;
   const pub: Role | null = r.visibility === "public" ? "read" : null;
-  const role = higher(higher(own, org), higher(collab, pub));
+  const role = higher(higher(own, org), higher(higher(collab, viaTeam), pub));
   if (!role) return null;
-  const relation: Relation = own ? "owner" : org ? "org" : collab ? "collaborator" : "public";
+  const relation: Relation = own ? "owner" : org || viaTeam ? "org" : collab ? "collaborator" : "public";
   return { role, relation };
 }
 

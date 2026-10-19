@@ -1,6 +1,7 @@
 import { Link, createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { Avatar, ErrorNote, Field, onSubmit, useAction } from "../components/ui";
+import { Teams, type Team } from "../components/teams";
 import { api, del, patch, put } from "../lib/api";
 
 type Member = { username: string; role: "owner" | "member"; displayName: string; avatarVersion: number | null };
@@ -10,9 +11,14 @@ type OrgProfile = { profile: { displayName: string; bio: string; location: strin
 export const Route = createFileRoute("/_authed/organizations/$org/settings")({
   loader: async ({ params }) => {
     const base = `/api/orgs/${encodeURIComponent(params.org)}`;
-    const [org, prof] = await Promise.all([api<Org>(base), api<OrgProfile>(`/api/users/${encodeURIComponent(params.org)}/profile`)]);
+    const [org, prof, teams, repos] = await Promise.all([
+      api<Org>(base),
+      api<OrgProfile>(`/api/users/${encodeURIComponent(params.org)}/profile`),
+      api<{ teams: Team[] }>(`${base}/teams`).catch(() => ({ teams: [] as Team[] })),
+      api<{ repos: { owner: string; name: string }[] }>("/api/repos"),
+    ]);
     if (org.viewerRole !== "owner") throw redirect({ to: "/$owner", params: { owner: params.org } });
-    return { org, profile: prof.profile };
+    return { org, profile: prof.profile, teams: teams.teams, repos: repos.repos.filter((r) => r.owner === org.name).map((r) => r.name) };
   },
   component: OrgSettings,
 });
@@ -26,7 +32,7 @@ const Status = ({ text }: { text: string }) =>
 
 function OrgSettings() {
   const router = useRouter();
-  const { org, profile } = Route.useLoaderData();
+  const { org, profile, teams, repos } = Route.useLoaderData();
   const base = `/api/orgs/${encodeURIComponent(org.name)}`;
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<"member" | "owner">("member");
@@ -116,6 +122,8 @@ function OrgSettings() {
           </button>
         </form>
       </section>
+
+      <Teams org={org.name} teams={teams} repos={repos} />
 
       <section className="card body stack-sm">
         <h2 style={{ margin: 0 }}>Base permission</h2>

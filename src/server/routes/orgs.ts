@@ -1,10 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { randomUUID } from "node:crypto";
 import { HttpError, findUser, isOrg, requireUser, type Viewer } from "../access";
 import { USERNAME_RE } from "../auth-plugins";
 import { db } from "../db/client";
-import { orgMember, organization, profile, user } from "../db/schema";
+import { orgMember, organization, profile, repo, team, teamMember, teamRepo, user } from "../db/schema";
 import { RESERVED } from "./account";
 import { applyProfilePatch, saveAvatar, upsertProfile } from "./profiles";
 
@@ -21,6 +21,14 @@ function requireOrgOwner(viewer: Viewer, name: string) {
   const org = requireOrg(name);
   if (roleIn(org.id, viewer.id) !== "owner") throw new HttpError(403, "Only organization owners can do that");
   return org;
+}
+
+const TEAM_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+
+function requireTeam(orgId: string, name: string) {
+  const t = db.select().from(team).where(and(eq(team.orgId, orgId), eq(team.name, name.toLowerCase()))).get();
+  if (!t) throw new HttpError(404, "No such team");
+  return t;
 }
 
 const ownerCount = (orgId: string) => db.select().from(orgMember).where(and(eq(orgMember.orgId, orgId), eq(orgMember.role, "owner"))).all().length;
@@ -93,7 +101,98 @@ export const orgRoutes = new Elysia()
     // Owners manage everyone; anyone may leave.
     if (target.id !== viewer.id && roleIn(org.id, viewer.id) !== "owner") throw new HttpError(403, "Only organization owners can do that");
     if (roleIn(org.id, target.id) === "owner" && ownerCount(org.id) === 1) throw new HttpError(400, "An organization needs at least one owner");
-    db.delete(orgMember).where(and(eq(orgMember.orgId, org.id), eq(orgMember.userId, target.id))).run();
+    db.transaction((tx) => {
+      tx.delete(orgMember).where(and(eq(orgMember.orgId, org.id), eq(orgMember.userId, target.id))).run();
+      // Leaving the org also leaves its teams.
+      const ids = tx.select({ id: team.id }).from(team).where(eq(team.orgId, org.id)).all().map((t) => t.id);
+      if (ids.length) tx.delete(teamMember).where(and(eq(teamMember.userId, target.id), inArray(teamMember.teamId, ids))).run();
+    });
+    return { ok: true };
+  })
+  // ---------- teams ----------
+  .get("/orgs/:org/teams", async ({ request, params }) => {
+    const viewer = await requireUser(request);
+    const org = requireOrg(params.org);
+    if (!roleIn(org.id, viewer.id)) throw new HttpError(404, "No such organization");
+    return {
+      teams: db
+        .select()
+        .from(team)
+        .where(eq(team.orgId, org.id))
+        .orderBy(team.name)
+        .all()
+        .map((t) => ({
+          name: t.name,
+          description: t.description,
+          members: db
+            .select({ username: user.username })
+            .from(teamMember)
+            .innerJoin(user, eq(user.id, teamMember.userId))
+            .where(eq(teamMember.teamId, t.id))
+            .orderBy(user.username)
+            .all()
+            .map((m) => m.username!),
+          repos: db
+            .select({ name: repo.name, role: teamRepo.role })
+            .from(teamRepo)
+            .innerJoin(repo, eq(repo.id, teamRepo.repoId))
+            .where(eq(teamRepo.teamId, t.id))
+            .orderBy(repo.name)
+            .all(),
+        })),
+    };
+  })
+  .post("/orgs/:org/teams", async ({ request, params, body }) => {
+    const viewer = await requireUser(request);
+    const org = requireOrgOwner(viewer, params.org);
+    const { name, description } = (body ?? {}) as { name?: unknown; description?: unknown };
+    if (typeof name !== "string" || !TEAM_RE.test(name)) throw new HttpError(400, "Team names are 1-39 letters, digits or dashes");
+    const lower = name.toLowerCase();
+    if (db.select().from(team).where(and(eq(team.orgId, org.id), eq(team.name, lower))).get()) throw new HttpError(409, "That team already exists");
+    db.insert(team).values({ orgId: org.id, name: lower, description: typeof description === "string" ? description.slice(0, 200) : "" }).run();
+    return { team: { name: lower } };
+  })
+  .delete("/orgs/:org/teams/:team", async ({ request, params }) => {
+    const viewer = await requireUser(request);
+    const org = requireOrgOwner(viewer, params.org);
+    db.delete(team).where(eq(team.id, requireTeam(org.id, params.team).id)).run();
+    return { ok: true };
+  })
+  .put("/orgs/:org/teams/:team/members/:username", async ({ request, params }) => {
+    const viewer = await requireUser(request);
+    const org = requireOrgOwner(viewer, params.org);
+    const t = requireTeam(org.id, params.team);
+    const target = findUser(params.username);
+    if (!target) throw new HttpError(404, "No such user");
+    if (!roleIn(org.id, target.id)) throw new HttpError(400, "Add them to the organization first");
+    db.insert(teamMember).values({ teamId: t.id, userId: target.id }).onConflictDoNothing().run();
+    return { ok: true };
+  })
+  .delete("/orgs/:org/teams/:team/members/:username", async ({ request, params }) => {
+    const viewer = await requireUser(request);
+    const org = requireOrgOwner(viewer, params.org);
+    const t = requireTeam(org.id, params.team);
+    const target = findUser(params.username);
+    if (target) db.delete(teamMember).where(and(eq(teamMember.teamId, t.id), eq(teamMember.userId, target.id))).run();
+    return { ok: true };
+  })
+  .put("/orgs/:org/teams/:team/repos/:repo", async ({ request, params, body }) => {
+    const viewer = await requireUser(request);
+    const org = requireOrgOwner(viewer, params.org);
+    const t = requireTeam(org.id, params.team);
+    const role = (body as { role?: unknown } | null)?.role;
+    if (role !== "read" && role !== "write") throw new HttpError(400, "Role must be read or write");
+    const r = db.select().from(repo).where(and(eq(repo.ownerId, org.id), eq(repo.name, params.repo.toLowerCase()))).get();
+    if (!r) throw new HttpError(404, "The organization has no such repository");
+    db.insert(teamRepo).values({ teamId: t.id, repoId: r.id, role }).onConflictDoUpdate({ target: [teamRepo.teamId, teamRepo.repoId], set: { role } }).run();
+    return { ok: true };
+  })
+  .delete("/orgs/:org/teams/:team/repos/:repo", async ({ request, params }) => {
+    const viewer = await requireUser(request);
+    const org = requireOrgOwner(viewer, params.org);
+    const t = requireTeam(org.id, params.team);
+    const r = db.select().from(repo).where(and(eq(repo.ownerId, org.id), eq(repo.name, params.repo.toLowerCase()))).get();
+    if (r) db.delete(teamRepo).where(and(eq(teamRepo.teamId, t.id), eq(teamRepo.repoId, r.id))).run();
     return { ok: true };
   })
   .patch("/orgs/:org/profile", async ({ request, params, body }) => {
