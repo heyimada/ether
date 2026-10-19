@@ -6,6 +6,7 @@ import { HttpError, findUser, readableRepos, requireUser, type ReadableRepo } fr
 import { config } from "../config";
 import { db } from "../db/client";
 import { comment, commitEmail, follow, issue, orgMember, organization, pin, profile, user } from "../db/schema";
+import { pushSuggestions } from "../contrib";
 import * as git from "../git";
 
 const MAX_AVATAR = 1024 * 1024;
@@ -198,6 +199,26 @@ export async function saveAvatar(userId: string, request: Request) {
 
 export { upsertProfile };
 
+// Emails from the user's pushes; for history pushed before Ether recorded pushes, fall back
+// to the author emails in repositories they own. Addresses other people own are left out.
+async function emailSuggestions(userId: string) {
+  const fromPushes = pushSuggestions(userId);
+  if (fromPushes.length) return fromPushes;
+  const counts = new Map<string, number>();
+  for (const r of readableRepos(userId).filter((x) => x.relation === "owner")) {
+    const head = await git.resolveCommit(r.path, await git.headBranch(r.path));
+    if (!head) continue;
+    for (const c of await git.authorTimes(r.path, head, new Date(0))) counts.set(c.email, (counts.get(c.email) ?? 0) + 1);
+  }
+  if (counts.size === 0) return [];
+  const owners = new Map(db.select().from(commitEmail).where(inArray(commitEmail.email, [...counts.keys()])).all().map((c) => [c.email, c.userId]));
+  return [...counts]
+    .filter(([email]) => !owners.has(email) || owners.get(email) === userId)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([email, commits]) => ({ email, commits, yours: owners.get(email) === userId }));
+}
+
 export const profileRoutes = new Elysia()
   .get("/users/:name/profile", async ({ request, params }) => {
     const viewer = await requireUser(request);
@@ -234,6 +255,8 @@ export const profileRoutes = new Elysia()
       viewerOrgRole: myOrgRole,
       organizations: orgsOf,
       isSelf: viewer.id === target.id,
+      // Lets the owner see why commits aren't counted yet.
+      hasCommitEmails: !!db.select().from(commitEmail).where(eq(commitEmail.userId, target.id)).get(),
       profile: {
         displayName: row?.displayName ?? "",
         bio: row?.bio ?? "",
@@ -311,6 +334,7 @@ export const profileRoutes = new Elysia()
         avatarVersion: row?.avatarVersion ?? null,
       },
       emails: db.select({ email: commitEmail.email }).from(commitEmail).where(eq(commitEmail.userId, viewer.id)).all().map((e) => e.email),
+      pushEmails: await emailSuggestions(viewer.id),
       pins: db
         .select({ repoId: pin.repoId })
         .from(pin)

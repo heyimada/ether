@@ -15,6 +15,7 @@ type ProfileData = {
   viewerOrgRole: "owner" | "member" | null;
   organizations: { name: string; avatarVersion: number | null }[];
   isSelf: boolean;
+  hasCommitEmails: boolean;
   profile: {
     displayName: string;
     bio: string;
@@ -216,7 +217,14 @@ function Overview({ data }: { data: ProfileData }) {
         <div className="card body calendar">
           <Contributions days={data.contributions.days} />
         </div>
-        <p className="hint">Commits from the commit emails set in Settings, plus issues, pull requests and comments, in repositories you can see.</p>
+        {data.isSelf && !data.hasCommitEmails ? (
+          <p className="notice" style={{ margin: 0 }}>
+            Your commits aren't counted yet because Ether doesn't know which email you commit with. <Link to="/settings">Add your commit email</Link>{" "}
+            (the one in <code>git config user.email</code>).
+          </p>
+        ) : (
+          <p className="hint">Commits from the commit emails set in Settings, plus issues, pull requests and comments, in repositories you can see.</p>
+        )}
       </section>
       <section className="stack-sm">
         <h2 className="section-title">Recent activity</h2>

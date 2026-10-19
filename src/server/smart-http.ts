@@ -42,7 +42,7 @@ export function advertiseRefs(service: Service, repo: string): Response {
 
 // POST /git-upload-pack and /git-receive-pack. Both directions are streamed: pushes arrive
 // chunked with no Content-Length and can be far larger than memory should hold.
-export function runService(service: Service, repo: string, req: Request): Response {
+export function runService(service: Service, repo: string, req: Request, afterPush?: () => Promise<void>): Response {
   const proc = spawnService(service, repo, false);
   let input = req.body;
   const encoding = req.headers.get("content-encoding")?.toLowerCase();
@@ -65,7 +65,10 @@ export function runService(service: Service, repo: string, req: Request): Respon
       await pump;
       const code = await proc.exited;
       if (code !== 0) console.error(`${service} exited ${code}: ${(await stderr).trim()}`);
-      if (service === "git-receive-pack") await fixHead(repo).catch((e) => console.error("fixHead", e));
+      if (service === "git-receive-pack") {
+        await fixHead(repo).catch((e) => console.error("fixHead", e));
+        if (code === 0 && afterPush) await afterPush().catch((e) => console.error("afterPush", e));
+      }
       controller.close();
     },
     cancel() {

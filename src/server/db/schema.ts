@@ -204,3 +204,17 @@ export const orgMember = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.orgId, t.userId] }), index("org_member_user_idx").on(t.userId)],
 );
+
+// Author emails found in commits a user pushed, offered as commit-email suggestions.
+export const pushEmail = sqliteTable(
+  "push_email",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    commits: integer("commits").notNull().default(0),
+    lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.email] })],
+);
