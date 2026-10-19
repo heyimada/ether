@@ -1,6 +1,7 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { DiffView } from "../components/content";
 import { Conversation, IssueHeader } from "../components/conversation";
+import { CiBadge, ciDone, type CiStatus } from "../components/ci";
 import { IssueSidebar } from "../components/labels";
 import { ReviewList, ReviewPanel, ReviewersSection, type ReviewData } from "../components/reviews";
 import { ErrorNote, useAction } from "../components/ui";
@@ -8,6 +9,8 @@ import { api, post, repoApi, shortSha, type Comment, type Commit, type Issue } f
 
 type PullData = ReviewData & {
   pull: Issue;
+  requireChecks: boolean;
+  checks: { id: number; status: CiStatus } | null;
   comments: Comment[];
   role: "owner" | "write" | "read";
   mergeable: boolean;
@@ -99,6 +102,7 @@ function MergeBox({ data }: { data: PullData }) {
 
   const canMerge = data.role !== "read";
   const needsApproval = data.requireApproval && data.reviewDecision !== "approved";
+  const needsChecks = data.requireChecks && !!data.checks && data.checks.status !== "success";
   const blocked = !data.mergeable;
   return (
     <section className={`card body merge-box ${blocked ? "blocked conflict" : ""}`}>
@@ -128,13 +132,26 @@ function MergeBox({ data }: { data: PullData }) {
       )}
       {data.reviewDecision === "changes_requested" && <p className="review-note review-changes_requested">Changes were requested in a review.</p>}
       {data.reviewDecision === "approved" && <p className="review-note review-approved">Approved in review.</p>}
+      {data.checks && (
+        <p className="review-note">
+          <CiBadge status={data.checks.status} />{" "}
+          <Link to="/$owner/$repo/ci/$id" params={{ owner: info.repo.owner, repo: info.repo.name, id: String(data.checks.id) }}>
+            {data.checks.status === "success"
+              ? "All checks have passed"
+              : ciDone(data.checks.status)
+                ? "Some checks failed"
+                : "Checks are still running"}
+          </Link>
+          {needsChecks && " · merging requires passing checks"}
+        </p>
+      )}
       {needsApproval && (
         <p className="review-note">
           <strong>Merging requires an approving review</strong> because this repository protects its pull requests.
         </p>
       )}
       {canMerge ? (
-        <button className="primary" onClick={() => merge.run()} disabled={blocked || needsApproval || merge.pending}>
+        <button className="primary" onClick={() => merge.run()} disabled={blocked || needsApproval || needsChecks || merge.pending}>
           Merge pull request
         </button>
       ) : (

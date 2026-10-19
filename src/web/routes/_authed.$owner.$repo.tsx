@@ -56,6 +56,9 @@ function RepoLayout() {
         <Link to="/$owner/$repo/wiki" params={params}>
           Wiki
         </Link>
+        <Link to="/$owner/$repo/ci" params={params}>
+          CI
+        </Link>
         {info.role === "owner" && (
           <Link to="/$owner/$repo/settings" params={params}>
             Settings

@@ -29,6 +29,13 @@ function RepoSettings() {
   const [confirm, setConfirm] = useState("");
   const [confirmVisibility, setConfirmVisibility] = useState(false);
   const [requireApproval, setRequireApproval] = useState(info.repo.requireApproval);
+  const { instance } = Route.useRouteContext();
+  const [ci, setCi] = useState({ enabled: info.repo.ciEnabled, required: info.repo.requireChecks });
+  const ciToggle = useAction(async (change: { ciEnabled?: boolean; requireChecks?: boolean }) => {
+    setCi({ enabled: change.ciEnabled ?? ci.enabled, required: change.requireChecks ?? ci.required });
+    await patch(base, change);
+    await router.invalidate();
+  });
   const protect = useAction(async (on: boolean) => {
     setRequireApproval(on);
     await patch(base, { requireApproval: on });
@@ -82,6 +89,20 @@ function RepoSettings() {
           Save
         </button>
       </form>
+
+      <section className="card body stack-sm">
+        <h2 style={{ margin: 0 }}>CI</h2>
+        <ErrorNote error={ciToggle.error} />
+        <label className="radio">
+          <input type="checkbox" checked={ci.enabled} onChange={(e) => ciToggle.run({ ciEnabled: e.target.checked })} disabled={ciToggle.pending || (!instance.ciEnabled && !ci.enabled)} />
+          Run <code>.ether/ci.yml</code> on every push
+        </label>
+        {!instance.ciEnabled && <span className="hint" style={{ margin: 0 }}>An admin has to allow CI on this server first.</span>}
+        <label className="radio">
+          <input type="checkbox" checked={ci.required} onChange={(e) => ciToggle.run({ requireChecks: e.target.checked })} disabled={ciToggle.pending} />
+          Require passing checks before merging
+        </label>
+      </section>
 
       <section className="card body stack-sm">
         <h2 style={{ margin: 0 }}>Pull requests</h2>

@@ -50,6 +50,27 @@ Backups: `bun run ether backup <dir>` writes a timestamped snapshot while the se
 
 Restore: stop Ether, then `ETHER_DATA=<empty folder> bun run ether restore <dir>/<timestamp>` and start Ether with that `ETHER_DATA`. Restore refuses to write into a folder that already holds Ether data.
 
+## CI
+
+Off until an admin ticks **Admin → Access → Run CI jobs on this server** and an owner turns it on in the repository's **Settings**. Jobs run on the Ether machine as the user Ether runs as, so only allow it for people you trust with that. Then commit `.ether/ci.yml`:
+
+```yaml
+jobs:
+  test:
+    steps:
+      - name: Install
+        run: bun install
+      - name: Test
+        run: bun test
+        timeout-minutes: 15        # default 10, at most 60
+  lint:
+    steps:
+      - run: bunx tsc --noEmit
+        shell: bash                # bash (default when installed), sh, pwsh, powershell or cmd
+```
+
+Every push to a branch runs the workflow of its new commit, one job at a time, in a fresh checkout. Steps get a minimal environment (`PATH`, `HOME`/`TEMP` and `CI`, `CI_REPOSITORY`, `CI_COMMIT_SHA`, `CI_REF`), never Ether's own settings or secrets. Runs and logs are under the repository's **CI** tab; pull requests show their head commit's checks, and **Require passing checks before merging** blocks merges until they pass.
+
 ## Command-line client
 
 `cli/` is a Rust client in the spirit of GitHub's `gh`, built as `ether`:

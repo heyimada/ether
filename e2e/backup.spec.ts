@@ -48,7 +48,7 @@ test("a backup taken while the server runs restores into a working instance", as
   expect(restore.status, restore.stderr).toBe(0);
 
   const port = await freePort();
-  const server = spawn("bun", ["src/server/main.ts"], { cwd: root, env: { ...process.env, ETHER_DATA: fresh, ETHER_PORT: String(port), ETHER_HOST: "127.0.0.1" }, stdio: "ignore" });
+  const server = spawn("bun", ["src/server/main.ts"], { cwd: root, env: { ...process.env, ETHER_DATA: fresh, ETHER_PORT: String(port), ETHER_HOST: "127.0.0.1", ETHER_SSH_PORT: "off" }, stdio: "ignore" });
   try {
     const url = `http://127.0.0.1:${port}`;
     for (let i = 0; i < 100; i++) {

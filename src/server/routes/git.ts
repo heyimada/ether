@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { existsSync } from "node:fs";
 import { VISITOR, allows, anonymousRead, repoAccess, tokenUser, type RepoAccess, type Viewer } from "../access";
+import { onPush } from "../ci";
 import { recordPush } from "../contrib";
 import { NAME_RE, ensureWiki, listRefs, newAuthorEmails, repoExists, wikiPath } from "../git";
 import { advertiseRefs, basicCredentials, challenge, runService, type Service } from "../smart-http";
@@ -47,10 +48,11 @@ export const gitRoutes = new Elysia()
   .post("/:owner/:repo/git-receive-pack", { parse: "none" }, async ({ request, params }) => {
     const access = await authorize(request, params.owner, params.repo, "git-receive-pack");
     if (access instanceof Response) return access;
-    const before = (await listRefs(access.path)).map((r) => r.sha);
-    // Learn the pusher's commit emails from what the push brought in.
+    const before = await listRefs(access.path);
+    // Learn the pusher's commit emails from what the push brought in, and start CI.
     return runService("git-receive-pack", access.path, request, async () => {
-      const after = (await listRefs(access.path)).map((r) => r.sha);
-      recordPush(access.viewer.id, await newAuthorEmails(access.path, before, after));
+      const after = await listRefs(access.path);
+      recordPush(access.viewer.id, await newAuthorEmails(access.path, before.map((r) => r.sha), after.map((r) => r.sha)));
+      if (!access.path.endsWith(".wiki.git")) await onPush(access.repo.id, access.path, before, after);
     });
   });
