@@ -18,6 +18,9 @@ const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 const secret = (prefix: string) => prefix + randomBytes(24).toString("base64url");
 
 export async function currentUser(req: Request): Promise<Viewer | null> {
+  // API clients such as the ether CLI send a personal access token instead of a session cookie.
+  const bearer = /^Bearer\s+(\S+)$/i.exec(req.headers.get("authorization") ?? "")?.[1];
+  if (bearer) return tokenOwner(bearer);
   const session = await auth.api.getSession({ headers: req.headers });
   if (!session?.user.username) return null;
   return { id: session.user.id, username: session.user.username, isAdmin: (session.user as { role?: string | null }).role === "admin" };
@@ -193,6 +196,19 @@ export function createAccessToken(userId: string, name: string) {
   const token = secret("eth_");
   const row = db.insert(accessToken).values({ userId, name, tokenHash: sha256(token) }).returning({ id: accessToken.id }).get();
   return { id: row.id, token };
+}
+
+// The account a personal access token belongs to, from the token alone (tokens are unique).
+export function tokenOwner(token: string): Viewer | null {
+  const row = db
+    .select({ id: user.id, username: user.username, role: user.role, tokenId: accessToken.id })
+    .from(accessToken)
+    .innerJoin(user, eq(accessToken.userId, user.id))
+    .where(eq(accessToken.tokenHash, sha256(token)))
+    .get();
+  if (!row?.username) return null;
+  db.update(accessToken).set({ lastUsedAt: new Date() }).where(eq(accessToken.id, row.tokenId)).run();
+  return { id: row.id, username: row.username, isAdmin: row.role === "admin" };
 }
 
 export function tokenUser(username: string, token: string): Viewer | null {
