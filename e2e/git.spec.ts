@@ -147,7 +147,7 @@ test("gzip-encoded upload-pack requests are decoded", async () => {
   const head = gitOk(src, ["rev-parse", "HEAD"]).trim();
 
   const pkt = (s: string) => (s.length + 4).toString(16).padStart(4, "0") + s;
-  const body = gzipSync(Buffer.from(pkt(`want ${head}\n`) + "0000" + pkt("done\n")));
+  const body = new Uint8Array(gzipSync(Buffer.from(pkt(`want ${head}\n`) + "0000" + pkt("done\n"))));
   const basic = Buffer.from(`${auth.username}:${auth.token}`).toString("base64");
   const res = await fetch(`${cloneUrl("admin", repo)}/git-upload-pack`, {
     method: "POST",

@@ -401,3 +401,21 @@ export const reviewRequest = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.issueId, t.userId] }), index("review_request_user_idx").on(t.userId)],
 );
+
+// Public keys for git over SSH. `blob` is the base64 key data; one key belongs to one account.
+export const sshKey = sqliteTable(
+  "ssh_key",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    keyType: text("key_type").notNull(),
+    blob: text("blob").notNull().unique(),
+    fingerprint: text("fingerprint").notNull(),
+    createdAt: createdAt(),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("ssh_key_user_idx").on(t.userId)],
+);

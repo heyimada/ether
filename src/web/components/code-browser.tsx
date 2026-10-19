@@ -1,6 +1,6 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouteContext } from "@tanstack/react-router";
 import { BookOpen, FileText, Folder, FolderGit2, History, Tag } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import formatSize from "pretty-bytes";
 import { api, repoApi, shortSha, timeAgo, type Commit, type RepoInfo, type TreeEntry } from "../lib/api";
 import { CodeView, Markdown } from "./content";
@@ -27,11 +27,25 @@ export async function loadTree(info: RepoInfo, ref: string, path: string): Promi
 export const cloneUrl = (info: RepoInfo) => `${location.origin}/${info.repo.owner}/${info.repo.name}.git`;
 
 export function CloneBox({ info }: { info: RepoInfo }) {
-  const url = cloneUrl(info);
+  const { instance } = useRouteContext({ from: "/_authed" });
+  const [kind, setKind] = useState<"https" | "ssh">("https");
+  const ssh = instance.sshBase ? `${instance.sshBase}/${info.repo.owner}/${info.repo.name}.git` : null;
+  const url = kind === "ssh" && ssh ? ssh : cloneUrl(info);
   return (
-    <div className="clone">
-      <input className="mono" readOnly value={url} aria-label="Clone URL" onFocus={(e) => e.currentTarget.select()} />
-      <CopyButton text={url} />
+    <div className="stack-sm" style={{ gap: 6 }}>
+      {ssh && (
+        <div className="popover-tabs clone-tabs" role="tablist" aria-label="Clone over">
+          {(["https", "ssh"] as const).map((k) => (
+            <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)}>
+              {k === "https" ? "HTTPS" : "SSH"}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="clone">
+        <input className="mono" readOnly value={url} aria-label="Clone URL" onFocus={(e) => e.currentTarget.select()} />
+        <CopyButton text={url} />
+      </div>
     </div>
   );
 }

@@ -31,7 +31,8 @@ export default async function globalSetup() {
   if (!existsSync(join(built, "_shell.html"))) throw new Error("Build the web app first: bunx vite build");
   const webDir = join(dataDir, "web");
   cpSync(built, webDir, { recursive: true });
-  const env = { ...process.env, ETHER_DATA: dataDir, ETHER_PORT: String(port), ETHER_HOST: "127.0.0.1", ETHER_WEB_DIST: webDir };
+  const sshPort = await freePort();
+  const env = { ...process.env, ETHER_DATA: dataDir, ETHER_PORT: String(port), ETHER_HOST: "127.0.0.1", ETHER_WEB_DIST: webDir, ETHER_SSH_PORT: String(sshPort) };
 
   const admin = spawnSync("bun", ["src/server/cli.ts", "create-admin", ADMIN.username, "--password", ADMIN.password], {
     cwd: root,
@@ -58,6 +59,7 @@ export default async function globalSetup() {
 
   process.env.ETHER_URL = url;
   process.env.ETHER_PORT = String(port);
+  process.env.ETHER_SSH_PORT = String(sshPort);
   process.env.ETHER_DATA = dataDir;
 
   return async () => {

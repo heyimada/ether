@@ -28,11 +28,13 @@ Development: run `bun run dev:server` and `bun run dev:web` together. The app is
 | `ETHER_DATA` | `./data` | SQLite DB, bare repos, auth secret |
 | `ETHER_HOST` / `ETHER_PORT` | `127.0.0.1` / `3000` | Bind address. Keep it on loopback. |
 | `ETHER_PUBLIC_URL` | `http://HOST:PORT` | The URL people use to reach Ether |
+| `ETHER_SSH_PORT` | `2222` | Git over SSH on the same bind address; `off` disables it |
+| `ETHER_SSH_HOST` | host of `ETHER_PUBLIC_URL` | Host name shown in `ssh://` clone URLs |
 | `BETTER_AUTH_SECRET` | generated into `data/auth-secret` | Session signing secret |
 
 ## Example deployment: a Tailscale tailnet
 
-`scripts/deploy.ps1` builds Ether and registers a logon task that runs `scripts/start.ps1`. It then publishes the server to your tailnet with `tailscale serve --https=443`. Ether only ever listens on `127.0.0.1`, so it can't be reached from the LAN or the internet. Don't use `tailscale funnel`.
+`scripts/deploy.ps1` builds Ether and registers a logon task that runs `scripts/start.ps1`. It then publishes the server to your tailnet with `tailscale serve --https=443`, and git over SSH with `tailscale serve --tcp=2222`. Ether only ever listens on `127.0.0.1`, so it can't be reached from the LAN or the internet. Don't use `tailscale funnel`.
 
 On a tailnet, first share the machine with the person in the Tailscale admin console (or invite them to the tailnet).
 

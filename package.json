@@ -32,13 +32,15 @@
     "pretty-bytes": "7.2.0",
     "react": "^19.3.1",
     "react-activity-calendar": "^3.2.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "ssh2": "^1.17.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
     "@types/bun": "^1.4.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/ssh2": "^1.15.6",
     "@vitejs/plugin-react": "^6.1.2",
     "drizzle-kit": "0.31.11",
     "typescript": "^7.0.2",

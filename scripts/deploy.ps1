@@ -16,6 +16,9 @@ Start-ScheduledTask -TaskName "Ether"
 
 # HTTPS on the tailnet only. Never use `tailscale funnel`, which would publish it to the internet.
 tailscale serve --bg --https=443 "http://127.0.0.1:$Port"
+# Git over SSH: forward the tailnet's port 2222 to Ether's SSH server on loopback.
+$SshPort = if ($env:ETHER_SSH_PORT) { $env:ETHER_SSH_PORT } else { "2222" }
+if ($SshPort -ne "off") { tailscale serve --bg --tcp=$SshPort "tcp://127.0.0.1:$SshPort" }
 
 $dns = (tailscale status --json | ConvertFrom-Json).Self.DNSName.TrimEnd(".")
 Write-Host "Ether is starting at https://$dns"
