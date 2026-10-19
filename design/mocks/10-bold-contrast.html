@@ -1,0 +1,944 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  Direction 10 — Bold high-contrast, accessibility-first.
+  Palette: pure white (#ffffff) and pure black (#000000) grounds, Ether blue (#1538e8, 8.6:1 on white), signal yellow (#ffd400) used only as a highlight behind black text, success green (#005a2b, 8.4:1) and danger red (#a80d1f, 7.4:1). Dark mode inverts to pure black with white text and brighter blue (#8fa6ff).
+  Type: Archivo (variable width and weight) for chunky headings and labels, IBM Plex Sans for reading text, IBM Plex Mono for code. Base 18px, minimum touch target 44px, focus rings are a 4px yellow halo with a 2px black outline that works on any background.
+  Key ideas: every icon has a visible text label, every state is also a word or a shape (never colour alone), hard 3px borders and offset shadows instead of soft depth, and everything collapses cleanly to phone width with no horizontal page scroll.
+-->
+<title>Ether — Direction 10, Bold Contrast</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f2f2f2;
+    --surface-3: #e4e4e4;
+    --text: #000000;
+    --text-2: #1a1a1a;
+    --text-3: #3d3d3d;
+    --line: #000000;
+    --line-soft: #9a9a9a;
+    --primary: #1538e8;
+    --primary-ink: #ffffff;
+    --primary-soft: #dfe5ff;
+    --highlight: #ffd400;
+    --success: #005a2b;
+    --success-soft: #d4f5e0;
+    --danger: #a80d1f;
+    --danger-soft: #ffdadd;
+    --focus-ring: #ffd400;
+    --shadow: 4px 4px 0 #000000;
+    --font-display: "Archivo", "Arial Black", system-ui, sans-serif;
+    --font-text: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #000000;
+      --surface: #000000;
+      --surface-2: #151515;
+      --surface-3: #262626;
+      --text: #ffffff;
+      --text-2: #f2f2f2;
+      --text-3: #d0d0d0;
+      --line: #ffffff;
+      --line-soft: #7a7a7a;
+      --primary: #8fa6ff;
+      --primary-ink: #000000;
+      --primary-soft: #1b2a6b;
+      --highlight: #ffd400;
+      --success: #5fe39a;
+      --success-soft: #0c3b22;
+      --danger: #ff8a95;
+      --danger-soft: #4a1218;
+      --focus-ring: #ffd400;
+      --shadow: 4px 4px 0 #ffffff;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #000000;
+    --surface: #000000;
+    --surface-2: #151515;
+    --surface-3: #262626;
+    --text: #ffffff;
+    --text-2: #f2f2f2;
+    --text-3: #d0d0d0;
+    --line: #ffffff;
+    --line-soft: #7a7a7a;
+    --primary: #8fa6ff;
+    --primary-ink: #000000;
+    --primary-soft: #1b2a6b;
+    --success: #5fe39a;
+    --success-soft: #0c3b22;
+    --danger: #ff8a95;
+    --danger-soft: #4a1218;
+    --shadow: 4px 4px 0 #ffffff;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-width: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-text);
+    font-size: 18px;
+    line-height: 1.55;
+    overflow-x: hidden;
+  }
+  a { color: var(--primary); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  a:hover { color: var(--text); background: var(--highlight); text-decoration-color: var(--text); }
+  button, input, textarea { font: inherit; color: inherit; }
+  :focus-visible {
+    outline: 2px solid var(--line);
+    outline-offset: 3px;
+    box-shadow: 0 0 0 7px var(--focus-ring);
+    border-radius: 4px;
+  }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  svg.i { width: 1.1em; height: 1.1em; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.16em; }
+  .mono { font-family: var(--font-mono); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- Gallery chrome ---------- */
+  .hero {
+    max-width: 1280px; margin: 0 auto; padding: 48px 24px 32px;
+    border-bottom: 6px solid var(--line);
+  }
+  .hero .kicker {
+    display: inline-block; font-family: var(--font-display); font-weight: 800; font-stretch: 112%;
+    text-transform: uppercase; letter-spacing: 0.04em; font-size: 15px;
+    background: var(--highlight); color: #000; padding: 4px 12px; border: 3px solid #000;
+  }
+  .hero h1 {
+    font-family: var(--font-display); font-weight: 900; font-stretch: 115%;
+    font-size: clamp(48px, 9vw, 120px); line-height: 0.9; letter-spacing: -0.03em;
+    margin: 18px 0 14px; text-transform: uppercase;
+  }
+  .hero p { max-width: 58ch; font-size: 21px; margin: 0; color: var(--text-2); }
+
+  .gallery { max-width: 1280px; margin: 0 auto; padding: 48px 24px 96px; display: grid; gap: 80px; }
+  .frame-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 18px; }
+  .frame-head .n {
+    font-family: var(--font-display); font-weight: 900; font-stretch: 110%; font-size: 20px;
+    background: var(--primary); color: var(--primary-ink); padding: 6px 14px; border: 3px solid var(--line);
+  }
+  .frame-head h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-stretch: 105%; font-size: clamp(24px, 3.6vw, 34px); letter-spacing: -0.01em; text-transform: uppercase; }
+
+  .frame {
+    border: 3px solid var(--line);
+    box-shadow: 10px 10px 0 var(--line);
+    background: var(--surface);
+    min-width: 0;
+    overflow: hidden;
+  }
+  .frame-inner { padding: 0 32px; max-width: 1280px; margin: 0 auto; }
+
+  /* ---------- Shared app pieces ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 14px 20px; flex-wrap: wrap;
+    padding: 14px 0; border-bottom: 3px solid var(--line);
+  }
+  .logo { display: inline-flex; align-items: center; gap: 12px; min-width: 0; color: var(--text); text-decoration: none; }
+  .logo:hover { background: none; }
+  .logo-mark {
+    width: 46px; height: 46px; display: grid; place-items: center; flex: none;
+    background: var(--primary); color: var(--primary-ink);
+    border: 3px solid var(--line); border-radius: 12px;
+    box-shadow: 3px 3px 0 var(--line);
+    font-family: var(--font-display); font-weight: 900; font-size: 30px;
+    transform: rotate(-4deg);
+  }
+  .wordmark { font-family: var(--font-display); font-weight: 900; font-stretch: 110%; font-size: 30px; letter-spacing: -0.02em; }
+  .top-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    min-height: 48px; padding: 8px 20px;
+    border: 3px solid var(--line); border-radius: 10px;
+    background: var(--surface); color: var(--text);
+    font-family: var(--font-display); font-weight: 700; font-stretch: 104%; font-size: 17px; letter-spacing: 0.005em;
+    text-decoration: none; cursor: pointer; white-space: nowrap;
+    box-shadow: 4px 4px 0 var(--line);
+    transition: transform 90ms ease, box-shadow 90ms ease, background-color 90ms ease;
+  }
+  .btn:hover { background: var(--highlight); color: #000; }
+  .btn:active { transform: translate(4px, 4px); box-shadow: 0 0 0 var(--line); }
+  .btn-primary { background: var(--primary); color: var(--primary-ink); }
+  .btn-primary:hover { background: var(--line); color: var(--bg); }
+  .btn-primary:focus-visible { box-shadow: 0 0 0 7px var(--focus-ring), 4px 4px 0 var(--line); }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-success:hover { background: var(--line); color: var(--bg); }
+  .btn-ghost { box-shadow: none; border-color: transparent; }
+  .btn-ghost:hover { background: var(--surface-3); color: var(--text); }
+  .btn-ghost:active { transform: none; }
+  .btn-block { width: 100%; }
+  .btn[disabled] { opacity: 1; color: var(--text-3); border-color: var(--line-soft); box-shadow: none; cursor: not-allowed; background: var(--surface-2); }
+  .btn-sm { min-height: 44px; padding: 6px 14px; font-size: 16px; }
+
+  .me { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 4px 12px 4px 4px; border: 3px solid var(--line); border-radius: 999px; background: var(--surface); cursor: pointer; font-family: var(--font-display); font-weight: 700; font-size: 17px; color: var(--text); }
+  .me:hover { background: var(--highlight); color: #000; }
+  .avatar {
+    width: 40px; height: 40px; flex: none; display: inline-grid; place-items: center;
+    border: 3px solid var(--line); border-radius: 50%;
+    font-family: var(--font-display); font-weight: 900; font-size: 15px;
+    background: var(--surface-3); color: var(--text);
+  }
+  .avatar.sm { width: 32px; height: 32px; font-size: 12px; border-width: 2px; }
+  .avatar.xl { width: 56px; height: 56px; font-size: 20px; }
+  .av-admin { background: var(--primary); color: var(--primary-ink); }
+  .av-mira { background: #ffd400; color: #000; }
+  .av-jonas { background: #b7f0cf; color: #000; }
+  .av-kat { background: #ffc2d4; color: #000; }
+
+  .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 26px 0 8px; min-width: 0; }
+  .crumbs .owner, .crumbs .sep { font-family: var(--font-display); font-weight: 700; font-size: 26px; color: var(--text-3); }
+  .crumbs .repo { font-family: var(--font-display); font-weight: 900; font-stretch: 112%; font-size: clamp(34px, 5.4vw, 60px); line-height: 1; letter-spacing: -0.025em; overflow-wrap: anywhere; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 12px;
+    border: 3px solid var(--line); border-radius: 999px; font-family: var(--font-display); font-weight: 800; font-size: 15px; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; background: var(--surface);
+  }
+  .pill.private { background: #000; color: #fff; }
+  .pill.private svg { color: var(--highlight); }
+  .pill.open { background: var(--success); color: #fff; border-color: var(--success); }
+  .pill.closed { background: var(--danger); color: #fff; border-color: var(--danger); }
+  .pill.merged { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+  .desc { margin: 6px 0 22px; font-size: 20px; max-width: 62ch; color: var(--text-2); }
+
+  .tabs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: thin; border-bottom: 3px solid var(--line); padding-top: 4px; }
+  .tab {
+    display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 18px 6px;
+    background: var(--surface); border: 3px solid transparent; border-bottom: 0; border-radius: 12px 12px 0 0;
+    font-family: var(--font-display); font-weight: 700; font-stretch: 104%; font-size: 18px; color: var(--text-2);
+    cursor: pointer; white-space: nowrap; margin-bottom: -3px;
+  }
+  .tab:hover { background: var(--surface-2); color: var(--text); }
+  .tab[aria-current="page"] { border-color: var(--line); background: var(--highlight); color: #000; }
+  .tab[aria-current="page"]:hover { background: var(--highlight); }
+  .count {
+    min-width: 30px; height: 26px; display: inline-grid; place-items: center; padding: 0 8px;
+    border: 2px solid currentColor; border-radius: 999px; font-family: var(--font-mono); font-size: 14px; font-weight: 600;
+    background: var(--surface); color: var(--text);
+  }
+  .tab[aria-current="page"] .count { background: #000; color: #fff; border-color: #000; }
+
+  /* ---------- Screen 1: repository ---------- */
+  .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 22px 0; }
+  .branch { min-width: 0; }
+  .branch .label-k { font-family: var(--font-display); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); }
+  .branch .name { font-family: var(--font-mono); font-weight: 600; }
+  .toolbar .spacer { flex: 1; }
+  .meta-line { font-size: 17px; color: var(--text-2); }
+
+  .commitbar {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px 16px; align-items: center;
+    padding: 16px 20px; background: var(--surface-2); border: 3px solid var(--line); border-radius: 14px;
+  }
+  .commitbar .who { font-family: var(--font-display); font-weight: 800; font-size: 18px; }
+  .commitbar .msg { font-size: 18px; min-width: 0; overflow-wrap: anywhere; }
+  .commitbar .msg a { color: var(--text); text-decoration-color: var(--primary); }
+  .commitbar .meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; font-family: var(--font-mono); font-size: 15px; }
+  .chip-sha { border: 2px solid var(--line); padding: 2px 8px; border-radius: 6px; background: var(--surface); }
+  .time { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-text); font-size: 16px; }
+
+  .repo-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 36px; padding: 28px 0 56px; align-items: start; }
+  .filelist { border: 3px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); }
+  .filelist .row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px;
+    min-height: 60px; padding: 8px 16px;
+    border-top: 2px solid var(--line);
+  }
+  .filelist .row:first-child { border-top: 0; }
+  .filelist .row.head { min-height: 0; padding: 10px 16px; background: #000; color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .filelist .row.head .r { text-align: right; }
+  .filelist .row:not(.head):hover { background: var(--highlight); color: #000; }
+  .filelist .row:not(.head):hover a { color: #000; }
+  .filelist .row:not(.head):hover .muted { color: #000; }
+  .filelist .row .name { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .filelist .row .name a { font-family: var(--font-display); font-weight: 700; font-size: 18px; text-decoration: none; color: var(--text); padding: 6px 0; min-height: 44px; display: inline-flex; align-items: center; }
+  .filelist .row .name a:hover { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; background: none; }
+  .filelist .row .what { display: block; font-size: 16px; color: var(--text-3); overflow-wrap: anywhere; }
+  .filelist .row .meta { text-align: right; font-family: var(--font-mono); font-size: 14px; color: var(--text-3); white-space: nowrap; }
+  .filelist .row .meta strong { display: block; color: var(--text); font-size: 14px; font-weight: 600; }
+  .filelist .ico { width: 36px; height: 36px; display: grid; place-items: center; border: 2px solid currentColor; border-radius: 8px; flex: none; }
+  .filelist .ico svg { width: 20px; height: 20px; }
+  .ico.dir { background: var(--highlight); color: #000; border-color: #000; }
+  .ico.file { background: var(--surface-3); color: var(--text); }
+  .filelist .row:not(.head):hover .ico.file { background: #000; color: #fff; }
+
+  .clone-card { border: 3px solid var(--line); border-radius: 14px; padding: 18px; background: var(--surface); }
+  .clone-card h3 { margin: 0 0 10px; font-family: var(--font-display); font-weight: 900; font-stretch: 110%; font-size: 22px; text-transform: uppercase; }
+  .clone-card p { margin: 0 0 12px; font-size: 16px; color: var(--text-2); }
+  .clone-url {
+    display: block; width: 100%; padding: 10px 12px; font-family: var(--font-mono); font-size: 15px; font-weight: 500;
+    border: 3px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--text); overflow-wrap: anywhere;
+  }
+  .clone-card .btn { margin-top: 12px; }
+  .copy-state { margin-top: 10px; font-size: 16px; font-weight: 600; color: var(--success); min-height: 1.4em; }
+  .facts { display: grid; gap: 12px; margin: 0; padding: 0; }
+  .facts div { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 10px 0; border-bottom: 2px solid var(--line); font-size: 17px; }
+  .facts dt { font-weight: 600; }
+  .facts dd { margin: 0; font-family: var(--font-mono); font-weight: 600; }
+  .facts-title { font-family: var(--font-display); font-weight: 900; font-stretch: 110%; text-transform: uppercase; font-size: 20px; margin: 0 0 6px; }
+
+  .readme { border-top: 3px solid var(--line); padding-top: 26px; max-width: 72ch; }
+  .readme .readme-title { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 900; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 14px; }
+  .readme h2 { font-family: var(--font-display); font-weight: 900; font-stretch: 112%; font-size: clamp(38px, 5vw, 56px); line-height: 1; letter-spacing: -0.02em; margin: 0 0 16px; }
+  .readme h3 { font-family: var(--font-display); font-weight: 800; font-stretch: 105%; font-size: 26px; margin: 30px 0 10px; }
+  .readme p { margin: 0 0 14px; }
+  .readme ul { list-style: none; padding: 0; margin: 0 0 16px; }
+  .readme li { position: relative; padding: 4px 0 4px 36px; margin-bottom: 6px; }
+  .readme li::before {
+    content: ""; position: absolute; left: 0; top: 10px; width: 20px; height: 20px;
+    border: 3px solid var(--line); border-radius: 6px; background: var(--primary);
+  }
+  .readme code { font-family: var(--font-mono); font-size: 0.9em; background: var(--surface-3); border: 2px solid var(--line); padding: 0 6px; border-radius: 6px; }
+  .codeblock { border: 3px solid var(--line); border-radius: 14px; overflow: hidden; margin: 18px 0 24px; box-shadow: 6px 6px 0 var(--line); }
+  .codeblock header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 14px; background: var(--highlight); color: #000; border-bottom: 3px solid var(--line); font-family: var(--font-display); font-weight: 800; text-transform: uppercase; font-size: 14px; }
+  .codeblock button { min-height: 40px; padding: 4px 12px; border: 2px solid #000; background: #fff; color: #000; border-radius: 8px; font-family: var(--font-display); font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .codeblock button:hover { background: #000; color: #fff; }
+  .codeblock pre { margin: 0; padding: 18px; background: #0b0b0b; color: #fff; overflow-x: auto; font-family: var(--font-mono); font-size: 16px; line-height: 1.6; }
+  .codeblock .p { color: var(--highlight); }
+  .codeblock .c { color: #b9c6ff; }
+  :root[data-theme="dark"] .codeblock { box-shadow: 6px 6px 0 #fff; }
+
+  /* ---------- Screen 2: pull request ---------- */
+  .pr-head { padding: 28px 0 0; }
+  .pr-title { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin: 0; }
+  .pr-title .t { font-family: var(--font-display); font-weight: 900; font-stretch: 110%; font-size: clamp(34px, 5vw, 60px); letter-spacing: -0.025em; line-height: 1; }
+  .pr-title .n { font-family: var(--font-mono); font-weight: 600; font-size: 28px; color: var(--text-3); }
+  .pr-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 16px 0 0; font-size: 18px; }
+  .branchpair { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 16px; font-weight: 600; }
+  .branchpair span { padding: 3px 10px; border: 2px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+  .branchpair span.target { background: var(--highlight); color: #000; }
+  .pr-tabs { margin-top: 24px; }
+  .pr-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 36px; padding: 28px 0 56px; align-items: start; }
+  .thread { display: grid; gap: 20px; min-width: 0; }
+  .comment { border: 3px solid var(--line); border-radius: 16px; background: var(--surface); overflow: hidden; }
+  .comment header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; background: var(--surface-2); border-bottom: 3px solid var(--line); }
+  .comment header .name { font-family: var(--font-display); font-weight: 800; font-size: 19px; }
+  .comment header .when { font-size: 16px; color: var(--text-3); }
+  .comment header .role { margin-left: auto; }
+  .tag { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; min-height: 30px; border: 2px solid var(--line); border-radius: 999px; font-family: var(--font-display); font-weight: 700; font-size: 14px; background: var(--surface); }
+  .tag.author { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+  .comment .body { padding: 18px 20px 20px; font-size: 19px; line-height: 1.6; }
+  .comment .body p { margin: 0 0 12px; }
+  .comment .body p:last-child { margin: 0; }
+  .comment .body code { font-family: var(--font-mono); font-size: 0.9em; background: var(--surface-3); border: 2px solid var(--line); padding: 0 6px; border-radius: 6px; }
+  .comment footer { display: flex; gap: 10px; flex-wrap: wrap; padding: 0 20px 18px; }
+
+  .merge {
+    border: 3px solid var(--line); border-radius: 16px; background: var(--success-soft); padding: 20px; display: grid; gap: 16px;
+    box-shadow: 6px 6px 0 var(--line);
+  }
+  .merge .status { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; font-family: var(--font-display); font-weight: 800; font-size: 20px; line-height: 1.25; }
+  .merge .status .tick { width: 40px; height: 40px; border-radius: 50%; background: var(--success); color: #fff; display: grid; place-items: center; border: 3px solid var(--line); }
+  .merge .status .tick svg { width: 22px; height: 22px; stroke-width: 3; }
+  .merge .status small { display: block; font-family: var(--font-text); font-weight: 500; font-size: 16px; margin-top: 4px; color: var(--text-2); }
+  .merge .btn-success { min-height: 56px; font-size: 20px; }
+  .merge .hint { font-size: 15px; color: var(--text-2); margin: 0; }
+
+  .composer { border: 3px solid var(--line); border-radius: 16px; padding: 16px; background: var(--surface); }
+  .composer label { display: block; font-family: var(--font-display); font-weight: 800; font-size: 17px; margin-bottom: 8px; }
+  .composer textarea {
+    width: 100%; min-height: 110px; resize: vertical; padding: 12px; font-size: 18px;
+    background: var(--surface); border: 3px solid var(--line); border-radius: 12px;
+  }
+  .composer textarea:focus { outline: none; box-shadow: 0 0 0 6px var(--focus-ring); }
+  .composer .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .composer .row small { font-size: 15px; color: var(--text-3); }
+
+  .side { display: grid; gap: 14px; min-width: 0; }
+  .side-card { border: 3px solid var(--line); border-radius: 14px; padding: 14px 16px; background: var(--surface); }
+  .side-card h4 { margin: 0 0 8px; font-family: var(--font-display); font-weight: 900; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .side-card p { margin: 0; font-size: 17px; }
+
+  .diff { border: 3px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--surface); margin-top: 6px; min-width: 0; }
+  .diff-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 16px; background: #000; color: #fff; }
+  .diff-head .path { font-family: var(--font-mono); font-weight: 600; font-size: 16px; overflow-wrap: anywhere; }
+  .diff-head .stat { display: inline-flex; gap: 8px; font-family: var(--font-mono); font-weight: 700; font-size: 15px; }
+  .stat .add-n { background: #00e27a; color: #000; padding: 2px 8px; border-radius: 6px; }
+  .stat .del-n { background: #ff7b86; color: #000; padding: 2px 8px; border-radius: 6px; }
+  .diff-scroll { overflow-x: auto; }
+  .diff-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 15px; line-height: 1.5; }
+  .diff-table td { padding: 0; vertical-align: top; }
+  .diff-table .hunk td { background: var(--surface-3); padding: 6px 16px; font-weight: 600; font-size: 14px; border-bottom: 2px solid var(--line); }
+  .diff-table .ln { width: 1%; min-width: 44px; padding: 0 10px; text-align: right; color: var(--text-3); font-variant-numeric: tabular-nums; border-right: 2px solid var(--line); user-select: none; white-space: nowrap; }
+  .diff-table .sg { width: 1%; padding: 0 12px; text-align: center; font-weight: 700; user-select: none; }
+  .diff-table .cd { padding: 0 16px 0 8px; white-space: pre; }
+  .diff-table tr.add td { background: #c9f7dc; color: #000; }
+  .diff-table tr.del td { background: #ffd3d7; color: #000; }
+  .diff-table tr.add .sg { color: #005a2b; }
+  .diff-table tr.del .sg { color: #a80d1f; }
+  .diff-table tr.add .cd, .diff-table tr.del .cd { color: #000; }
+  .diff-table tr.ctx td { color: var(--text); }
+  .diff-table tr td .sign-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .diff-table tr.add td { background: #0c3b22; color: #fff; }
+    :root:not([data-theme="light"]) .diff-table tr.del td { background: #4a1218; color: #fff; }
+    :root:not([data-theme="light"]) .diff-table tr.add .sg { color: #5fe39a; }
+    :root:not([data-theme="light"]) .diff-table tr.del .sg { color: #ff8a95; }
+    :root:not([data-theme="light"]) .diff-table tr.add .cd, :root:not([data-theme="light"]) .diff-table tr.del .cd { color: #fff; }
+  }
+  :root[data-theme="dark"] .diff-table tr.add td { background: #0c3b22; color: #fff; }
+  :root[data-theme="dark"] .diff-table tr.del td { background: #4a1218; color: #fff; }
+  :root[data-theme="dark"] .diff-table tr.add .sg { color: #5fe39a; }
+  :root[data-theme="dark"] .diff-table tr.del .sg { color: #ff8a95; }
+  :root[data-theme="dark"] .diff-table tr.add .cd, :root[data-theme="dark"] .diff-table tr.del .cd { color: #fff; }
+  .diff-foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-top: 3px solid var(--line); font-size: 16px; }
+
+  /* ---------- Screen 3: issues ---------- */
+  .issues-top { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 26px 0 18px; }
+  .issues-top h2 { margin: 0; font-family: var(--font-display); font-weight: 900; font-stretch: 112%; font-size: clamp(34px, 5vw, 56px); letter-spacing: -0.025em; line-height: 1; }
+  .issues-top .spacer { flex: 1; }
+  .toggle { display: inline-flex; border: 3px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); }
+  .toggle button {
+    min-height: 52px; padding: 6px 18px; border: 0; background: var(--surface); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 800; font-size: 18px;
+  }
+  .toggle button + button { border-left: 3px solid var(--line); }
+  .toggle button[aria-pressed="true"] { background: #000; color: #fff; }
+  .toggle button[aria-pressed="false"]:hover { background: var(--highlight); color: #000; }
+  .toggle button[aria-pressed="true"] .count { background: #fff; color: #000; border-color: #fff; }
+  .toggle svg { width: 22px; height: 22px; }
+  .toggle .ico-open { color: var(--success); }
+  .toggle .ico-closed { color: var(--primary); }
+  .toggle button[aria-pressed="true"] .ico-open, .toggle button[aria-pressed="true"] .ico-closed { color: inherit; }
+  .filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 0 0 18px; }
+  .search { flex: 1 1 280px; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; border: 3px solid var(--line); border-radius: 14px; background: var(--surface); }
+  .search svg { width: 22px; height: 22px; }
+  .search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-family: var(--font-mono); font-size: 16px; font-weight: 500; padding: 8px 0; }
+  .search:focus-within { box-shadow: 0 0 0 6px var(--focus-ring); }
+  .chipfilter { display: inline-flex; align-items: center; gap: 8px; min-height: 52px; padding: 6px 16px; border: 3px solid var(--line); border-radius: 14px; background: var(--surface); font-family: var(--font-display); font-weight: 700; font-size: 17px; cursor: pointer; }
+  .chipfilter:hover { background: var(--highlight); color: #000; }
+  .chipfilter svg { width: 20px; height: 20px; }
+
+  .issue-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .issue {
+    position: relative; display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px 18px; align-items: start;
+    padding: 18px 18px 18px 16px; border: 3px solid var(--line); border-radius: 16px; background: var(--surface);
+    transition: transform 90ms ease, box-shadow 90ms ease;
+  }
+  .issue:hover, .issue:focus-within { box-shadow: 6px 6px 0 var(--line); transform: translate(-2px, -2px); }
+  .issue .state {
+    width: 52px; height: 52px; display: grid; place-items: center; border: 3px solid var(--line); border-radius: 14px;
+  }
+  .issue .state svg { width: 30px; height: 30px; stroke-width: 2.6; }
+  .state.open { background: var(--success); color: #fff; }
+  .state.closed { background: var(--primary); color: var(--primary-ink); }
+  .issue .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
+  .issue .title { font-family: var(--font-display); font-weight: 800; font-stretch: 104%; font-size: 23px; line-height: 1.2; color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+  .issue .title::after { content: ""; position: absolute; inset: 0; border-radius: 16px; }
+  .issue .title:hover { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; background: none; }
+  .issue .title:focus-visible { outline: none; }
+  .issue:focus-within { box-shadow: 0 0 0 6px var(--focus-ring), 6px 6px 0 var(--line); }
+  .issue .meta { grid-column: 2; font-size: 16px; color: var(--text-2); }
+  .issue .meta .mono { font-weight: 600; color: var(--text); }
+  .issue .labels { grid-column: 2; display: flex; gap: 8px; flex-wrap: wrap; }
+  .label { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 2px 12px; border: 2px solid var(--line); border-radius: 999px; font-family: var(--font-display); font-weight: 700; font-size: 14px; background: var(--surface); }
+  .label.bug { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .label.enh { background: var(--highlight); color: #000; border-color: #000; }
+  .label.design { background: #ffc2d4; color: #000; border-color: #000; }
+  .label.docs { background: #b7f0cf; color: #000; border-color: #000; }
+  .label svg { width: 16px; height: 16px; }
+  .issue .aside { grid-column: 3; grid-row: 1 / span 3; display: inline-flex; align-items: center; gap: 8px; align-self: center; min-height: 44px; padding: 6px 14px; border: 3px solid var(--line); border-radius: 12px; font-family: var(--font-display); font-weight: 800; font-size: 17px; background: var(--surface-2); color: var(--text); }
+  .issue .aside svg { width: 22px; height: 22px; }
+  .issue .aside .sr-only { position: absolute; }
+  .issue-foot { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; margin-top: 22px; font-size: 17px; }
+  .pager { display: inline-flex; gap: 10px; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 1080px) {
+    .repo-grid, .pr-grid { grid-template-columns: minmax(0, 1fr); }
+    .side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 760px) {
+    body { font-size: 17px; }
+    .hero { padding: 32px 16px 24px; }
+    .gallery { padding: 32px 16px 72px; gap: 56px; }
+    .frame { box-shadow: 6px 6px 0 var(--line); }
+    .frame-inner { padding: 0 16px; }
+    .topbar { gap: 12px; }
+    .logo-mark { width: 40px; height: 40px; font-size: 26px; }
+    .wordmark { font-size: 26px; }
+    .top-actions { margin-left: 0; width: 100%; justify-content: space-between; }
+    .top-actions .btn { flex: 1 1 auto; }
+    .commitbar { grid-template-columns: minmax(0, 1fr); }
+    .commitbar .meta { justify-content: flex-start; }
+    .filelist .row .what { display: none; }
+    .side { grid-template-columns: minmax(0, 1fr); }
+    .tab { padding-inline: 12px; font-size: 16px; }
+    .issue { grid-template-columns: 44px minmax(0, 1fr); padding: 14px; gap: 8px 12px; }
+    .issue .state { width: 44px; height: 44px; border-radius: 12px; }
+    .issue .state svg { width: 26px; height: 26px; }
+    .issue .title { font-size: 20px; }
+    .issue .aside { grid-column: 2; grid-row: auto; justify-self: start; }
+    .issue .meta, .issue .labels { grid-column: 2; }
+    .issues-top h2 { font-size: 40px; }
+    .toggle { width: 100%; }
+    .toggle button { flex: 1 1 50%; justify-content: center; padding-inline: 10px; font-size: 17px; }
+    .pr-title .n { font-size: 22px; }
+    .merge .btn-success { width: 100%; }
+    .diff-table { font-size: 13.5px; }
+    .diff-table .ln { min-width: 34px; padding: 0 6px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="7" r="2.2"/><path d="M6 7.2v9.6M18 9.2c0 5-6 4-11 8"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.5l3.5 2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M4.5 15.5v-11a2 2 0 0 1 2-2h9"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+    <symbol id="i-issue-open" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></symbol>
+    <symbol id="i-issue-closed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.6L16 9.5"/></symbol>
+    <symbol id="i-comment" viewBox="0 0 24 24"><path d="M4 5.5h16v11H9.5L5 20.5v-4H4z"/></symbol>
+    <symbol id="i-pr" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="19" r="2.2"/><path d="M6 7.2v9.6M18 16.8V9.5a3 3 0 0 0-3-3h-3"/><path d="M13 3.5l-2.5 3 2.5 3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4.5v15M4.5 12h15"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-merge" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="18" r="2.2"/><path d="M6 8.2v7.6M18 15.8V10a4 4 0 0 0-4-4h-2"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M10 19h4"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="4"/><path d="M4.5 20.5c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5"/></symbol>
+  </defs>
+</svg>
+
+<header class="hero">
+  <span class="kicker">Ether design exploration &middot; Direction 10 of 10</span>
+  <h1>Bold, clear, <br>easy to hit</h1>
+  <p>Pure white and pure black, one loud blue, a yellow highlight that means &ldquo;look here&rdquo;. Every action has a label and an icon, every state has a word, and every target is at least 44 pixels square.</p>
+</header>
+
+<main class="gallery">
+
+  <!-- ============ 01 REPOSITORY ============ -->
+  <section aria-labelledby="s1">
+    <div class="frame-head"><span class="n">01</span><h2 id="s1">Repository code view</h2></div>
+    <article class="frame">
+      <div class="frame-inner">
+
+        <nav class="topbar" aria-label="Global">
+          <a class="logo" href="#" aria-label="Ether home">
+            <span class="logo-mark" aria-hidden="true">E</span>
+            <span class="wordmark">Ether</span>
+          </a>
+          <div class="top-actions">
+            <a class="btn btn-primary" href="#"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New repository</a>
+            <button class="me" aria-haspopup="menu" aria-label="Account menu, signed in as admin">
+              <span class="avatar sm av-admin" aria-hidden="true">AD</span>
+              admin
+              <svg class="i" aria-hidden="true"><use href="#i-chev"/></svg>
+            </button>
+          </div>
+        </nav>
+
+        <div class="crumbs">
+          <span class="owner">admin</span><span class="sep">/</span><h3 class="repo" style="margin:0">ether-core</h3>
+          <span class="pill private"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Private</span>
+        </div>
+        <p class="desc">The Ether server and web client: git over HTTPS, invite codes, and a deliberately small review UI.</p>
+
+        <nav class="tabs" aria-label="Repository sections">
+          <button class="tab" aria-current="page"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>Code</button>
+          <button class="tab"><svg class="i" aria-hidden="true"><use href="#i-issue-open"/></svg>Issues <span class="count">5</span></button>
+          <button class="tab"><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg>Pull requests <span class="count">1</span></button>
+          <button class="tab"><svg class="i" aria-hidden="true"><use href="#i-filter"/></svg>Settings</button>
+        </nav>
+
+        <div class="toolbar">
+          <button class="btn branch" aria-label="Switch branch. Current branch: main">
+            <svg class="i" aria-hidden="true"><use href="#i-branch"/></svg>
+            <span><span class="label-k">Branch</span> <span class="name">main</span></span>
+            <svg class="i" aria-hidden="true"><use href="#i-chev"/></svg>
+          </button>
+          <span class="meta-line"><strong class="num">3</strong> branches</span>
+          <span class="spacer"></span>
+          <button class="btn"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg>Commits <span class="count">148</span></button>
+        </div>
+
+        <div class="commitbar">
+          <span class="avatar av-jonas" aria-hidden="true">JN</span>
+          <div class="msg"><span class="who">jonas</span>&nbsp; <a href="#">Port diff renderer to streaming parser</a></div>
+          <div class="meta">
+            <span class="chip-sha">a3f9c2e</span>
+            <span class="time"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg>2 hours ago</span>
+          </div>
+        </div>
+
+        <div class="repo-grid">
+          <div>
+            <div class="filelist" role="table" aria-label="Files in main">
+              <div class="row head" role="row"><span role="columnheader">Name</span><span role="columnheader" class="r">Size or last updated</span></div>
+              <div class="row" role="row">
+                <div class="name"><span class="ico dir" aria-hidden="true"><svg class="i"><use href="#i-folder"/></svg></span>
+                  <div><a href="#">src/</a><span class="what">Move session handling into src/auth</span></div></div>
+                <div class="meta" role="cell"><strong>2 hours ago</strong>folder</div>
+              </div>
+              <div class="row" role="row">
+                <div class="name"><span class="ico dir" aria-hidden="true"><svg class="i"><use href="#i-folder"/></svg></span>
+                  <div><a href="#">e2e/</a><span class="what">Cover push over HTTPS with a real git client</span></div></div>
+                <div class="meta" role="cell"><strong>yesterday</strong>folder</div>
+              </div>
+              <div class="row" role="row">
+                <div class="name"><span class="ico dir" aria-hidden="true"><svg class="i"><use href="#i-folder"/></svg></span>
+                  <div><a href="#">drizzle/</a><span class="what">Add invites table</span></div></div>
+                <div class="meta" role="cell"><strong>3 days ago</strong>folder</div>
+              </div>
+              <div class="row" role="row">
+                <div class="name"><span class="ico file" aria-hidden="true"><svg class="i"><use href="#i-file"/></svg></span>
+                  <div><a href="#">README.md</a><span class="what">Document tailnet-only setup</span></div></div>
+                <div class="meta" role="cell"><strong>2.1 KB</strong>3 weeks ago</div>
+              </div>
+              <div class="row" role="row">
+                <div class="name"><span class="ico file" aria-hidden="true"><svg class="i"><use href="#i-file"/></svg></span>
+                  <div><a href="#">package.json</a><span class="what">Bump drizzle-orm to 0.44</span></div></div>
+                <div class="meta" role="cell"><strong>1.4 KB</strong>5 days ago</div>
+              </div>
+              <div class="row" role="row">
+                <div class="name"><span class="ico file" aria-hidden="true"><svg class="i"><use href="#i-file"/></svg></span>
+                  <div><a href="#">tsconfig.json</a><span class="what">Initial commit</span></div></div>
+                <div class="meta" role="cell"><strong>512 B</strong>4 months ago</div>
+              </div>
+            </div>
+
+            <div class="readme" style="margin-top: 40px">
+              <p class="readme-title"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>README.md</p>
+              <h2>ether-core</h2>
+              <p style="font-size: 21px">Ether is a small, invite-only place to keep git repositories for a handful of friends. This repository holds the server and the web client.</p>
+              <h3>Running it locally</h3>
+              <p>You need Bun. For the tailnet URL to resolve you also need a Tailscale node on the machine. Then:</p>
+              <div class="codeblock">
+                <header>
+                  <span>Shell</span>
+                  <button type="button" data-copy="bun install&#10;bun run dev"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy</button>
+                </header>
+                <pre><span class="p">$</span> bun install
+<span class="p">$</span> bun run dev
+<span class="c"># first run creates data/ and the sqlite file</span></pre>
+              </div>
+              <h3>Good to know</h3>
+              <ul>
+                <li>The first account is created with <code>bun run scripts/make-admin.ts</code>.</li>
+                <li>Invites are minted in Settings, then People, and they expire after seven days.</li>
+                <li>Repositories live on disk under <code>data/repos</code>, one bare repo each.</li>
+              </ul>
+            </div>
+          </div>
+
+          <aside class="side" aria-label="Clone and repository facts">
+            <section class="clone-card" aria-labelledby="clone-h">
+              <h3 id="clone-h">Clone this repo</h3>
+              <p>Copy the HTTPS address, then paste it into git. Git will ask for your Ether username and an access token.</p>
+              <code class="clone-url" id="clone-url">https://ether.example.ts.net/admin/ether-core.git</code>
+              <button class="btn btn-primary btn-block" type="button" id="copy-btn"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy URL</button>
+              <p class="copy-state" id="copy-state" role="status" aria-live="polite"></p>
+            </section>
+            <section class="side-card">
+              <h4 class="facts-title">About</h4>
+              <dl class="facts">
+                <div><dt>Owner</dt><dd>admin</dd></div>
+                <div><dt>Visibility</dt><dd>Private</dd></div>
+                <div><dt>Shared with</dt><dd>3 people</dd></div>
+                <div><dt>Default branch</dt><dd>main</dd></div>
+              </dl>
+            </section>
+          </aside>
+        </div>
+
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ 02 PULL REQUEST ============ -->
+  <section aria-labelledby="s2">
+    <div class="frame-head"><span class="n">02</span><h2 id="s2">Pull request</h2></div>
+    <article class="frame">
+      <div class="frame-inner">
+
+        <nav class="topbar" aria-label="Global">
+          <a class="logo" href="#" aria-label="Ether home">
+            <span class="logo-mark" aria-hidden="true">E</span>
+            <span class="wordmark">Ether</span>
+          </a>
+          <div class="top-actions">
+            <a class="btn btn-primary" href="#"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New repository</a>
+            <button class="me" aria-haspopup="menu" aria-label="Account menu, signed in as admin">
+              <span class="avatar sm av-admin" aria-hidden="true">AD</span>
+              admin
+              <svg class="i" aria-hidden="true"><use href="#i-chev"/></svg>
+            </button>
+          </div>
+        </nav>
+
+        <header class="pr-head">
+          <h3 class="pr-title">
+            <span class="t">Add invite-only registration</span>
+            <span class="n">#12</span>
+          </h3>
+          <p class="pr-sub">
+            <span class="pill open"><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg>Open</span>
+            <span><strong>admin</strong> wants to merge</span>
+            <span class="branchpair"><span>feature/invites</span> into <span class="target">main</span></span>
+          </p>
+        </header>
+
+        <nav class="tabs pr-tabs" aria-label="Pull request sections">
+          <button class="tab" aria-current="page"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>Conversation</button>
+          <button class="tab"><svg class="i" aria-hidden="true"><use href="#i-branch"/></svg>Commits <span class="count">3</span></button>
+          <button class="tab"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>Files changed <span class="count">4</span></button>
+        </nav>
+
+        <div class="pr-grid">
+          <div class="thread">
+
+            <article class="comment">
+              <header>
+                <span class="avatar av-mira" aria-hidden="true">MK</span>
+                <span class="name">mira</span>
+                <span class="when">commented 2 days ago</span>
+                <span class="tag role"><svg class="i" aria-hidden="true"><use href="#i-user"/></svg>Reviewer</span>
+              </header>
+              <div class="body">
+                <p>Should invite codes be single-use? As written, anyone holding the link can register as many accounts as they like until it expires.</p>
+                <p>I would rather not find that out from a stranger in a group chat.</p>
+              </div>
+            </article>
+
+            <article class="comment">
+              <header>
+                <span class="avatar av-admin" aria-hidden="true">AD</span>
+                <span class="name">admin</span>
+                <span class="when">replied 2 days ago</span>
+                <span class="tag author"><svg class="i" aria-hidden="true"><use href="#i-tag"/></svg>Author</span>
+              </header>
+              <div class="body">
+                <p>Good catch. Single-use is now the default.</p>
+                <p>The <code>--reusable</code> flag exists on the CLI for the one group invite we ever want to hand out. It stays a boolean on the row until we need more.</p>
+              </div>
+            </article>
+
+            <section class="diff" aria-label="Diff for src/auth/invites.ts">
+              <div class="diff-head">
+                <span class="path">src/auth/invites.ts</span>
+                <span class="stat"><span class="add-n">+7</span><span class="del-n">&minus;1</span></span>
+              </div>
+              <div class="diff-scroll">
+                <table class="diff-table">
+                  <colgroup><col style="width:52px"><col style="width:52px"><col style="width:36px"><col></colgroup>
+                  <tbody>
+                    <tr class="hunk"><td colspan="4">@@ -18,4 +18,10 @@ export async function createInvite(actor: User, opts: InviteOpts) {</td></tr>
+                    <tr class="ctx"><td class="ln">18</td><td class="ln">18</td><td class="sg"> </td><td class="cd">  const code = randomToken(12);</td></tr>
+                    <tr class="del"><td class="ln">19</td><td class="ln"></td><td class="sg">-</td><td class="cd">  await db.insert(invites).values({ code });</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">19</td><td class="sg">+</td><td class="cd">  const expires = addDays(now(), opts.days ?? 7);</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">20</td><td class="sg">+</td><td class="cd">  await db.insert(invites).values({</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">21</td><td class="sg">+</td><td class="cd">    code,</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">22</td><td class="sg">+</td><td class="cd">    createdBy: actor.id,</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">23</td><td class="sg">+</td><td class="cd">    expiresAt: expires,</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">24</td><td class="sg">+</td><td class="cd">    singleUse: !opts.reusable,</td></tr>
+                    <tr class="add"><td class="ln"></td><td class="ln">25</td><td class="sg">+</td><td class="cd">  });</td></tr>
+                    <tr class="ctx"><td class="ln">20</td><td class="ln">26</td><td class="sg"> </td><td class="cd">  return code;</td></tr>
+                    <tr class="ctx"><td class="ln">21</td><td class="ln">27</td><td class="sg"> </td><td class="cd">}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="diff-foot">
+                <span>Showing 1 of 4 changed files</span>
+                <a href="#">Open the full diff</a>
+              </div>
+            </section>
+
+            <form class="composer" onsubmit="return false">
+              <label for="reply">Add a comment</label>
+              <textarea id="reply" placeholder="Write a reply. Markdown works."></textarea>
+              <div class="row">
+                <small>Be kind. Your friends are reading this.</small>
+                <button class="btn btn-primary" type="submit"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>Comment</button>
+              </div>
+            </form>
+          </div>
+
+          <aside class="side" aria-label="Merge and details">
+            <section class="merge" aria-label="Merge status">
+              <div class="status">
+                <span class="tick" aria-hidden="true"><svg class="i"><use href="#i-check"/></svg></span>
+                <div>This branch has no conflicts with the base branch<small>Merging will close #12 and update main.</small></div>
+              </div>
+              <button class="btn btn-success btn-block" type="button"><svg class="i" aria-hidden="true"><use href="#i-merge"/></svg>Merge pull request</button>
+              <p class="hint">Only squash merges are allowed on this repository.</p>
+            </section>
+            <section class="side-card">
+              <h4>Reviewers</h4>
+              <p><span class="label design" style="background:var(--surface)">mira</span> <span class="label docs">jonas</span></p>
+            </section>
+            <section class="side-card">
+              <h4>Labels</h4>
+              <p><span class="label enh"><svg class="i" aria-hidden="true"><use href="#i-tag"/></svg>enhancement</span></p>
+            </section>
+            <section class="side-card">
+              <h4>Closes</h4>
+              <p>#13 Let invites expire after seven days</p>
+            </section>
+          </aside>
+        </div>
+
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ 03 ISSUES ============ -->
+  <section aria-labelledby="s3">
+    <div class="frame-head"><span class="n">03</span><h2 id="s3">Issues list</h2></div>
+    <article class="frame">
+      <div class="frame-inner">
+
+        <nav class="topbar" aria-label="Global">
+          <a class="logo" href="#" aria-label="Ether home">
+            <span class="logo-mark" aria-hidden="true">E</span>
+            <span class="wordmark">Ether</span>
+          </a>
+          <div class="top-actions">
+            <a class="btn btn-primary" href="#"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New repository</a>
+            <button class="me" aria-haspopup="menu" aria-label="Account menu, signed in as admin">
+              <span class="avatar sm av-admin" aria-hidden="true">AD</span>
+              admin
+              <svg class="i" aria-hidden="true"><use href="#i-chev"/></svg>
+            </button>
+          </div>
+        </nav>
+
+        <div class="crumbs">
+          <span class="owner">admin</span><span class="sep">/</span><span class="repo" style="font-size: clamp(28px, 4vw, 40px)">ether-core</span>
+        </div>
+
+        <nav class="tabs" aria-label="Repository sections" style="margin-top: 12px">
+          <button class="tab"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>Code</button>
+          <button class="tab" aria-current="page"><svg class="i" aria-hidden="true"><use href="#i-issue-open"/></svg>Issues <span class="count">5</span></button>
+          <button class="tab"><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg>Pull requests <span class="count">1</span></button>
+          <button class="tab"><svg class="i" aria-hidden="true"><use href="#i-filter"/></svg>Settings</button>
+        </nav>
+
+        <div class="issues-top">
+          <h2>Issues</h2>
+          <span class="spacer"></span>
+          <div class="toggle" role="group" aria-label="Show issues by state">
+            <button type="button" aria-pressed="true"><svg class="i ico-open" aria-hidden="true"><use href="#i-issue-open"/></svg>5 Open</button>
+            <button type="button" aria-pressed="false"><svg class="i ico-closed" aria-hidden="true"><use href="#i-issue-closed"/></svg>9 Closed</button>
+          </div>
+          <button class="btn btn-primary"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New issue</button>
+        </div>
+
+        <div class="filters">
+          <label class="search">
+            <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+            <span class="sr-only">Search issues</span>
+            <input type="search" value="is:issue is:open" aria-label="Search issues">
+          </label>
+          <button class="chipfilter" type="button"><svg class="i" aria-hidden="true"><use href="#i-filter"/></svg>Filters</button>
+        </div>
+
+        <ol class="issue-list">
+          <li class="issue">
+            <span class="state open" aria-hidden="true"><svg class="i"><use href="#i-issue-open"/></svg></span>
+            <div class="head"><a class="title" href="#">Session cookie is missing SameSite on Safari</a></div>
+            <div class="meta"><span class="mono">#14</span> opened 3 days ago by kat</div>
+            <div class="labels"><span class="label bug"><svg class="i" aria-hidden="true"><use href="#i-tag"/></svg>bug</span></div>
+            <span class="aside"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>2<span class="sr-only">comments</span></span>
+          </li>
+          <li class="issue">
+            <span class="state open" aria-hidden="true"><svg class="i"><use href="#i-issue-open"/></svg></span>
+            <div class="head"><a class="title" href="#">Let invites expire after seven days</a></div>
+            <div class="meta"><span class="mono">#13</span> opened 4 days ago by mira</div>
+            <div class="labels"><span class="label enh"><svg class="i" aria-hidden="true"><use href="#i-tag"/></svg>enhancement</span></div>
+            <span class="aside"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>5<span class="sr-only">comments</span></span>
+          </li>
+          <li class="issue">
+            <span class="state open" aria-hidden="true"><svg class="i"><use href="#i-issue-open"/></svg></span>
+            <div class="head"><a class="title" href="#">Clone hangs on packfiles over 200 MB</a></div>
+            <div class="meta"><span class="mono">#11</span> opened 1 week ago by jonas</div>
+            <div class="labels"><span class="label bug"><svg class="i" aria-hidden="true"><use href="#i-tag"/></svg>bug</span><span class="label">mirror</span></div>
+            <span class="aside"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>0<span class="sr-only">comments</span></span>
+          </li>
+          <li class="issue">
+            <span class="state open" aria-hidden="true"><svg class="i"><use href="#i-issue-open"/></svg></span>
+            <div class="head"><a class="title" href="#">Give the diff viewer a reading mode for long hunks</a></div>
+            <div class="meta"><span class="mono">#9</span> opened 2 weeks ago by kat</div>
+            <div class="labels"><span class="label design"><svg class="i" aria-hidden="true"><use href="#i-tag"/></svg>design</span></div>
+            <span class="aside"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>3<span class="sr-only">comments</span></span>
+          </li>
+          <li class="issue">
+            <span class="state open" aria-hidden="true"><svg class="i"><use href="#i-issue-open"/></svg></span>
+            <div class="head"><a class="title" href="#">Document the tailnet setup for friends</a></div>
+            <div class="meta"><span class="mono">#8</span> opened 3 weeks ago by admin</div>
+            <div class="labels"><span class="label docs"><svg class="i" aria-hidden="true"><use href="#i-tag"/></svg>docs</span></div>
+            <span class="aside"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>1<span class="sr-only">comment</span></span>
+          </li>
+        </ol>
+
+        <div class="issue-foot">
+          <span>Sorted by newest activity. Updated 12 minutes ago.</span>
+          <span class="pager">
+            <button class="btn btn-sm" type="button" disabled>&larr; Newer</button>
+            <button class="btn btn-sm" type="button">Older &rarr;</button>
+          </span>
+        </div>
+
+      </div>
+    </article>
+  </section>
+
+</main>
+
+<script>
+  // Copy buttons confirm in text, not only by icon or colour.
+  (function () {
+    function announce(el, msg) { if (el) el.textContent = msg; }
+    var url = document.getElementById("clone-url");
+    var copyBtn = document.getElementById("copy-btn");
+    var state = document.getElementById("copy-state");
+    function copy(text, done) {
+      try {
+        navigator.clipboard.writeText(text).then(done, function () { done(false); });
+      } catch (e) { done(false); }
+    }
+    if (copyBtn && url) {
+      copyBtn.addEventListener("click", function () {
+        copy(url.textContent.trim(), function (ok) {
+          announce(state, ok === false ? "Copy failed. Select the address and copy it by hand." : "Copied the clone URL.");
+        });
+      });
+    }
+    document.querySelectorAll("[data-copy]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        copy(btn.getAttribute("data-copy"), function (ok) {
+          btn.lastChild.textContent = ok === false ? " Failed" : " Copied";
+          setTimeout(function () { btn.lastChild.textContent = " Copy"; }, 1600);
+        });
+      });
+    });
+    document.querySelectorAll(".toggle button").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        btn.parentElement.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
+      });
+    });
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,1350 @@
+<!--
+Direction 02, Sidebar workspace. Layout: Linear-style app shell with a persistent left sidebar (workspace, Inbox, pull requests, issues, pinned repositories) and a slim breadcrumb header over the content.
+Palette: dark-first graphite with a restrained indigo-violet accent (#8b8cf8 on dark, #4f46e5 on light). The light theme has its own tokens, not an inversion.
+Type: Geist for UI and Geist Mono for code, shas and branch names, on a 12/14/16/20 scale. Compact 32px rows, tabular counts, keyboard hints on primary actions.
+Distinct: dense list rows and a quiet sidebar; under 900px the sidebar collapses to a top bar with a menu button.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ether, direction 02: Sidebar workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Tokens: light is the default, dark follows the OS, and data-theme can force either. */
+:root {
+  --font-ui: "Geist", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --fs-12: 12px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+
+  --page: #e9e9ed;
+  --sidebar: #f4f4f6;
+  --main: #ffffff;
+  --raised: #ffffff;
+  --hover: #ededf1;
+  --active: #e2e3ea;
+  --selected: #e8e9fd;
+  --text: #17181d;
+  --text-2: #50545f;
+  --text-3: #62677a;
+  --border: #e3e4ea;
+  --border-strong: #8a8fa0;
+
+  --accent: #4f46e5;
+  --accent-text: #4338ca;
+  --accent-subtle: #eceefe;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-active: #372fa3;
+  --on-primary: #ffffff;
+  --focus: #4f46e5;
+
+  --open: #15803d;
+  --open-bg: #dcfbe6;
+  --merged: #0f766e;
+  --merged-bg: #d5f5ef;
+  --closed: #b91c1c;
+  --closed-bg: #fde4e4;
+  --danger: #b91c1c;
+
+  --add-fg: #15803d;
+  --add-bg: #eaf8ef;
+  --add-num: #d6f0df;
+  --del-fg: #b91c1c;
+  --del-bg: #fdeeee;
+  --del-num: #f9dada;
+
+  --disabled-bg: #f0f0f3;
+  --disabled-fg: #8a8fa0;
+  --skel: #e6e7ec;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #050608;
+    --sidebar: #0f1013;
+    --main: #0c0d10;
+    --raised: #16171c;
+    --hover: #1b1d24;
+    --active: #252831;
+    --selected: #22243d;
+    --text: #ededf2;
+    --text-2: #aab0bf;
+    --text-3: #9499a8;
+    --border: #22242c;
+    --border-strong: #5f6475;
+
+    --accent: #8b8cf8;
+    --accent-text: #a9aaff;
+    --accent-subtle: #1f2140;
+    --primary: #5b5bd6;
+    --primary-hover: #6b6be0;
+    --primary-active: #4a4bbd;
+    --on-primary: #ffffff;
+    --focus: #8b8cf8;
+
+    --open: #5be2a6;
+    --open-bg: #0f2a1f;
+    --merged: #5eead4;
+    --merged-bg: #0d2b2a;
+    --closed: #fca5a5;
+    --closed-bg: #3a1619;
+    --danger: #fca5a5;
+
+    --add-fg: #5be2a6;
+    --add-bg: #0e2319;
+    --add-num: #12301f;
+    --del-fg: #fca5a5;
+    --del-bg: #2a1417;
+    --del-num: #361a1d;
+
+    --disabled-bg: #16171c;
+    --disabled-fg: #6a6f80;
+    --skel: #22242c;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --page: #050608;
+  --sidebar: #0f1013;
+  --main: #0c0d10;
+  --raised: #16171c;
+  --hover: #1b1d24;
+  --active: #252831;
+  --selected: #22243d;
+  --text: #ededf2;
+  --text-2: #aab0bf;
+  --text-3: #9499a8;
+  --border: #22242c;
+  --border-strong: #5f6475;
+
+  --accent: #8b8cf8;
+  --accent-text: #a9aaff;
+  --accent-subtle: #1f2140;
+  --primary: #5b5bd6;
+  --primary-hover: #6b6be0;
+  --primary-active: #4a4bbd;
+  --on-primary: #ffffff;
+  --focus: #8b8cf8;
+
+  --open: #5be2a6;
+  --open-bg: #0f2a1f;
+  --merged: #5eead4;
+  --merged-bg: #0d2b2a;
+  --closed: #fca5a5;
+  --closed-bg: #3a1619;
+  --danger: #fca5a5;
+
+  --add-fg: #5be2a6;
+  --add-bg: #0e2319;
+  --add-num: #12301f;
+  --del-fg: #fca5a5;
+  --del-bg: #2a1417;
+  --del-num: #361a1d;
+
+  --disabled-bg: #16171c;
+  --disabled-fg: #6a6f80;
+  --skel: #22242c;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text);
+  font: 400 var(--fs-14) / 20px var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, p { margin: 0; }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+a { color: var(--accent-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, input, textarea { font: inherit; color: inherit; }
+code, pre, .mono { font-family: var(--font-mono); }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--text-2); }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Icon sprite: 1.5px strokes at 16px and 20px. */
+.sprite symbol > * { vector-effect: non-scaling-stroke; }
+.i {
+  width: 16px; height: 16px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.i-20 { width: 20px; height: 20px; }
+
+/* Page scaffolding */
+.page { max-width: 1280px; margin: 0 auto; padding: var(--s-5) var(--s-4) var(--s-6); }
+.page-intro { margin-bottom: var(--s-5); }
+.page-intro h1 { font: 600 var(--fs-20) / 28px var(--font-ui); }
+.page-intro p { color: var(--text-2); max-width: 75ch; margin-top: var(--s-1); }
+.frame { max-width: 1280px; width: 100%; margin: 0 auto var(--s-6); min-width: 0; }
+.frame-label {
+  display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: baseline;
+  margin-bottom: var(--s-2); font: 600 var(--fs-12) / 16px var(--font-ui); color: var(--text-2);
+}
+.frame-label span { font-weight: 400; }
+.frame-body {
+  min-width: 0; background: var(--main); border: 1px solid var(--border);
+  border-radius: var(--r-lg); overflow: hidden;
+}
+
+/* Controls */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px; padding: 0 10px; min-width: 0;
+  border: 1px solid var(--border-strong); border-radius: var(--r-md);
+  background: var(--raised); color: var(--text);
+  font: 500 var(--fs-14) / 20px var(--font-ui); white-space: nowrap; cursor: pointer;
+  transition: background-color .15s, border-color .15s, color .15s, opacity .15s;
+}
+.btn:hover { background: var(--hover); }
+.btn:active { background: var(--active); }
+.btn:disabled { cursor: not-allowed; background: var(--disabled-bg); border-color: var(--border); color: var(--disabled-fg); }
+.btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.btn-primary:active { background: var(--primary-active); border-color: var(--primary-active); }
+.btn-primary:disabled { background: var(--disabled-bg); border-color: var(--border); color: var(--disabled-fg); }
+.btn .i { color: currentColor; }
+.btn-ghost { border-color: transparent; background: transparent; }
+.btn-ghost:hover { background: var(--hover); }
+
+.btn-hint { display: inline-flex; align-items: center; gap: 8px; }
+.kbd {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px;
+  border-radius: var(--r-sm); background: rgb(127 127 140 / 0.16); color: inherit; opacity: .85;
+  font: 500 var(--fs-12) / 1 var(--font-ui);
+}
+.btn-primary .kbd { background: rgb(255 255 255 / 0.2); opacity: 1; }
+
+.icon-btn {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none;
+  border: 1px solid transparent; border-radius: var(--r-md); background: transparent;
+  color: var(--text-2); cursor: pointer;
+  transition: background-color .15s, color .15s;
+}
+.icon-btn:hover { background: var(--hover); color: var(--text); }
+.icon-btn:active { background: var(--active); }
+.icon-btn:disabled { color: var(--disabled-fg); cursor: not-allowed; background: transparent; }
+
+.field { position: relative; display: flex; align-items: center; min-width: 0; }
+.field > .i { position: absolute; left: 10px; color: var(--text-2); pointer-events: none; }
+.input {
+  width: 100%; min-width: 0; height: 32px; padding: 0 var(--s-2) 0 32px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-md);
+  background: var(--raised); color: var(--text);
+  transition: border-color .15s, background-color .15s;
+}
+.input::placeholder { color: var(--text-3); opacity: 1; }
+.input:hover { border-color: var(--text-2); }
+.textarea {
+  width: 100%; min-height: 88px; padding: var(--s-2) var(--s-3); resize: vertical;
+  border: 1px solid var(--border-strong); border-radius: var(--r-md);
+  background: var(--raised); color: var(--text);
+  transition: border-color .15s;
+}
+.textarea::placeholder { color: var(--text-3); opacity: 1; }
+.textarea:hover { border-color: var(--text-2); }
+.field-label { display: block; font-weight: 500; margin-bottom: var(--s-1); }
+
+.seg {
+  display: inline-flex; flex: none; padding: 2px; gap: 2px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--raised);
+}
+.seg button {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px;
+  border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-2);
+  font: 500 var(--fs-14) / 20px var(--font-ui); cursor: pointer; white-space: nowrap;
+  transition: background-color .15s, color .15s;
+}
+.seg button:hover { background: var(--hover); color: var(--text); }
+.seg button:active { background: var(--active); }
+.seg button[aria-pressed="true"] { background: var(--active); color: var(--text); }
+.seg button:disabled { color: var(--disabled-fg); cursor: not-allowed; }
+
+.count {
+  display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--active); color: var(--text-2); text-align: center;
+  font: 500 var(--fs-12) / 18px var(--font-ui); font-variant-numeric: tabular-nums;
+}
+.pill {
+  display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  font: 500 var(--fs-12) / 18px var(--font-ui); color: var(--text-2); white-space: nowrap;
+}
+.state {
+  display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px;
+  border-radius: 999px; font: 500 var(--fs-12) / 16px var(--font-ui); white-space: nowrap;
+}
+.state-open { background: var(--open-bg); color: var(--open); }
+.state-merged { background: var(--merged-bg); color: var(--merged); }
+.state-closed { background: var(--closed-bg); color: var(--closed); }
+.branch {
+  display: inline-block; padding: 0 5px; border-radius: var(--r-sm); background: var(--hover);
+  font: 400 var(--fs-12) / 20px var(--font-mono); overflow-wrap: anywhere; color: var(--text);
+}
+.avatar {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; flex: none;
+  border-radius: 50%; background: var(--active); color: var(--text-2);
+  font: 500 var(--fs-12) / 1 var(--font-ui);
+}
+.avatar-lg { width: 28px; height: 28px; font-size: var(--fs-14); }
+.scroll { overflow-x: auto; min-width: 0; max-width: 100%; }
+
+/* App shell */
+.app {
+  display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 640px; min-width: 0;
+  background: var(--main);
+}
+.app > * { min-width: 0; }
+.app.is-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+.app.is-collapsed .sidebar { display: none; }
+
+.sidebar {
+  display: flex; flex-direction: column; gap: var(--s-1); padding: var(--s-2);
+  background: var(--sidebar); border-right: 1px solid var(--border); min-width: 0;
+}
+.sb-head { display: flex; align-items: center; gap: var(--s-1); }
+.ws-btn {
+  display: inline-flex; flex: 1; min-width: 0; align-items: center; gap: var(--s-2);
+  height: 32px; padding: 0 var(--s-2); border: 1px solid transparent; border-radius: var(--r-md);
+  background: transparent; color: var(--text); font-weight: 600; cursor: pointer;
+  transition: background-color .15s, border-color .15s;
+}
+.ws-btn:hover { background: var(--hover); }
+.ws-btn:active { background: var(--active); }
+.ws-btn .i:last-child { margin-left: auto; color: var(--text-2); }
+.ws-mark {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: var(--r-sm);
+  background: var(--primary); color: var(--on-primary); flex: none;
+}
+.ws-mark .i { width: 16px; height: 16px; }
+.sb-menu { display: none; }
+.sb-body { display: flex; flex-direction: column; gap: var(--s-1); min-width: 0; }
+.sb-search {
+  display: flex; align-items: center; gap: var(--s-2); width: 100%; height: 32px; padding: 0 var(--s-2);
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--raised);
+  color: var(--text-2); cursor: pointer; text-align: left;
+  transition: border-color .15s, background-color .15s;
+}
+.sb-search:hover { border-color: var(--border-strong); }
+.sb-search span { flex: 1; }
+.sb-search .kbd { margin-left: auto; }
+.sb-group { margin-top: var(--s-3); display: grid; gap: 2px; }
+.sb-label {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 24px; padding: 0 var(--s-2); color: var(--text-3);
+  font: 500 var(--fs-12) / 16px var(--font-ui);
+}
+.sb-item {
+  display: flex; align-items: center; gap: var(--s-2); height: 32px; padding: 0 var(--s-2);
+  border-radius: var(--r-md); color: var(--text); font-weight: 500; min-width: 0;
+  transition: background-color .15s, color .15s;
+}
+.sb-item:hover { background: var(--hover); text-decoration: none; }
+.sb-item:active { background: var(--active); }
+.sb-item > .i { color: var(--text-2); }
+.sb-item span.lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-item .count { margin-left: auto; }
+.sb-item[aria-current="page"] { background: var(--selected); color: var(--text); }
+.sb-item[aria-current="page"] > .i { color: var(--accent-text); }
+.sb-item .i.pin { color: var(--text-3); margin-left: auto; }
+.sb-foot {
+  margin-top: auto; display: flex; align-items: center; gap: var(--s-2);
+  padding: var(--s-2); border-top: 1px solid var(--border);
+}
+.sb-foot .who { flex: 1; min-width: 0; line-height: 16px; }
+.sb-foot .who strong { display: block; font-weight: 600; }
+.sb-foot .who span { font-size: var(--fs-12); color: var(--text-2); }
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.crumbs {
+  display: flex; align-items: center; gap: var(--s-2); min-height: 44px; padding: 0 var(--s-4);
+  border-bottom: 1px solid var(--border); min-width: 0;
+}
+.crumbs ol { display: flex; align-items: center; gap: var(--s-1); min-width: 0; flex-wrap: wrap; color: var(--text-2); }
+.crumbs li { display: inline-flex; align-items: center; gap: var(--s-1); white-space: nowrap; }
+.crumbs li + li::before { content: "/"; color: var(--text-3); margin-right: 2px; }
+.crumbs [aria-current="page"] { color: var(--text); font-weight: 500; }
+.crumbs .crumb-link { color: var(--text-2); }
+.crumbs .crumb-link:hover { color: var(--text); text-decoration: none; }
+.crumbs .sb-collapse { margin-left: calc(var(--s-1) * -1); }
+.content { padding: var(--s-5) var(--s-5) var(--s-6); min-width: 0; }
+.content-head { display: grid; gap: var(--s-1); min-width: 0; }
+.repo-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); font: 600 var(--fs-20) / 28px var(--font-ui); }
+.repo-title .i { color: var(--text-2); }
+.repo-title .owner { color: var(--text-2); font-weight: 400; }
+.lockpill {
+  display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px;
+  border-radius: var(--r-sm); border: 1px solid var(--border-strong);
+  font: 500 var(--fs-12) / 18px var(--font-ui); color: var(--text-2);
+}
+.desc { color: var(--text-2); max-width: 75ch; }
+
+.tabs {
+  display: flex; gap: var(--s-1); min-width: max-content; margin-top: var(--s-3);
+  border-bottom: 1px solid var(--border);
+}
+.tabs a {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 var(--s-2);
+  margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--text-2); font-weight: 500;
+  white-space: nowrap; transition: color .15s, border-color .15s, background-color .15s;
+}
+.tabs a:hover { color: var(--text); background: var(--hover); border-radius: var(--r-md) var(--r-md) 0 0; text-decoration: none; }
+.tabs a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
+.tabs-wrap { overflow-x: auto; min-width: 0; }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-5); }
+.toolbar .field { flex: 1 1 200px; max-width: 300px; }
+.toolbar .btn-code { margin-left: auto; }
+.toolbar .meta { display: inline-flex; gap: var(--s-2); color: var(--text-2); white-space: nowrap; align-items: center; }
+.toolbar .meta .i { color: var(--text-3); }
+
+.code-grid { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: var(--s-5); margin-top: var(--s-4); min-width: 0; }
+.code-grid > * { min-width: 0; }
+.commit-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); min-height: 36px; padding: 0 var(--s-3);
+  border: 1px solid var(--border); border-radius: var(--r-lg) var(--r-lg) 0 0; background: var(--sidebar);
+}
+.commit-row .msg { flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 500; }
+.commit-row .msg:hover { color: var(--accent-text); }
+.commit-row .sha { font: 400 var(--fs-12) / 20px var(--font-mono); color: var(--accent-text); }
+.commit-row .muted { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.commit-row .muted .i { color: var(--text-3); }
+
+.file-table { width: 100%; min-width: 520px; border-collapse: collapse; border: 1px solid var(--border); border-top: 0; }
+.file-table td { height: 32px; padding: 0 var(--s-3); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.file-table tr:last-child td { border-bottom: 0; }
+.file-table tbody tr { transition: background-color .15s; }
+.file-table tbody tr:hover { background: var(--hover); }
+.file-table .c-name { width: 220px; }
+.file-table .c-name a { display: inline-flex; align-items: center; gap: var(--s-2); color: var(--text); font-weight: 500; }
+.file-table .c-name a:hover { color: var(--accent-text); }
+.file-table .c-name .i { color: var(--text-2); }
+.file-table .c-msg { color: var(--text-2); max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.file-table .c-age { color: var(--text-2); width: 110px; }
+.file-table .c-size { width: 80px; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+.readme {
+  margin-top: var(--s-5); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden;
+  background: var(--main);
+}
+.readme-head {
+  display: flex; align-items: center; gap: var(--s-2); height: 36px; padding: 0 var(--s-3);
+  background: var(--sidebar); border-bottom: 1px solid var(--border); font-weight: 500;
+}
+.readme-head .i { color: var(--text-2); }
+.readme-body { padding: var(--s-5); }
+.readme-body h2 { font: 600 var(--fs-20) / 28px var(--font-ui); margin-bottom: var(--s-3); }
+.readme-body p { max-width: 75ch; color: var(--text); }
+.readme-body p + p { margin-top: var(--s-3); }
+.readme-body pre {
+  margin: var(--s-4) 0; padding: var(--s-3) var(--s-4); max-width: 100%; overflow-x: auto;
+  background: var(--sidebar); border: 1px solid var(--border); border-radius: var(--r-md);
+  font: 400 var(--fs-12) / 20px var(--font-mono); color: var(--text);
+}
+.readme-body ul { list-style: disc; padding-left: var(--s-5); margin-top: var(--s-3); max-width: 75ch; color: var(--text); }
+.readme-body li + li { margin-top: var(--s-1); }
+
+.side-col { display: grid; gap: var(--s-5); align-content: start; min-width: 0; }
+.side-block { display: grid; gap: var(--s-2); padding-bottom: var(--s-5); border-bottom: 1px solid var(--border); min-width: 0; }
+.side-block:last-child { border-bottom: 0; padding-bottom: 0; }
+.side-block h2 { font: 600 var(--fs-12) / 16px var(--font-ui); color: var(--text-3); }
+.side-block p { color: var(--text-2); }
+.clone-field { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.clone-input {
+  flex: 1; min-width: 0; height: 32px; padding: 0 var(--s-2);
+  border: 1px solid var(--border-strong); border-radius: var(--r-md);
+  background: var(--sidebar); color: var(--text);
+  font: 400 var(--fs-12) / 20px var(--font-mono); font-variant-numeric: tabular-nums;
+}
+.clone-input:hover { border-color: var(--text-2); }
+.clone-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.help { font-size: var(--fs-12); line-height: 18px; color: var(--text-2); }
+.link-line { display: inline-flex; align-items: center; gap: 6px; }
+.link-line .i { color: var(--text-2); }
+.release-line { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+.release-line strong { font: 500 var(--fs-14) / 20px var(--font-mono); }
+
+/* Pull request */
+.pr-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); font: 600 var(--fs-20) / 28px var(--font-ui); }
+.pr-title .num-ref { color: var(--text-3); font-weight: 400; }
+.pr-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-2); color: var(--text-2); }
+.pr-meta strong { color: var(--text); font-weight: 500; }
+.pr-grid { display: grid; grid-template-columns: minmax(0, 1fr) 232px; gap: var(--s-5); margin-top: var(--s-5); min-width: 0; }
+.pr-grid > * { min-width: 0; }
+.pr-main { display: grid; gap: var(--s-4); align-content: start; min-width: 0; }
+.tl { display: grid; gap: var(--s-4); }
+.tl-item { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--s-3); min-width: 0; }
+.tl-card { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--raised); min-width: 0; overflow: hidden; }
+.tl-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--s-2); min-height: 36px; padding: 6px var(--s-3);
+  background: var(--sidebar); border-bottom: 1px solid var(--border); color: var(--text-2);
+}
+.tl-head strong { color: var(--text); font-weight: 500; }
+.tl-head .pill { margin-left: auto; }
+.tl-body { padding: var(--s-3); max-width: 75ch; color: var(--text); }
+.tl-body p + p { margin-top: var(--s-2); }
+.tl-body code { font-size: var(--fs-12); padding: 0 4px; border-radius: var(--r-sm); background: var(--hover); }
+
+.merge-box {
+  display: grid; gap: var(--s-3); padding: var(--s-4); min-width: 0;
+  border: 1px solid var(--border-strong); border-radius: var(--r-lg); background: var(--raised);
+}
+.merge-box.is-conflict { border-color: var(--danger); }
+.merge-top { display: flex; flex-wrap: wrap; gap: var(--s-3) var(--s-4); align-items: flex-start; }
+.merge-status { display: flex; gap: var(--s-3); flex: 1 1 260px; min-width: 0; }
+.merge-status .i { margin-top: 2px; }
+.merge-status .ok { color: var(--open); }
+.merge-status .bad { color: var(--danger); }
+.merge-status strong { display: block; font-weight: 600; }
+.merge-status p { color: var(--text-2); margin-top: 2px; }
+.merge-action { display: grid; gap: 6px; justify-items: start; flex: 0 1 240px; }
+.merge-action p { font-size: var(--fs-12); line-height: 18px; color: var(--text-2); }
+.conflict-list { display: grid; gap: 2px; margin-top: var(--s-2); }
+.conflict-list li { font: 400 var(--fs-12) / 20px var(--font-mono); overflow-wrap: anywhere; }
+
+.composer { display: grid; gap: var(--s-2); min-width: 0; }
+.composer-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--s-2); }
+.composer-foot p { font-size: var(--fs-12); color: var(--text-2); }
+
+.changes { border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; min-width: 0; background: var(--raised); }
+.changes-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); min-height: 36px; padding: 0 var(--s-3);
+  background: var(--sidebar); border-bottom: 1px solid var(--border);
+}
+.changes-head h2 { font-weight: 600; display: flex; align-items: center; gap: var(--s-2); }
+.changes-head .seg { margin-left: auto; }
+.stat { display: inline-flex; gap: 6px; font: 500 var(--fs-12) / 18px var(--font-ui); font-variant-numeric: tabular-nums; }
+.add { color: var(--add-fg); }
+.del { color: var(--del-fg); }
+.file-list li { display: flex; align-items: center; gap: var(--s-2); min-height: 32px; padding: 0 var(--s-3); border-bottom: 1px solid var(--border); min-width: 0; }
+.file-list li:last-child { border-bottom: 0; }
+.file-list li:hover { background: var(--hover); }
+.file-list .path { flex: 1; min-width: 0; font: 400 var(--fs-12) / 20px var(--font-mono); overflow-wrap: anywhere; color: var(--text); }
+.file-list .stat { white-space: nowrap; }
+.file-list .i { color: var(--text-2); }
+.file-list li.is-open { background: var(--selected); }
+.file-list li.is-open .path { font-weight: 600; }
+.file-diff { border-top: 1px solid var(--border); min-width: 0; background: var(--main); }
+.file-diff-head {
+  display: flex; align-items: center; gap: var(--s-2); min-height: 32px; padding: 0 var(--s-3);
+  background: var(--sidebar); border-bottom: 1px solid var(--border);
+}
+.file-diff-head code { font-size: var(--fs-12); overflow-wrap: anywhere; }
+.file-diff-head .stat { margin-left: auto; }
+table.diff {
+  width: 100%; min-width: 580px; border-collapse: collapse;
+  font: 400 var(--fs-12) / 20px var(--font-mono);
+}
+table.diff td { padding: 0; vertical-align: top; white-space: pre; }
+table.diff .ln { width: 44px; padding: 0 var(--s-2); text-align: right; color: var(--text-3); user-select: none; font-variant-numeric: tabular-nums; }
+table.diff .sg { width: 22px; text-align: center; user-select: none; }
+table.diff .cd { padding-right: var(--s-3); color: var(--text); }
+table.diff tr.add td { background: var(--add-bg); }
+table.diff tr.add td.ln { background: var(--add-num); }
+table.diff tr.add td.sg { color: var(--add-fg); font-weight: 600; }
+table.diff tr.del td { background: var(--del-bg); }
+table.diff tr.del td.ln { background: var(--del-num); }
+table.diff tr.del td.sg { color: var(--del-fg); font-weight: 600; }
+table.diff tr.hunk td { background: var(--accent-subtle); color: var(--text-2); padding: 2px var(--s-3); }
+
+.details { display: grid; gap: var(--s-4); align-content: start; min-width: 0; }
+.details dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; margin: 0; }
+.details dt { color: var(--text-2); }
+.details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.details h2 { font: 600 var(--fs-12) / 16px var(--font-ui); color: var(--text-3); margin-bottom: var(--s-2); }
+
+/* Issues */
+.issues-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-5); }
+.issues-bar .field { flex: 1 1 200px; max-width: 360px; }
+.issues-bar .btn-primary { margin-left: auto; }
+.issue-list { margin-top: var(--s-3); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; background: var(--raised); }
+.issue-row {
+  display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: var(--s-3);
+  height: 32px; padding: 0 var(--s-3); border-bottom: 1px solid var(--border);
+  transition: background-color .15s;
+}
+.issue-row:hover { background: var(--hover); }
+.issue-row:last-child { border-bottom: 0; }
+.issue-row > .i { color: var(--open); }
+.issue-title { font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.issue-title:hover { color: var(--accent-text); }
+.issue-meta { display: inline-flex; align-items: center; gap: var(--s-3); color: var(--text-2); font-size: var(--fs-12); white-space: nowrap; }
+.issue-meta .num { font-variant-numeric: tabular-nums; }
+.issue-meta .ref { font: 400 var(--fs-12) / 20px var(--font-mono); color: var(--text-3); }
+.issue-meta .cmt { display: inline-flex; align-items: center; gap: 4px; min-width: 28px; justify-content: flex-end; }
+.issue-meta .cmt .i { color: var(--text-3); }
+.issue-meta .hide-sm { display: inline; }
+.issue-foot {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2) var(--s-3);
+  height: auto; min-height: 40px; padding: var(--s-2) var(--s-3); border-top: 1px solid var(--border);
+  background: var(--sidebar); color: var(--text-2);
+}
+.pager { display: inline-flex; align-items: center; gap: var(--s-2); }
+
+/* States */
+.states-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-5); padding: var(--s-5); min-width: 0; }
+.state-card { margin: 0; min-width: 0; display: grid; gap: var(--s-3); align-content: start; }
+.state-card > figcaption {
+  font: 500 var(--fs-12) / 16px var(--font-ui); color: var(--text-2);
+  padding-bottom: var(--s-2); border-bottom: 1px dashed var(--border-strong);
+}
+.state-stage {
+  position: relative; min-height: 260px; min-width: 0; padding: var(--s-4);
+  border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--sidebar);
+}
+.popover-demo { position: relative; min-height: 290px; }
+.popover {
+  position: absolute; top: 40px; left: 0; width: min(280px, 100%); z-index: 1;
+  background: var(--raised); border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); overflow: hidden;
+}
+.pop-filter { position: relative; padding: var(--s-2); border-bottom: 1px solid var(--border); }
+.pop-filter .i { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--text-2); }
+.pop-tabs { display: flex; gap: var(--s-1); padding: var(--s-1) var(--s-2) 0; border-bottom: 1px solid var(--border); }
+.pop-tabs button {
+  height: 30px; padding: 0 var(--s-2); border: 0; border-bottom: 2px solid transparent; background: transparent;
+  color: var(--text-2); font-weight: 500; cursor: pointer; transition: color .15s, border-color .15s, background-color .15s;
+}
+.pop-tabs button:hover { color: var(--text); background: var(--hover); }
+.pop-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.pop-list { padding: 4px; }
+.pop-item {
+  display: flex; align-items: center; gap: var(--s-2); width: 100%; height: 32px; padding: 0 var(--s-2);
+  border: 0; border-radius: var(--r-md); background: transparent; color: var(--text); text-align: left; cursor: pointer;
+  transition: background-color .15s;
+}
+.pop-item:hover { background: var(--hover); }
+.pop-item .i { color: var(--text-2); }
+.pop-item .i.on { color: var(--accent-text); }
+.pop-item .name { flex: 1; min-width: 0; font: 400 var(--fs-12) / 20px var(--font-mono); overflow-wrap: anywhere; }
+.pop-foot { padding: var(--s-2) var(--s-3); border-top: 1px solid var(--border); font-size: var(--fs-12); color: var(--text-2); }
+
+.skeleton-list { display: grid; background: var(--raised); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
+.skel-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 56px; gap: var(--s-3); align-items: center; height: 32px; padding: 0 var(--s-3); border-bottom: 1px solid var(--border); }
+.skel-row:last-child { border-bottom: 0; }
+.skel { height: 10px; border-radius: var(--r-sm); background: var(--skel); }
+.skel-sq { width: 14px; height: 14px; border-radius: var(--r-sm); background: var(--skel); }
+.skel-end { justify-self: end; width: 40px; }
+
+.force-focus { outline: 2px solid var(--focus); outline-offset: 2px; }
+.focus-row { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: center; }
+.focus-row .field { flex: 1 1 180px; max-width: 240px; }
+
+.empty {
+  display: grid; justify-items: center; gap: var(--s-2); padding: var(--s-6) var(--s-4); text-align: center;
+  border: 1px dashed var(--border-strong); border-radius: var(--r-lg); background: var(--raised);
+}
+.empty .i { color: var(--text-2); }
+.empty h3 { font: 600 var(--fs-16) / 24px var(--font-ui); }
+.empty p { color: var(--text-2); max-width: 40ch; }
+.empty .btn { margin-top: var(--s-2); }
+
+/* Responsive: sidebar becomes a top bar with a menu button below 900px */
+@media (max-width: 1099px) {
+  .code-grid { grid-template-columns: minmax(0, 1fr) 232px; }
+  .pr-grid { grid-template-columns: minmax(0, 1fr) 208px; }
+}
+@media (max-width: 899px) {
+  .app, .app.is-collapsed { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .app.is-collapsed .sidebar { display: flex; }
+  .sidebar {
+    position: static; border-right: 0; border-bottom: 1px solid var(--border);
+    padding: var(--s-2) var(--s-3); flex-direction: column;
+  }
+  .sb-menu { display: inline-grid; }
+  .sb-head { min-height: 32px; }
+  .sb-body { display: none; padding-top: var(--s-2); }
+  .app.is-open .sb-body { display: flex; }
+  .sb-foot { display: none; }
+  .app.is-open .sb-foot { display: flex; }
+  .sb-head .ws-btn { flex: 0 1 auto; }
+  .crumbs .sb-collapse { display: none; }
+  .code-grid, .pr-grid { grid-template-columns: minmax(0, 1fr); }
+  .states-grid { grid-template-columns: minmax(0, 1fr); }
+  .content { padding: var(--s-4) var(--s-4) var(--s-5); }
+  .details { order: -1; }
+  .issue-meta .hide-sm { display: none; }
+  .file-table .c-msg { display: none; }
+  .file-table { min-width: 0; }
+  .file-table .c-name { width: auto; }
+  .side-col { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 639px) {
+  .toolbar .btn-code { margin-left: 0; }
+  .issues-bar .btn-primary { margin-left: 0; }
+  .issue-row { grid-template-columns: 16px minmax(0, 1fr) auto; height: auto; min-height: 32px; padding: 6px var(--s-3); }
+  .states-grid { padding: var(--s-3); }
+  .changes-head .seg { margin-left: 0; }
+  .tl-item { grid-template-columns: 24px minmax(0, 1fr); gap: var(--s-2); }
+  .tl-item .avatar-lg { width: 24px; height: 24px; }
+  .crumbs { padding: 0 var(--s-3); }
+  .toolbar .meta { display: none; }
+}
+@media (max-width: 380px) {
+  .page { padding-left: var(--s-3); padding-right: var(--s-3); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<svg class="sprite" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-logo" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4.5A1.5 1.5 0 0 1 4.5 3H12l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.4l2 2.5h8.6A1.5 1.5 0 0 1 21 10v7.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7.5A1.5 1.5 0 0 0 6 4.5v15A1.5 1.5 0 0 0 7.5 21h9a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/></symbol>
+    <symbol id="i-issue" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/></symbol>
+    <symbol id="i-issue-closed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></symbol>
+    <symbol id="i-pr" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></symbol>
+    <symbol id="i-merge" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></symbol>
+    <symbol id="i-commit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M1.5 12H8m8 0h6.5"/></symbol>
+    <symbol id="i-comment" viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-12.2 7.6L3 21l1.9-5.4A8.5 8.5 0 1 1 21 11.5z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-updown" viewBox="0 0 24 24"><path d="m7 9 5-5 5 5M7 15l5 5 5-5"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17.5h.01"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H20v15H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5V21h16"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-split" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M12 4v16"/></symbol>
+    <symbol id="i-unified" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M7 9h10M7 15h10"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.8V6a3 3 0 0 1 6 0v4.8l2.5 2.7a1 1 0 0 1-.7 1.7H7.2a1 1 0 0 1-.7-1.7z"/></symbol>
+    <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3" y="3.5" width="18" height="17" rx="2"/><path d="M9 3.5v17"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/></symbol>
+  </defs>
+</svg>
+
+<main class="page">
+  <header class="page-intro">
+    <h1>Ether, direction 02: Sidebar workspace</h1>
+    <p>A Linear-style shell for daily work. Dark is the primary theme and light is designed on its own tokens. Each frame is checked at 1280 and 375 wide.</p>
+  </header>
+
+  <!-- Frame 1: repository code view -->
+  <section class="frame" aria-labelledby="f1">
+    <h2 class="frame-label" id="f1">1. Repository code view <span>Sidebar shell, slim breadcrumb header</span></h2>
+    <div class="frame-body">
+      <div class="app" id="app-1">
+        <aside class="sidebar" aria-label="Workspace">
+          <div class="sb-head">
+            <button class="ws-btn" type="button" aria-haspopup="menu">
+              <span class="ws-mark" aria-hidden="true"><svg class="i"><use href="#i-logo"/></svg></span>
+              <span>Ether</span>
+              <svg class="i" aria-hidden="true"><use href="#i-updown"/></svg>
+            </button>
+            <button class="icon-btn sb-menu" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="sb-body-1" data-nav-toggle><svg class="i i-20" aria-hidden="true"><use href="#i-menu"/></svg></button>
+          </div>
+          <div class="sb-body" id="sb-body-1">
+            <button class="sb-search" type="button">
+              <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+              <span>Search</span>
+              <span class="kbd" aria-label="Control K">Ctrl K</span>
+            </button>
+            <nav class="sb-group" aria-label="Across repositories">
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-inbox"/></svg><span class="lbl">Inbox</span><span class="count num">3</span></a>
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg><span class="lbl">Pull requests</span><span class="count num">1</span></a>
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-issue"/></svg><span class="lbl">Issues</span><span class="count num">5</span></a>
+            </nav>
+            <nav class="sb-group" aria-label="Repositories">
+              <h2 class="sb-label">Pinned</h2>
+              <a class="sb-item" href="#" aria-current="page"><svg class="i" aria-hidden="true"><use href="#i-book"/></svg><span class="lbl">admin/ether-core</span><svg class="i pin" aria-label="Pinned" role="img"><use href="#i-pin"/></svg></a>
+              <h2 class="sb-label">Repositories</h2>
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="lbl">All repositories</span><span class="count num">1</span></a>
+            </nav>
+          </div>
+          <div class="sb-foot">
+            <span class="avatar" aria-hidden="true">A</span>
+            <div class="who"><strong>admin</strong><span>Owner</span></div>
+            <button class="icon-btn" type="button" aria-label="Settings"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></button>
+          </div>
+        </aside>
+
+        <div class="main">
+          <header class="crumbs">
+            <button class="icon-btn sb-collapse" type="button" aria-label="Hide sidebar" aria-expanded="true" aria-controls="app-1" data-collapse-toggle><svg class="i" aria-hidden="true"><use href="#i-sidebar"/></svg></button>
+            <nav aria-label="Breadcrumb">
+              <ol>
+                <li><a class="crumb-link" href="#">admin</a></li>
+                <li><a class="crumb-link" href="#">ether-core</a></li>
+                <li aria-current="page">Code</li>
+              </ol>
+            </nav>
+          </header>
+
+          <div class="content">
+            <div class="content-head">
+              <h2 class="repo-title"><svg class="i i-20" aria-hidden="true"><use href="#i-book"/></svg><span class="owner">admin /</span> ether-core <span class="lockpill"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Private</span></h2>
+              <p class="desc">Server, web client and git transport for Ether.</p>
+            </div>
+            <div class="tabs-wrap">
+              <nav class="tabs" aria-label="Repository">
+                <a href="#" aria-current="page">Code</a>
+                <a href="#">Issues <span class="count num">5</span></a>
+                <a href="#">Pull requests <span class="count num">1</span></a>
+                <a href="#">Settings</a>
+              </nav>
+            </div>
+
+            <div class="toolbar">
+              <button class="btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <svg class="i" aria-hidden="true"><use href="#i-branch"/></svg>
+                <span class="mono" style="font-family:var(--font-mono)">main</span>
+                <svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg>
+              </button>
+              <span class="meta"><span class="num">3</span> branches <span aria-hidden="true">·</span> <span class="num">1</span> tag</span>
+              <label class="field">
+                <span class="sr-only">Go to file</span>
+                <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+                <input class="input" type="search" placeholder="Go to file">
+              </label>
+              <button class="btn btn-primary btn-code btn-hint" type="button" aria-haspopup="dialog">
+                Code
+                <span class="kbd" aria-label="shortcut C">C</span>
+              </button>
+            </div>
+
+            <div class="code-grid">
+              <div class="code-main">
+                <div class="commit-row">
+                  <span class="avatar" aria-hidden="true">MI</span>
+                  <strong style="font-weight:500">mira</strong>
+                  <a class="msg" href="#">Harden session cookie rotation on login</a>
+                  <a class="sha" href="#">3f9a1c2</a>
+                  <span class="muted"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg>2 hours ago</span>
+                  <span class="muted num"><svg class="i" aria-hidden="true"><use href="#i-commit"/></svg>214 commits</span>
+                </div>
+                <div class="scroll">
+                  <table class="file-table">
+                    <caption class="sr-only">Files at main</caption>
+                    <thead class="sr-only"><tr><th scope="col">Name</th><th scope="col">Last commit message</th><th scope="col">Age</th><th scope="col">Size</th></tr></thead>
+                    <tbody>
+                      <tr><td class="c-name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg>src</a></td><td class="c-msg">Add invite token table and consume flow</td><td class="c-age">2 hours ago</td><td class="c-size"></td></tr>
+                      <tr><td class="c-name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg>e2e</a></td><td class="c-msg">Cover expired invites in signup spec</td><td class="c-age">yesterday</td><td class="c-size"></td></tr>
+                      <tr><td class="c-name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg>drizzle</a></td><td class="c-msg">Migration 0004: invites table</td><td class="c-age">2 hours ago</td><td class="c-size"></td></tr>
+                      <tr><td class="c-name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>README.md</a></td><td class="c-msg">Document setup and create-admin</td><td class="c-age">5 days ago</td><td class="c-size">4.2 KB</td></tr>
+                      <tr><td class="c-name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>package.json</a></td><td class="c-msg">Bump drizzle-orm and add e2e script</td><td class="c-age">3 days ago</td><td class="c-size">1.8 KB</td></tr>
+                      <tr><td class="c-name"><a href="#"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>tsconfig.json</a></td><td class="c-msg">Enable strict mode for server code</td><td class="c-age">3 weeks ago</td><td class="c-size">612 B</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <article class="readme" aria-labelledby="readme-title">
+                  <header class="readme-head"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>README.md</header>
+                  <div class="readme-body">
+                    <h2 id="readme-title">ether-core</h2>
+                    <p>Ether core runs the server, the web client and the git transport in one process. It serves repositories over HTTPS and is meant to run only inside your tailnet, for a small group of people you trust.</p>
+                    <pre><code>bun install
+bun run build
+bun run ether create-admin &lt;you&gt; --password '...'
+bun run start</code></pre>
+                    <ul>
+                      <li>Accounts are created from one-time invite links that an admin issues.</li>
+                      <li>Every repository is private. Add collaborators with Read or Write access.</li>
+                      <li>Git authenticates with a personal access token, never your account password.</li>
+                    </ul>
+                  </div>
+                </article>
+              </div>
+
+              <aside class="side-col" aria-label="About and clone">
+                <section class="side-block" aria-labelledby="about-h">
+                  <h2 id="about-h">About</h2>
+                  <p>Server, web client and git transport for Ether.</p>
+                  <a class="link-line" href="#"><svg class="i" aria-hidden="true"><use href="#i-book"/></svg>Readme</a>
+                </section>
+                <section class="side-block" aria-labelledby="rel-h">
+                  <h2 id="rel-h">Latest release</h2>
+                  <div class="release-line"><svg class="i" aria-hidden="true"><use href="#i-tag"/></svg><strong>v0.3.0</strong><span class="state state-open" style="height:20px">Latest</span></div>
+                </section>
+                <section class="side-block" aria-labelledby="clone-h">
+                  <h2 id="clone-h">Clone</h2>
+                  <label class="field-label" for="clone-url">HTTPS</label>
+                  <div class="clone-field">
+                    <input class="clone-input" id="clone-url" type="text" readonly value="https://ether.example.ts.net/admin/ether-core.git">
+                    <button class="icon-btn" type="button" aria-label="Copy clone URL"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button>
+                  </div>
+                  <p class="help">Git authenticates with a personal access token, not your account password.</p>
+                </section>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Frame 2: pull request -->
+  <section class="frame" aria-labelledby="f2">
+    <h2 class="frame-label" id="f2">2. Pull request <span>Conversation, merge box, composer and files changed</span></h2>
+    <div class="frame-body">
+      <div class="app" id="app-2">
+        <aside class="sidebar" aria-label="Workspace">
+          <div class="sb-head">
+            <button class="ws-btn" type="button" aria-haspopup="menu">
+              <span class="ws-mark" aria-hidden="true"><svg class="i"><use href="#i-logo"/></svg></span>
+              <span>Ether</span>
+              <svg class="i" aria-hidden="true"><use href="#i-updown"/></svg>
+            </button>
+            <button class="icon-btn sb-menu" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="sb-body-2" data-nav-toggle><svg class="i i-20" aria-hidden="true"><use href="#i-menu"/></svg></button>
+          </div>
+          <div class="sb-body" id="sb-body-2">
+            <button class="sb-search" type="button">
+              <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+              <span>Search</span>
+              <span class="kbd" aria-label="Control K">Ctrl K</span>
+            </button>
+            <nav class="sb-group" aria-label="Across repositories">
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-inbox"/></svg><span class="lbl">Inbox</span><span class="count num">3</span></a>
+              <a class="sb-item" href="#" aria-current="page"><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg><span class="lbl">Pull requests</span><span class="count num">1</span></a>
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-issue"/></svg><span class="lbl">Issues</span><span class="count num">5</span></a>
+            </nav>
+            <nav class="sb-group" aria-label="Repositories">
+              <h2 class="sb-label">Pinned</h2>
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-book"/></svg><span class="lbl">admin/ether-core</span><svg class="i pin" aria-label="Pinned" role="img"><use href="#i-pin"/></svg></a>
+              <h2 class="sb-label">Repositories</h2>
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="lbl">All repositories</span><span class="count num">1</span></a>
+            </nav>
+          </div>
+          <div class="sb-foot">
+            <span class="avatar" aria-hidden="true">A</span>
+            <div class="who"><strong>admin</strong><span>Owner</span></div>
+            <button class="icon-btn" type="button" aria-label="Settings"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></button>
+          </div>
+        </aside>
+
+        <div class="main">
+          <header class="crumbs">
+            <button class="icon-btn sb-collapse" type="button" aria-label="Hide sidebar" aria-expanded="true" aria-controls="app-2" data-collapse-toggle><svg class="i" aria-hidden="true"><use href="#i-sidebar"/></svg></button>
+            <nav aria-label="Breadcrumb">
+              <ol>
+                <li><a class="crumb-link" href="#">admin</a></li>
+                <li><a class="crumb-link" href="#">ether-core</a></li>
+                <li aria-current="page">Pull requests</li>
+              </ol>
+            </nav>
+          </header>
+
+          <div class="content">
+            <div class="content-head">
+              <h2 class="pr-title">Add invite-only registration <span class="num-ref num">#12</span></h2>
+              <div class="pr-meta">
+                <span class="state state-open"><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg>Open</span>
+                <span><strong>admin</strong> wants to merge 3 commits into <span class="branch">main</span> from <span class="branch">feature/invites</span></span>
+              </div>
+            </div>
+            <div class="tabs-wrap">
+              <nav class="tabs" aria-label="Pull request">
+                <a href="#" aria-current="page">Conversation</a>
+                <a href="#">Commits <span class="count num">3</span></a>
+                <a href="#">Files changed <span class="count num">4</span></a>
+              </nav>
+            </div>
+
+            <div class="pr-grid">
+              <div class="pr-main">
+                <ol class="tl">
+                  <li class="tl-item">
+                    <span class="avatar avatar-lg" aria-hidden="true">AD</span>
+                    <article class="tl-card" aria-label="Description by admin">
+                      <header class="tl-head"><strong>admin</strong> opened this pull request 1 day ago</header>
+                      <div class="tl-body"><p>Adds invite-only sign-up. Invite links are single use, and a used link cannot be claimed again.</p></div>
+                    </article>
+                  </li>
+                  <li class="tl-item">
+                    <span class="avatar avatar-lg" aria-hidden="true">MI</span>
+                    <article class="tl-card" aria-label="Comment by mira">
+                      <header class="tl-head"><strong>mira</strong> commented 5 hours ago</header>
+                      <div class="tl-body"><p>Should the invite claim be atomic? Right now two requests can both read <code>usedAt</code> as NULL and both succeed.</p></div>
+                    </article>
+                  </li>
+                  <li class="tl-item">
+                    <span class="avatar avatar-lg" aria-hidden="true">AD</span>
+                    <article class="tl-card" aria-label="Comment by admin">
+                      <header class="tl-head"><strong>admin</strong> commented 4 hours ago <span class="pill">Author</span></header>
+                      <div class="tl-body"><p>Fixed in <code>e41b7d0</code>. The claim is now one conditional update, and the handler checks the row count before it succeeds.</p></div>
+                    </article>
+                  </li>
+                </ol>
+
+                <section class="merge-box" aria-labelledby="merge-h">
+                  <div class="merge-top">
+                    <div class="merge-status">
+                      <svg class="i i-20 ok" aria-hidden="true"><use href="#i-check"/></svg>
+                      <div>
+                        <strong id="merge-h">No conflicts with main</strong>
+                        <p>This branch can be merged automatically.</p>
+                      </div>
+                    </div>
+                    <div class="merge-action">
+                      <button class="btn btn-primary btn-hint" type="button">Merge <span class="kbd" aria-label="shortcut M">M</span></button>
+                      <p>Creates a merge commit on main.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <form class="composer" aria-label="Add a comment" onsubmit="return false">
+                  <label class="field-label" for="comment">Comment</label>
+                  <textarea class="textarea" id="comment" placeholder="Leave a comment"></textarea>
+                  <div class="composer-foot">
+                    <p>Markdown is supported.</p>
+                    <button class="btn" type="submit">Comment</button>
+                  </div>
+                </form>
+
+                <section class="changes" aria-labelledby="chg-h">
+                  <header class="changes-head">
+                    <h2 id="chg-h" style="font-size:var(--fs-14)">Files changed <span class="count num">4</span></h2>
+                    <span class="stat" aria-label="148 additions and 31 deletions"><span class="add">+148</span><span class="del">−31</span></span>
+                    <div class="seg" role="group" aria-label="Diff view">
+                      <button type="button" aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-unified"/></svg>Unified</button>
+                      <button type="button" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-split"/></svg>Split</button>
+                    </div>
+                  </header>
+                  <ul class="file-list">
+                    <li><svg class="i" aria-hidden="true"><use href="#i-file"/></svg><span class="path">src/web/routes/signup.tsx</span><span class="stat"><span class="add">+96</span><span class="del">−14</span></span></li>
+                    <li><svg class="i" aria-hidden="true"><use href="#i-file"/></svg><span class="path">e2e/signup.spec.ts</span><span class="stat"><span class="add">+23</span><span class="del">−15</span></span></li>
+                    <li><svg class="i" aria-hidden="true"><use href="#i-file"/></svg><span class="path">drizzle/0004_invites.sql</span><span class="stat"><span class="add">+21</span><span class="del">−0</span></span></li>
+                    <li class="is-open"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg><span class="path">src/server/invites.ts</span><span class="stat"><span class="add">+8</span><span class="del">−2</span></span></li>
+                  </ul>
+                  <div class="file-diff">
+                    <div class="scroll">
+                      <table class="diff">
+                        <caption class="sr-only">Changes to src/server/invites.ts</caption>
+                        <tbody>
+                          <tr class="hunk"><td colspan="4">@@ -40,8 +40,14 @@ export async function claimInvite(db: Db, token: string, user: string) {</td></tr>
+                          <tr><td class="ln">40</td><td class="ln">40</td><td class="sg"></td><td class="cd">  const invite = await db.query.invites.findFirst({</td></tr>
+                          <tr><td class="ln">41</td><td class="ln">41</td><td class="sg"></td><td class="cd">    where: eq(invites.token, hashToken(token)),</td></tr>
+                          <tr><td class="ln">42</td><td class="ln">42</td><td class="sg"></td><td class="cd">  });</td></tr>
+                          <tr><td class="ln">43</td><td class="ln">43</td><td class="sg"></td><td class="cd">  if (!invite) throw new InviteError("not_found");</td></tr>
+                          <tr class="del"><td class="ln">44</td><td class="ln"></td><td class="sg">−</td><td class="cd">  await db.update(invites).set({ usedAt: now(), usedBy: user })</td></tr>
+                          <tr class="del"><td class="ln">45</td><td class="ln"></td><td class="sg">−</td><td class="cd">    .where(eq(invites.id, invite.id));</td></tr>
+                          <tr class="add"><td class="ln"></td><td class="ln">44</td><td class="sg">+</td><td class="cd">  if (invite.expiresAt &lt; now()) throw new InviteError("expired");</td></tr>
+                          <tr class="add"><td class="ln"></td><td class="ln">45</td><td class="sg">+</td><td class="cd">  // Claim atomically: only one request can set usedAt while it is NULL.</td></tr>
+                          <tr class="add"><td class="ln"></td><td class="ln">46</td><td class="sg">+</td><td class="cd">  const claimed = await db</td></tr>
+                          <tr class="add"><td class="ln"></td><td class="ln">47</td><td class="sg">+</td><td class="cd">    .update(invites)</td></tr>
+                          <tr class="add"><td class="ln"></td><td class="ln">48</td><td class="sg">+</td><td class="cd">    .set({ usedAt: now(), usedBy: user })</td></tr>
+                          <tr class="add"><td class="ln"></td><td class="ln">49</td><td class="sg">+</td><td class="cd">    .where(and(eq(invites.id, invite.id), isNull(invites.usedAt)))</td></tr>
+                          <tr class="add"><td class="ln"></td><td class="ln">50</td><td class="sg">+</td><td class="cd">    .returning({ id: invites.id });</td></tr>
+                          <tr class="add"><td class="ln"></td><td class="ln">51</td><td class="sg">+</td><td class="cd">  if (claimed.length === 0) throw new InviteError("already_used");</td></tr>
+                          <tr><td class="ln">52</td><td class="ln">52</td><td class="sg"></td><td class="cd">  return invite;</td></tr>
+                          <tr><td class="ln">53</td><td class="ln">53</td><td class="sg"></td><td class="cd">}</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <aside class="details" aria-label="Pull request details">
+                <section>
+                  <h2>Details</h2>
+                  <dl>
+                    <dt>Author</dt><dd>admin</dd>
+                    <dt>From</dt><dd><span class="branch">feature/invites</span></dd>
+                    <dt>Into</dt><dd><span class="branch">main</span></dd>
+                    <dt>Commits</dt><dd class="num">3</dd>
+                    <dt>Changes</dt><dd class="num"><span class="add">+148</span> <span class="del">−31</span> in 4 files</dd>
+                    <dt>Status</dt><dd>Open, mergeable</dd>
+                  </dl>
+                </section>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Frame 3: issues list -->
+  <section class="frame" aria-labelledby="f3">
+    <h2 class="frame-label" id="f3">3. Issues list <span>Open state, five compact rows</span></h2>
+    <div class="frame-body">
+      <div class="app" id="app-3">
+        <aside class="sidebar" aria-label="Workspace">
+          <div class="sb-head">
+            <button class="ws-btn" type="button" aria-haspopup="menu">
+              <span class="ws-mark" aria-hidden="true"><svg class="i"><use href="#i-logo"/></svg></span>
+              <span>Ether</span>
+              <svg class="i" aria-hidden="true"><use href="#i-updown"/></svg>
+            </button>
+            <button class="icon-btn sb-menu" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="sb-body-3" data-nav-toggle><svg class="i i-20" aria-hidden="true"><use href="#i-menu"/></svg></button>
+          </div>
+          <div class="sb-body" id="sb-body-3">
+            <button class="sb-search" type="button">
+              <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+              <span>Search</span>
+              <span class="kbd" aria-label="Control K">Ctrl K</span>
+            </button>
+            <nav class="sb-group" aria-label="Across repositories">
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-inbox"/></svg><span class="lbl">Inbox</span><span class="count num">3</span></a>
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-pr"/></svg><span class="lbl">Pull requests</span><span class="count num">1</span></a>
+              <a class="sb-item" href="#" aria-current="page"><svg class="i" aria-hidden="true"><use href="#i-issue"/></svg><span class="lbl">Issues</span><span class="count num">5</span></a>
+            </nav>
+            <nav class="sb-group" aria-label="Repositories">
+              <h2 class="sb-label">Pinned</h2>
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-book"/></svg><span class="lbl">admin/ether-core</span><svg class="i pin" aria-label="Pinned" role="img"><use href="#i-pin"/></svg></a>
+              <h2 class="sb-label">Repositories</h2>
+              <a class="sb-item" href="#"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="lbl">All repositories</span><span class="count num">1</span></a>
+            </nav>
+          </div>
+          <div class="sb-foot">
+            <span class="avatar" aria-hidden="true">A</span>
+            <div class="who"><strong>admin</strong><span>Owner</span></div>
+            <button class="icon-btn" type="button" aria-label="Settings"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></button>
+          </div>
+        </aside>
+
+        <div class="main">
+          <header class="crumbs">
+            <button class="icon-btn sb-collapse" type="button" aria-label="Hide sidebar" aria-expanded="true" aria-controls="app-3" data-collapse-toggle><svg class="i" aria-hidden="true"><use href="#i-sidebar"/></svg></button>
+            <nav aria-label="Breadcrumb">
+              <ol>
+                <li><a class="crumb-link" href="#">admin</a></li>
+                <li><a class="crumb-link" href="#">ether-core</a></li>
+                <li aria-current="page">Issues</li>
+              </ol>
+            </nav>
+          </header>
+
+          <div class="content">
+            <div class="tabs-wrap" style="margin-top:0">
+              <nav class="tabs" aria-label="Repository">
+                <a href="#">Code</a>
+                <a href="#" aria-current="page">Issues <span class="count num">5</span></a>
+                <a href="#">Pull requests <span class="count num">1</span></a>
+                <a href="#">Settings</a>
+              </nav>
+            </div>
+
+            <div class="issues-bar">
+              <div class="seg" role="group" aria-label="Filter by state">
+                <button type="button" aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-issue"/></svg>Open <span class="num">5</span></button>
+                <button type="button" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-issue-closed"/></svg>Closed <span class="num">9</span></button>
+              </div>
+              <label class="field">
+                <span class="sr-only">Filter issues</span>
+                <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+                <input class="input" type="search" value="is:open" placeholder="Filter issues">
+              </label>
+              <button class="btn btn-primary btn-hint" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New issue <span class="kbd" aria-label="shortcut C">C</span></button>
+            </div>
+
+            <ul class="issue-list" aria-label="Open issues">
+              <li class="issue-row">
+                <svg class="i" role="img" aria-label="Open"><use href="#i-issue"/></svg>
+                <a class="issue-title" href="#">Session cookie survives logout in Safari</a>
+                <span class="issue-meta"><span class="ref">#21</span><span class="hide-sm">kat, 3 days ago</span><span class="cmt" aria-label="4 comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg><span class="num">4</span></span></span>
+              </li>
+              <li class="issue-row">
+                <svg class="i" role="img" aria-label="Open"><use href="#i-issue"/></svg>
+                <a class="issue-title" href="#">Show file sizes in the tree on narrow screens</a>
+                <span class="issue-meta"><span class="ref">#19</span><span class="hide-sm">jonas, 4 days ago</span><span class="cmt" aria-label="No comments"></span></span>
+              </li>
+              <li class="issue-row">
+                <svg class="i" role="img" aria-label="Open"><use href="#i-issue"/></svg>
+                <a class="issue-title" href="#">Clone hangs on packfiles over 200 MB</a>
+                <span class="issue-meta"><span class="ref">#17</span><span class="hide-sm">jonas, 5 days ago</span><span class="cmt" aria-label="7 comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg><span class="num">7</span></span></span>
+              </li>
+              <li class="issue-row">
+                <svg class="i" role="img" aria-label="Open"><use href="#i-issue"/></svg>
+                <a class="issue-title" href="#">Invite link should show who invited you</a>
+                <span class="issue-meta"><span class="ref">#14</span><span class="hide-sm">mira, 1 week ago</span><span class="cmt" aria-label="2 comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg><span class="num">2</span></span></span>
+              </li>
+              <li class="issue-row">
+                <svg class="i" role="img" aria-label="Open"><use href="#i-issue"/></svg>
+                <a class="issue-title" href="#">Document the backup command</a>
+                <span class="issue-meta"><span class="ref">#11</span><span class="hide-sm">admin, 2 weeks ago</span><span class="cmt" aria-label="1 comment"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg><span class="num">1</span></span></span>
+              </li>
+            </ul>
+
+            <footer class="issue-foot">
+              <span class="num">Showing 5 open issues</span>
+              <nav class="pager" aria-label="Pagination">
+                <button class="btn btn-ghost" type="button" disabled>Previous</button>
+                <span class="num">Page 1 of 1</span>
+                <button class="btn btn-ghost" type="button" disabled>Next</button>
+              </nav>
+            </footer>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Frame 4: states -->
+  <section class="frame" aria-labelledby="f4">
+    <h2 class="frame-label" id="f4">4. States <span>Branch picker, loading, keyboard focus, conflict, empty</span></h2>
+    <div class="frame-body">
+      <div class="states-grid">
+
+        <figure class="state-card">
+          <figcaption>Branch picker, opened with a filter</figcaption>
+          <div class="state-stage">
+            <div class="popover-demo">
+              <button class="btn" type="button" aria-haspopup="listbox" aria-expanded="true" aria-controls="branch-pop">
+                <svg class="i" aria-hidden="true"><use href="#i-branch"/></svg>
+                <span style="font-family:var(--font-mono)">main</span>
+                <svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg>
+              </button>
+              <div class="popover" id="branch-pop" role="dialog" aria-label="Switch branches or tags">
+                <div class="pop-filter">
+                  <label class="sr-only" for="branch-filter">Filter branches and tags</label>
+                  <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+                  <input class="input" id="branch-filter" type="search" placeholder="Filter branches and tags">
+                </div>
+                <div class="pop-tabs" role="tablist">
+                  <button type="button" role="tab" aria-selected="true">Branches</button>
+                  <button type="button" role="tab" aria-selected="false">Tags</button>
+                </div>
+                <ul class="pop-list" role="listbox" aria-label="Branches">
+                  <li><button class="pop-item" type="button" role="option" aria-selected="true"><svg class="i on" aria-hidden="true"><use href="#i-check"/></svg><span class="name">main</span></button></li>
+                  <li><button class="pop-item" type="button" role="option" aria-selected="false"><svg class="i" aria-hidden="true"><use href="#i-branch"/></svg><span class="name">feature/invites</span></button></li>
+                  <li><button class="pop-item" type="button" role="option" aria-selected="false"><svg class="i" aria-hidden="true"><use href="#i-branch"/></svg><span class="name">fix/session-rotation</span></button></li>
+                </ul>
+                <div class="pop-foot">3 branches. Type to filter.</div>
+              </div>
+            </div>
+          </div>
+        </figure>
+
+        <figure class="state-card">
+          <figcaption>Loading skeleton, file list</figcaption>
+          <div class="state-stage">
+            <div class="skeleton-list" role="status" aria-label="Loading files">
+              <div class="skel-row"><span class="skel-sq"></span><span class="skel" style="width:30%"></span><span class="skel skel-end"></span></div>
+              <div class="skel-row"><span class="skel-sq"></span><span class="skel" style="width:44%"></span><span class="skel skel-end"></span></div>
+              <div class="skel-row"><span class="skel-sq"></span><span class="skel" style="width:36%"></span><span class="skel skel-end"></span></div>
+              <div class="skel-row"><span class="skel-sq"></span><span class="skel" style="width:26%"></span><span class="skel skel-end"></span></div>
+              <div class="skel-row"><span class="skel-sq"></span><span class="skel" style="width:40%"></span><span class="skel skel-end"></span></div>
+            </div>
+          </div>
+        </figure>
+
+        <figure class="state-card">
+          <figcaption>Keyboard focus ring on controls</figcaption>
+          <div class="state-stage">
+            <div class="focus-row">
+              <button class="btn btn-primary btn-hint force-focus" type="button">Code <span class="kbd">C</span></button>
+              <button class="btn force-focus" type="button">Copy</button>
+              <label class="field">
+                <span class="sr-only">Go to file</span>
+                <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+                <input class="input force-focus" type="search" placeholder="Go to file">
+              </label>
+            </div>
+          </div>
+        </figure>
+
+        <figure class="state-card">
+          <figcaption>Conflict merge box</figcaption>
+          <div class="state-stage">
+            <section class="merge-box is-conflict" aria-labelledby="conflict-h">
+              <div class="merge-top">
+                <div class="merge-status">
+                  <svg class="i i-20 bad" aria-hidden="true"><use href="#i-alert"/></svg>
+                  <div>
+                    <strong id="conflict-h">Conflicts with main</strong>
+                    <p>Resolve these files on <span class="branch">feature/invites</span>, then push.</p>
+                    <ul class="conflict-list">
+                      <li>src/server/invites.ts</li>
+                      <li>drizzle/0004_invites.sql</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="merge-action">
+                  <button class="btn btn-primary btn-hint" type="button" disabled>Merge <span class="kbd">M</span></button>
+                  <p>Merge stays blocked until the conflicts are resolved.</p>
+                </div>
+              </div>
+            </section>
+          </div>
+        </figure>
+
+        <figure class="state-card">
+          <figcaption>Empty state, filtered issues</figcaption>
+          <div class="state-stage">
+            <div class="seg" role="group" aria-label="Filter by state" style="margin-bottom:var(--s-3)">
+              <button type="button" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-issue"/></svg>Open <span class="num">5</span></button>
+              <button type="button" aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-issue-closed"/></svg>Closed <span class="num">9</span></button>
+            </div>
+            <div class="empty">
+              <svg class="i i-20" aria-hidden="true"><use href="#i-search"/></svg>
+              <h3>No closed issues match</h3>
+              <p>Remove the author filter or try different words.</p>
+              <button class="btn" type="button">Clear filters</button>
+            </div>
+          </div>
+        </figure>
+
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  // Mobile: the sidebar head is a top bar; the menu button opens its body.
+  // Desktop: the breadcrumb button collapses the sidebar entirely.
+  (function () {
+    var narrow = window.matchMedia('(max-width: 899px)');
+    document.querySelectorAll('[data-nav-toggle]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var app = btn.closest('.app');
+        var open = app.classList.toggle('is-open');
+        btn.setAttribute('aria-expanded', String(open));
+      });
+    });
+    document.querySelectorAll('[data-collapse-toggle]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var app = btn.closest('.app');
+        var collapsed = app.classList.toggle('is-collapsed');
+        btn.setAttribute('aria-expanded', String(!collapsed));
+        btn.setAttribute('aria-label', collapsed ? 'Show sidebar' : 'Hide sidebar');
+      });
+    });
+    narrow.addEventListener && narrow.addEventListener('change', function () {
+      document.querySelectorAll('.app').forEach(function (app) { app.classList.remove('is-open', 'is-collapsed'); });
+    });
+  })();
+</script>
+</body>
+</html>

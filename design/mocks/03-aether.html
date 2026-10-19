@@ -1,0 +1,898 @@
+<!doctype html>
+<!--
+  DIRECTION 03 - LUMINOUS "AETHER"
+  Palette: deep indigo night sky (#07061a), frosted violet glass panels, luminous violet (#b9a6ff) and cyan (#7ee7f5) accents, emerald for open/merge states. Daylight variant swaps to a pale lavender sky with the same glass.
+  Type: Sora (geometric sans) for UI and headings, JetBrains Mono only for paths, shas, counts and diffs.
+  Key ideas: the page itself is a sky (fixed nebula glows + CSS starfield) so backdrop-filter glass has something to refract; every surface is a frosted panel; light comes from accent glows, not shadows; focus and hover are rendered as luminous rings.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ether - Direction 03 Luminous Aether</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Dark is the primary (night) palette. Daylight is used when the OS asks for light, or when toggled. */
+  :root,
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #07061a;
+    --ink: #eeebff;
+    --ink-2: #c3bee8;
+    --ink-3: #a09bcc;
+    --line: rgba(176, 166, 255, .16);
+    --line-2: rgba(176, 166, 255, .30);
+    --glass: rgba(20, 16, 50, .62);
+    --glass-hi: rgba(44, 36, 100, .46);
+    --glow-a: rgba(124, 92, 255, .40);
+    --glow-b: rgba(34, 211, 238, .20);
+    --glow-c: rgba(244, 114, 182, .12);
+    --stars: .75;
+    --accent: #b9a6ff;
+    --focus: #7ee7f5;
+    --grad: linear-gradient(135deg, #a48bff 0%, #6fe3f2 100%);
+    --on-grad: #0a0820;
+    --ok: #5ef0b8;
+    --ok-bg: rgba(94, 240, 184, .12);
+    --merge-grad: linear-gradient(135deg, #5ef0b8 0%, #34d399 100%);
+    --on-merge: #03261a;
+    --add-bg: rgba(94, 240, 184, .12);
+    --add-ink: #a8f7d6;
+    --del-bg: rgba(255, 130, 155, .13);
+    --del-ink: #ffb8c6;
+    --hunk: #7ee7f5;
+    --l-bug: #ff9fb0;
+    --l-enh: #7ee7f5;
+    --l-sec: #ffd27a;
+    --l-doc: #c4b5ff;
+    --shadow: 0 40px 90px -40px rgba(0, 0, 0, .9);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      color-scheme: light;
+      --bg: #eceefe;
+      --ink: #131138;
+      --ink-2: #3b3870;
+      --ink-3: #58558a;
+      --line: rgba(70, 58, 170, .14);
+      --line-2: rgba(70, 58, 170, .28);
+      --glass: rgba(255, 255, 255, .62);
+      --glass-hi: rgba(255, 255, 255, .92);
+      --glow-a: rgba(124, 92, 255, .30);
+      --glow-b: rgba(34, 211, 238, .26);
+      --glow-c: rgba(244, 114, 182, .18);
+      --stars: 0;
+      --accent: #5a3ee6;
+      --focus: #0a8fb0;
+      --grad: linear-gradient(135deg, #5a3ee6 0%, #0a8fb0 100%);
+      --on-grad: #ffffff;
+      --ok: #0d7a52;
+      --ok-bg: rgba(13, 122, 82, .11);
+      --merge-grad: linear-gradient(135deg, #0d7a52 0%, #0b6a7a 100%);
+      --on-merge: #ffffff;
+      --add-bg: rgba(13, 122, 82, .11);
+      --add-ink: #0b5a3d;
+      --del-bg: rgba(190, 30, 80, .09);
+      --del-ink: #8e1538;
+      --hunk: #0b6f88;
+      --l-bug: #a3163f;
+      --l-enh: #0a6b82;
+      --l-sec: #8a5a00;
+      --l-doc: #4b30c4;
+      --shadow: 0 30px 60px -30px rgba(50, 36, 150, .35);
+    }
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #eceefe;
+    --ink: #131138;
+    --ink-2: #3b3870;
+    --ink-3: #58558a;
+    --line: rgba(70, 58, 170, .14);
+    --line-2: rgba(70, 58, 170, .28);
+    --glass: rgba(255, 255, 255, .62);
+    --glass-hi: rgba(255, 255, 255, .92);
+    --glow-a: rgba(124, 92, 255, .30);
+    --glow-b: rgba(34, 211, 238, .26);
+    --glow-c: rgba(244, 114, 182, .18);
+    --stars: 0;
+    --accent: #5a3ee6;
+    --focus: #0a8fb0;
+    --grad: linear-gradient(135deg, #5a3ee6 0%, #0a8fb0 100%);
+    --on-grad: #ffffff;
+    --ok: #0d7a52;
+    --ok-bg: rgba(13, 122, 82, .11);
+    --merge-grad: linear-gradient(135deg, #0d7a52 0%, #0b6a7a 100%);
+    --on-merge: #ffffff;
+    --add-bg: rgba(13, 122, 82, .11);
+    --add-ink: #0b5a3d;
+    --del-bg: rgba(190, 30, 80, .09);
+    --del-ink: #8e1538;
+    --hunk: #0b6f88;
+    --l-bug: #a3163f;
+    --l-enh: #0a6b82;
+    --l-sec: #8a5a00;
+    --l-doc: #4b30c4;
+    --shadow: 0 30px 60px -30px rgba(50, 36, 150, .35);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { background: var(--bg); -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 15px/1.55 "Sora", system-ui, sans-serif;
+  }
+
+  /* Fixed night sky: nebula glows plus a CSS-only starfield. Glass panels blur this. */
+  .sky {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(60% 50% at 12% 8%, var(--glow-a), transparent 62%),
+      radial-gradient(50% 45% at 92% 18%, var(--glow-b), transparent 60%),
+      radial-gradient(70% 55% at 50% 115%, var(--glow-c), transparent 62%),
+      var(--bg);
+  }
+  .sky::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: var(--stars);
+    background-image:
+      radial-gradient(1px 1px at 20px 30px, #fff, transparent),
+      radial-gradient(1px 1px at 120px 80px, rgba(255, 255, 255, .75), transparent),
+      radial-gradient(1.5px 1.5px at 200px 150px, rgba(210, 200, 255, .95), transparent),
+      radial-gradient(1px 1px at 310px 40px, rgba(255, 255, 255, .6), transparent),
+      radial-gradient(1px 1px at 260px 190px, rgba(180, 240, 255, .8), transparent),
+      radial-gradient(1px 1px at 60px 170px, rgba(255, 255, 255, .5), transparent);
+    background-size: 340px 220px;
+  }
+
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 8px; }
+
+  .ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .ic.sm { width: 14px; height: 14px; }
+  .ic.xs { width: 12px; height: 12px; }
+  .logo { width: 28px; height: 28px; flex: none; color: var(--accent); }
+
+  .glass {
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), var(--shadow);
+  }
+
+  /* Page masthead and frame labels */
+  .masthead {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 28px clamp(16px, 3vw, 32px) 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .masthead h1 { margin: 0; font-size: clamp(20px, 3vw, 26px); font-weight: 600; letter-spacing: -.02em; }
+  .masthead p { margin: 2px 0 0; color: var(--ink-3); font-size: 14px; }
+  .theme-toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 36px; padding: 0 14px; border-radius: 999px;
+    border: 1px solid var(--line-2); background: var(--glass-hi); color: var(--ink);
+    font: 500 13px/1 "Sora", sans-serif; cursor: pointer;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .theme-toggle:hover { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
+
+  main { padding: 8px clamp(16px, 3vw, 32px) 72px; }
+  .frame { max-width: 1280px; margin: 40px auto 0; }
+  .frame-cap {
+    display: flex; align-items: center; gap: 14px; margin-bottom: 14px;
+    font: 500 12px/1 "JetBrains Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3);
+  }
+  .frame-cap .cap-no { color: var(--accent); }
+  .frame-cap h2 { margin: 0; font: inherit; color: var(--ink-2); }
+  .frame-cap::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--line-2), transparent); }
+
+  .screen {
+    position: relative;
+    display: flex; flex-direction: column; gap: 18px;
+    padding: clamp(12px, 2.4vw, 26px);
+    border-radius: 28px;
+    border: 1px solid var(--line);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 35%),
+      color-mix(in srgb, var(--bg) 55%, transparent);
+    min-width: 0;
+  }
+  .screen > * { min-width: 0; }
+
+  /* Controls */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 36px; padding: 0 14px; border-radius: 999px;
+    border: 1px solid var(--line-2); background: var(--glass-hi); color: var(--ink);
+    font: 500 14px/1 "Sora", sans-serif; text-decoration: none; cursor: pointer; white-space: nowrap;
+    transition: border-color .2s, box-shadow .2s, background .2s, transform .15s;
+  }
+  .btn:hover { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent); }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--grad); color: var(--on-grad); border-color: transparent; font-weight: 600; box-shadow: 0 10px 26px -12px var(--glow-a); }
+  .btn-primary:hover { filter: brightness(1.08); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 26px -12px var(--glow-a); }
+  .btn .count { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+
+  .icon-btn {
+    width: 34px; height: 34px; display: grid; place-items: center; flex: none;
+    border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--ink-2); cursor: pointer;
+    transition: color .2s, border-color .2s, background .2s;
+  }
+  .icon-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--glass-hi); }
+
+  .count {
+    font: 500 11px/1 "JetBrains Mono", monospace; padding: 4px 7px; border-radius: 999px;
+    background: var(--line); color: var(--ink-2);
+  }
+  .muted { color: var(--ink-3); }
+  .mono { font-family: "JetBrains Mono", monospace; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px;
+    font: 500 12px/1 "Sora", sans-serif; border: 1px solid var(--line-2); color: var(--ink-2); white-space: nowrap;
+  }
+  .badge-open { color: var(--ok); background: var(--ok-bg); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+  .badge-open::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+
+  .avatar {
+    width: 28px; height: 28px; border-radius: 50%; flex: none;
+    display: inline-grid; place-items: center;
+    font: 600 11px/1 "Sora", sans-serif; color: #0a0820; letter-spacing: .02em;
+  }
+  .av-a { background: linear-gradient(135deg, #a48bff, #f0abfc); }
+  .av-m { background: linear-gradient(135deg, #6fe3f2, #7aa2ff); }
+  .av-j { background: linear-gradient(135deg, #fde68a, #fb923c); }
+  .av-k { background: linear-gradient(135deg, #86efac, #22d3ee); }
+
+  /* Repo header */
+  .repo-head { display: grid; gap: 6px; padding: 4px 4px 0; }
+  .repo-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: clamp(20px, 3vw, 26px); letter-spacing: -.02em; }
+  .repo-title .ic { color: var(--ink-3); width: 20px; height: 20px; }
+  .repo-title a { color: var(--accent); text-decoration: none; font-weight: 600; border-radius: 6px; }
+  .repo-title a:hover { text-decoration: underline; text-underline-offset: 4px; }
+  .repo-title .slash { color: var(--ink-3); font-weight: 300; }
+  .repo-title .repo-name { color: var(--ink); }
+  .repo-desc { margin: 0; color: var(--ink-2); font-size: 15px; max-width: 70ch; }
+
+  .tabs {
+    display: flex; gap: 4px; border-bottom: 1px solid var(--line);
+    overflow-x: auto; scrollbar-width: none; white-space: nowrap;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    display: inline-flex; align-items: center; gap: 8px; padding: 12px 12px 13px; margin-bottom: -1px;
+    color: var(--ink-3); text-decoration: none; font-weight: 500; font-size: 14px;
+    border-bottom: 2px solid transparent; border-radius: 10px 10px 0 0;
+    transition: color .2s, border-color .2s, background .2s;
+  }
+  .tab:hover { color: var(--ink); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .tab.is-active { color: var(--ink); border-bottom-color: var(--accent); box-shadow: 0 6px 16px -10px var(--accent); }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+  .toolbar-group { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+  /* Commit bar + file table */
+  .commitbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px;
+    padding: 12px 16px; font-size: 14px;
+  }
+  .commitbar .c-msg { flex: 1 1 220px; min-width: 0; color: var(--ink-2); overflow-wrap: anywhere; }
+  .commitbar .c-author { color: var(--ink); font-weight: 600; text-decoration: none; }
+  .commitbar .c-author:hover, .sha:hover { color: var(--accent); }
+  .sha {
+    font: 500 12px/1 "JetBrains Mono", monospace; color: var(--accent); text-decoration: none;
+    padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .c-time { color: var(--ink-3); font-size: 13px; white-space: nowrap; }
+
+  .repo-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+  .repo-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .repo-side { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+  .filetable { overflow: hidden; }
+  .fl-head, .row {
+    display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.6fr) 110px 72px;
+    gap: 14px; align-items: center; padding: 11px 16px;
+  }
+  .fl-head {
+    font: 500 11px/1 "JetBrains Mono", monospace; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink-3); border-bottom: 1px solid var(--line);
+  }
+  .row { color: var(--ink); text-decoration: none; font-size: 14px; border-top: 1px solid var(--line); transition: background .15s; }
+  .fl-head + .row { border-top: 0; }
+  .row:hover { background: var(--glass-hi); }
+  .row .c-name { display: flex; align-items: center; gap: 10px; min-width: 0; font-weight: 500; }
+  .row .c-name .ic { color: var(--accent); }
+  .row .c-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .c-msg { color: var(--ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .c-size { font: 400 12.5px/1 "JetBrains Mono", monospace; color: var(--ink-3); text-align: right; }
+  .row .c-time { font-size: 13px; }
+
+  /* README */
+  .readme { overflow: hidden; }
+  .readme-head {
+    display: flex; align-items: center; gap: 10px; padding: 12px 18px;
+    border-bottom: 1px solid var(--line); font: 500 13px/1 "JetBrains Mono", monospace; color: var(--ink-2);
+  }
+  .readme-body { padding: 22px clamp(18px, 3vw, 30px) 26px; }
+  .readme-body h1 { margin: 0 0 14px; font-size: 26px; font-weight: 600; letter-spacing: -.02em; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .readme-body h2 { margin: 26px 0 10px; font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+  .readme-body p { margin: 0 0 12px; color: var(--ink-2); max-width: 72ch; }
+  .readme-body ul { margin: 0; padding-left: 20px; color: var(--ink-2); }
+  .readme-body li { margin: 6px 0; padding-left: 4px; }
+  .readme-body li::marker { color: var(--accent); }
+  .readme-body pre {
+    margin: 0 0 16px; padding: 14px 16px; border-radius: 12px; overflow-x: auto;
+    background: color-mix(in srgb, var(--bg) 70%, #000 30%); border: 1px solid var(--line);
+    font: 400 13px/1.7 "JetBrains Mono", monospace; color: var(--ink);
+  }
+  .readme-body pre .cm { color: var(--ink-3); }
+  .readme-body pre .pr { color: var(--accent); }
+
+  /* Side cards */
+  .card { padding: 18px; }
+  .card h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; letter-spacing: .01em; }
+  .card .muted { margin: 0 0 14px; font-size: 13px; }
+  .clone-box {
+    display: flex; align-items: flex-start; gap: 8px; padding: 10px 10px 10px 14px; border-radius: 12px;
+    background: color-mix(in srgb, var(--bg) 60%, transparent); border: 1px solid var(--line-2);
+  }
+  .clone-box code {
+    flex: 1; min-width: 0; font: 400 12.5px/1.6 "JetBrains Mono", monospace; color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .lang-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; margin: 4px 0 12px; background: var(--line); }
+  .lang-bar span { display: block; height: 100%; }
+  .lang-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
+  .lang-list li { display: flex; align-items: center; gap: 8px; }
+  .lang-list i { width: 8px; height: 8px; border-radius: 50%; }
+  .lang-list b { margin-left: auto; font: 400 12px/1 "JetBrains Mono", monospace; color: var(--ink-3); font-weight: 400; }
+  .stats { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: 14px; }
+  .stats li { display: flex; align-items: center; gap: 10px; color: var(--ink-2); }
+  .stats .ic { color: var(--accent); }
+
+  /* Pull request */
+  .pr-head { display: grid; gap: 10px; padding: 4px 4px 0; }
+  .pr-head h1 { margin: 0; font-size: clamp(22px, 3.4vw, 30px); font-weight: 600; letter-spacing: -.025em; line-height: 1.2; }
+  .pr-head h1 .num { color: var(--ink-3); font-weight: 300; margin-left: 6px; }
+  .pr-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 14px; color: var(--ink-2); }
+  .pr-sub a { color: var(--ink); font-weight: 600; text-decoration: none; }
+  .pr-sub a:hover { color: var(--accent); }
+  .chip {
+    font: 500 12.5px/1 "JetBrains Mono", monospace; padding: 6px 8px; border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent);
+  }
+  .thread { display: flex; flex-direction: column; gap: 18px; position: relative; }
+  .comment { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 14px; padding: 18px; }
+  .comment .avatar { width: 36px; height: 36px; font-size: 12px; }
+  .comment-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 8px; font-size: 14px; }
+  .comment-head strong { font-weight: 600; }
+  .comment-head span { color: var(--ink-3); font-size: 13px; }
+  .comment p { margin: 0 0 10px; color: var(--ink-2); max-width: 74ch; }
+  .comment p:last-child { margin-bottom: 0; }
+  .comment code { font: 400 12.5px/1 "JetBrains Mono", monospace; color: var(--accent); }
+  .comment .comment-body { min-width: 0; }
+
+  .merge {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px 18px;
+    padding: 18px 20px;
+  }
+  .merge-ic {
+    width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+    color: var(--ok); background: var(--ok-bg); border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+  }
+  .merge-copy h2 { margin: 0 0 2px; font-size: 16px; font-weight: 600; }
+  .merge-copy p { margin: 0; font-size: 14px; color: var(--ink-3); }
+  .btn-merge {
+    display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px;
+    border: 0; border-radius: 12px; cursor: pointer; background: var(--merge-grad); color: var(--on-merge);
+    font: 600 14px/1 "Sora", sans-serif; box-shadow: 0 10px 28px -14px var(--ok);
+    transition: filter .2s, box-shadow .2s, transform .15s;
+  }
+  .btn-merge:hover { filter: brightness(1.07); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); }
+  .btn-merge:active { transform: translateY(1px); }
+
+  .diffcard { overflow: hidden; margin: 0; }
+  .diff-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 16px;
+    border-bottom: 1px solid var(--line); font-size: 14px;
+  }
+  .diff-head .ic { color: var(--accent); }
+  .diff-file { font: 500 13px/1 "JetBrains Mono", monospace; color: var(--ink); overflow-wrap: anywhere; }
+  .diffstat { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; font: 500 13px/1 "JetBrains Mono", monospace; }
+  .diffstat .add { color: var(--add-ink); }
+  .diffstat .del { color: var(--del-ink); }
+  .bar { display: inline-flex; width: 64px; height: 8px; border-radius: 999px; overflow: hidden; background: var(--line); }
+  .bar i { display: block; height: 100%; }
+  .bar .b-add { width: 80%; background: var(--ok); }
+  .bar .b-del { width: 20%; background: var(--del-ink); }
+  .diff-scroll { overflow-x: auto; }
+  .diff { width: 100%; min-width: 620px; border-collapse: collapse; font: 400 13px/1.75 "JetBrains Mono", monospace; }
+  .diff td { padding: 0 10px; vertical-align: top; white-space: pre; }
+  .diff td.n { width: 46px; text-align: right; color: var(--ink-3); user-select: none; font-size: 12px; padding-right: 8px; }
+  .diff td.sg { width: 24px; text-align: center; color: var(--ink-3); user-select: none; padding: 0; }
+  .diff td.code { color: var(--ink); width: 100%; }
+  .diff tr.add { background: var(--add-bg); }
+  .diff tr.add td.sg { color: var(--add-ink); }
+  .diff tr.del { background: var(--del-bg); }
+  .diff tr.del td.sg { color: var(--del-ink); }
+  .diff tr.hunk td { background: color-mix(in srgb, var(--hunk) 10%, transparent); color: var(--hunk); padding: 6px 10px; }
+  .diff tr:hover td { background-color: color-mix(in srgb, var(--accent) 6%, transparent); }
+
+  /* Issues */
+  .page-crumb { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-3); padding: 0 4px; }
+  .page-crumb strong { color: var(--ink); font-weight: 600; font-size: 20px; letter-spacing: -.02em; }
+  .page-crumb a { color: var(--accent); text-decoration: none; font-weight: 500; border-radius: 6px; }
+  .page-crumb a:hover { text-decoration: underline; text-underline-offset: 4px; }
+  .issues-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .seg {
+    display: inline-flex; padding: 3px; border-radius: 999px; background: var(--glass-hi); border: 1px solid var(--line-2);
+  }
+  .seg-btn {
+    display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px; border: 0; border-radius: 999px;
+    background: transparent; color: var(--ink-3); font: 500 14px/1 "Sora", sans-serif; cursor: pointer;
+    transition: color .2s, background .2s;
+  }
+  .seg-btn:hover { color: var(--ink); }
+  .seg-btn[aria-pressed="true"] { background: var(--grad); color: var(--on-grad); font-weight: 600; box-shadow: 0 6px 16px -8px var(--glow-a); }
+  .search {
+    flex: 1 1 240px; min-width: 0; display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 14px;
+    border-radius: 999px; border: 1px solid var(--line-2); background: var(--glass-hi); color: var(--ink-3);
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
+  .search input {
+    flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink);
+    font: 400 13.5px/1 "JetBrains Mono", monospace;
+  }
+  .search input::placeholder { color: var(--ink-3); }
+
+  .issue-list { list-style: none; margin: 0; padding: 6px; overflow: hidden; }
+  .issue-list li + li { border-top: 1px solid var(--line); }
+  .issue {
+    display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 14px; align-items: start;
+    padding: 14px 14px; border-radius: 12px; color: var(--ink); text-decoration: none; transition: background .15s;
+  }
+  .issue:hover { background: var(--glass-hi); }
+  .issue:hover .issue-title { color: var(--accent); }
+  .issue .state { width: 18px; height: 18px; margin-top: 2px; }
+  .state-open { color: var(--ok); }
+  .state-closed { color: var(--accent); }
+  .issue-title { font-size: 15px; font-weight: 600; line-height: 1.4; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; transition: color .15s; }
+  .issue-meta { margin-top: 4px; font-size: 13px; color: var(--ink-3); }
+  .issue-meta .mono { color: var(--ink-2); }
+  .issue-comments { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); font: 500 13px/1 "JetBrains Mono", monospace; padding-top: 3px; }
+  .labels { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .label {
+    --c: var(--ink-2);
+    font: 500 11.5px/1 "Sora", sans-serif; padding: 4px 9px; border-radius: 999px;
+    color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c) 38%, transparent);
+  }
+  .l-bug { --c: var(--l-bug); }
+  .l-enh { --c: var(--l-enh); }
+  .l-sec { --c: var(--l-sec); }
+  .l-doc { --c: var(--l-doc); }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .repo-grid { grid-template-columns: minmax(0, 1fr); }
+    .repo-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    .screen { border-radius: 22px; }
+    .topbar { flex-wrap: wrap; row-gap: 10px; }
+    .hide-sm { display: none; }
+    .fl-head, .row { grid-template-columns: 20px minmax(0, 1fr) auto; gap: 10px; padding: 12px 14px; }
+    .fl-head .c-msg, .fl-head .c-time, .row .c-msg, .row .c-time { display: none; }
+    .merge { grid-template-columns: auto minmax(0, 1fr); }
+    .merge .btn-merge { grid-column: 1 / -1; justify-content: center; }
+    .comment { grid-template-columns: 36px minmax(0, 1fr); gap: 12px; padding: 14px; }
+    .comment .avatar { width: 36px; height: 36px; }
+    .issue { grid-template-columns: 22px minmax(0, 1fr); }
+    .issue-comments { grid-column: 2; padding-top: 0; }
+    .search { flex-basis: 100%; }
+    .issues-bar .btn-primary { margin-left: auto; }
+    .diffstat { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-logo" viewBox="0 0 32 32">
+      <circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2.4"/>
+      <ellipse cx="16" cy="16" rx="15" ry="6" transform="rotate(-24 16 16)" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".65"/>
+      <circle cx="26.2" cy="10.6" r="2.7" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.5"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="6.5" r="2.5"/><path d="M6 7.5v9M18 9c0 5-12 3-12 8"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-merge" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V9a3 3 0 0 0-3-3h-4"/></symbol>
+    <symbol id="i-pr" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V9a3 3 0 0 0-3-3h-4"/></symbol>
+    <symbol id="i-comment" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></symbol>
+    <symbol id="i-issue-open" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-issue-closed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+  </defs>
+</svg>
+
+<header class="masthead">
+  <div>
+    <h1>Ether UI &middot; Direction 03</h1>
+    <p>Luminous aether: night sky, frosted glass, violet and cyan light.</p>
+  </div>
+  <button class="theme-toggle" id="theme" type="button" aria-pressed="false">
+    <svg class="ic sm"><use href="#i-moon"/></svg>
+    <span id="theme-label">Daylight</span>
+  </button>
+</header>
+
+<main>
+
+  <!-- SCREEN 01: REPOSITORY CODE VIEW -->
+  <section class="frame" aria-labelledby="f1">
+    <div class="frame-cap"><span class="cap-no">01</span><h2 id="f1">Repository &middot; code view</h2></div>
+    <div class="screen">
+
+      <nav class="topbar glass" aria-label="Global" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px 10px 16px;">
+        <a href="#" style="display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:600;letter-spacing:-.01em;">
+          <svg class="logo"><use href="#i-logo"/></svg>
+          <span style="font-size:17px;">ether</span>
+        </a>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn" type="button"><svg class="ic"><use href="#i-plus"/></svg><span>New repository</span></button>
+          <button class="btn" type="button" aria-label="Open user menu for admin" style="padding:0 10px 0 4px;">
+            <span class="avatar av-a">AD</span>
+            <span class="hide-sm">admin</span>
+            <svg class="ic sm"><use href="#i-chev"/></svg>
+          </button>
+        </div>
+      </nav>
+
+      <div class="repo-head">
+        <div class="repo-title">
+          <svg class="ic"><use href="#i-book"/></svg>
+          <a href="#">admin</a><span class="slash">/</span><a href="#" class="repo-name">ether-core</a>
+          <span class="badge"><svg class="ic xs"><use href="#i-lock"/></svg>Private</span>
+        </div>
+        <p class="repo-desc">Server, web client and git transport for Ether. Invite-only, runs on one machine behind Tailscale.</p>
+      </div>
+
+      <nav class="tabs" aria-label="Repository">
+        <a href="#" class="tab is-active" aria-current="page"><svg class="ic sm"><use href="#i-code"/></svg>Code</a>
+        <a href="#" class="tab">Issues <span class="count">5</span></a>
+        <a href="#" class="tab">Pull requests <span class="count">1</span></a>
+        <a href="#" class="tab">Settings</a>
+      </nav>
+
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <button class="btn" type="button" aria-haspopup="listbox"><svg class="ic"><use href="#i-branch"/></svg><span>main</span><svg class="ic sm"><use href="#i-chev"/></svg></button>
+          <span class="muted" style="font-size:13px;">4 branches &middot; 2 tags</span>
+        </div>
+        <div class="toolbar-group">
+          <a href="#" class="btn"><svg class="ic"><use href="#i-clock"/></svg>Commits <span class="count">214</span></a>
+        </div>
+      </div>
+
+      <div class="commitbar glass">
+        <span class="avatar av-m">MI</span>
+        <a href="#" class="c-author">mira</a>
+        <span class="c-msg">Harden session cookie rotation on login</span>
+        <a href="#" class="sha">3f9a1c2</a>
+        <span class="c-time">2 hours ago</span>
+      </div>
+
+      <div class="repo-grid">
+        <div class="repo-main">
+          <div class="filetable glass" aria-label="Files at main">
+            <div class="fl-head"><span class="c-name">Name</span><span class="c-msg">Last commit</span><span class="c-time">Updated</span><span class="c-size">Size</span></div>
+            <a href="#" class="row"><span class="c-name"><svg class="ic"><use href="#i-folder"/></svg><span>src/</span></span><span class="c-msg">Add invite token table and consume flow</span><span class="c-time">2 hours ago</span><span class="c-size"></span></a>
+            <a href="#" class="row"><span class="c-name"><svg class="ic"><use href="#i-folder"/></svg><span>e2e/</span></span><span class="c-msg">Cover expired invites in signup spec</span><span class="c-time">yesterday</span><span class="c-size"></span></a>
+            <a href="#" class="row"><span class="c-name"><svg class="ic"><use href="#i-folder"/></svg><span>drizzle/</span></span><span class="c-msg">Migration 0004: invites table</span><span class="c-time">2 hours ago</span><span class="c-size"></span></a>
+            <a href="#" class="row"><span class="c-name"><svg class="ic"><use href="#i-file"/></svg><span>README.md</span></span><span class="c-msg">Document invite-only setup</span><span class="c-time">5 days ago</span><span class="c-size">4.2 KB</span></a>
+            <a href="#" class="row"><span class="c-name"><svg class="ic"><use href="#i-file"/></svg><span>package.json</span></span><span class="c-msg">Bump drizzle-orm to 0.44</span><span class="c-time">3 days ago</span><span class="c-size">1.8 KB</span></a>
+            <a href="#" class="row"><span class="c-name"><svg class="ic"><use href="#i-file"/></svg><span>tsconfig.json</span></span><span class="c-msg">Strict mode and path aliases</span><span class="c-time">3 weeks ago</span><span class="c-size">612 B</span></a>
+          </div>
+
+          <article class="readme glass">
+            <div class="readme-head"><svg class="ic sm"><use href="#i-book"/></svg>README.md</div>
+            <div class="readme-body">
+              <h1>ether-core</h1>
+              <p>Ether is a small, self-hosted git host for a handful of friends. Repositories live on disk as bare git repos. This package holds the HTTP server, the web UI and the invite flow that gates signup.</p>
+              <h2>Quick start</h2>
+              <pre><code><span class="cm"># needs Node 22 and pnpm</span>
+pnpm install
+pnpm db:migrate
+pnpm dev     <span class="cm"># http://localhost:4000</span></code></pre>
+              <ul>
+                <li>Invite-only registration with single-use tokens that expire after 7 days</li>
+                <li>Smart HTTP git transport, so friends clone with a login and no SSH keys</li>
+                <li>One process, one SQLite file, no public ports</li>
+              </ul>
+            </div>
+          </article>
+        </div>
+
+        <aside class="repo-side">
+          <section class="card glass" aria-labelledby="clone-h">
+            <h3 id="clone-h">Clone</h3>
+            <p class="muted">Over HTTPS, from inside the tailnet</p>
+            <div class="clone-box">
+              <code>https://ether.example.ts.net/admin/ether-core.git</code>
+              <button class="icon-btn" type="button" aria-label="Copy clone URL"><svg class="ic"><use href="#i-copy"/></svg></button>
+            </div>
+          </section>
+
+          <section class="card glass" aria-labelledby="lang-h">
+            <h3 id="lang-h">Languages</h3>
+            <p class="muted">Across 214 commits</p>
+            <div class="lang-bar" aria-hidden="true">
+              <span style="width:91%;background:linear-gradient(90deg,#a48bff,#7aa2ff)"></span>
+              <span style="width:6%;background:#6fe3f2"></span>
+              <span style="width:3%;background:#ffd27a"></span>
+            </div>
+            <ul class="lang-list">
+              <li><i style="background:#a48bff"></i>TypeScript<b>91.0%</b></li>
+              <li><i style="background:#6fe3f2"></i>SQL<b>6.1%</b></li>
+              <li><i style="background:#ffd27a"></i>CSS<b>2.9%</b></li>
+            </ul>
+          </section>
+
+          <section class="card glass" aria-labelledby="stat-h">
+            <h3 id="stat-h">Activity</h3>
+            <p class="muted">Main branch</p>
+            <ul class="stats">
+              <li><svg class="ic"><use href="#i-clock"/></svg>Last push 2 hours ago</li>
+              <li><svg class="ic"><use href="#i-branch"/></svg>4 branches, 2 tags</li>
+              <li><svg class="ic"><use href="#i-pr"/></svg>1 open pull request</li>
+            </ul>
+          </section>
+        </aside>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SCREEN 02: PULL REQUEST -->
+  <section class="frame" aria-labelledby="f2">
+    <div class="frame-cap"><span class="cap-no">02</span><h2 id="f2">Pull request &middot; conversation and diff</h2></div>
+    <div class="screen">
+
+      <nav class="topbar glass" aria-label="Global" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px 10px 16px;">
+        <a href="#" style="display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:600;letter-spacing:-.01em;">
+          <svg class="logo"><use href="#i-logo"/></svg>
+          <span style="font-size:17px;">ether</span>
+        </a>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn" type="button"><svg class="ic"><use href="#i-plus"/></svg><span>New repository</span></button>
+          <button class="btn" type="button" aria-label="Open user menu for admin" style="padding:0 10px 0 4px;">
+            <span class="avatar av-a">AD</span>
+            <span class="hide-sm">admin</span>
+            <svg class="ic sm"><use href="#i-chev"/></svg>
+          </button>
+        </div>
+      </nav>
+
+      <header class="pr-head">
+        <div class="page-crumb" style="padding:0;"><a href="#">admin / ether-core</a></div>
+        <h1>Add invite-only registration <span class="num">#12</span></h1>
+        <div class="pr-sub">
+          <span class="badge badge-open">Open</span>
+          <span><a href="#">admin</a> wants to merge <code class="chip">feature/invites</code> into <code class="chip">main</code></span>
+          <span class="muted">&middot; opened 1 day ago</span>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Pull request">
+        <a href="#" class="tab is-active" aria-current="page">Conversation</a>
+        <a href="#" class="tab">Commits <span class="count">3</span></a>
+        <a href="#" class="tab">Files changed <span class="count">3</span></a>
+      </nav>
+
+      <div class="thread">
+        <article class="comment glass">
+          <span class="avatar av-a">AD</span>
+          <div class="comment-body">
+            <div class="comment-head"><strong>admin</strong><span>commented 1 day ago</span></div>
+            <p>Replaces open signup. Admins mint an invite, it goes to one friend, and it is single use and expires after 7 days. Tokens are stored as SHA-256 hashes, so a leaked database dump does not leak live invites.</p>
+            <p>Covered by the new e2e spec for expired and reused tokens.</p>
+          </div>
+        </article>
+
+        <article class="comment glass">
+          <span class="avatar av-m">MI</span>
+          <div class="comment-body">
+            <div class="comment-head"><strong>mira</strong><span>commented 5 hours ago</span></div>
+            <p>Looks right. Can we make the claim atomic? Right now <code>consumeInvite</code> checks <code>usedAt</code> and then updates it, so two friends opening the same link at once could both pass the check. Moving the check into the <code>UPDATE ... WHERE</code> closes that gap.</p>
+          </div>
+        </article>
+
+        <section class="merge glass" aria-labelledby="merge-h">
+          <span class="merge-ic"><svg class="ic"><use href="#i-check"/></svg></span>
+          <div class="merge-copy">
+            <h2 id="merge-h">This branch has no conflicts with the base branch</h2>
+            <p>Merging can be performed automatically.</p>
+          </div>
+          <button class="btn-merge" type="button"><svg class="ic"><use href="#i-merge"/></svg>Merge pull request</button>
+        </section>
+
+        <figure class="diffcard glass">
+          <figcaption class="diff-head">
+            <svg class="ic"><use href="#i-file"/></svg>
+            <span class="diff-file">src/server/invites.ts</span>
+            <span class="diffstat"><span class="add">+8</span><span class="del">&minus;2</span><span class="bar" aria-hidden="true"><i class="b-add"></i><i class="b-del"></i></span></span>
+          </figcaption>
+          <div class="diff-scroll">
+            <table class="diff">
+              <tbody>
+                <tr class="hunk"><td colspan="4">@@ -19,5 +19,11 @@ export async function consumeInvite(db: Db, token: string)</td></tr>
+                <tr><td class="n">19</td><td class="n">19</td><td class="sg"></td><td class="code">  const hash = sha256(token);</td></tr>
+                <tr class="del"><td class="n">20</td><td class="n"></td><td class="sg">&minus;</td><td class="code">  const row = await db.query.invites.findFirst({ where: eq(invites.hash, hash) });</td></tr>
+                <tr class="add"><td class="n"></td><td class="n">20</td><td class="sg">+</td><td class="code">  const row = await db.query.invites.findFirst({</td></tr>
+                <tr class="add"><td class="n"></td><td class="n">21</td><td class="sg">+</td><td class="code">    where: and(eq(invites.hash, hash), isNull(invites.usedAt)),</td></tr>
+                <tr class="add"><td class="n"></td><td class="n">22</td><td class="sg">+</td><td class="code">  });</td></tr>
+                <tr><td class="n">21</td><td class="n">23</td><td class="sg"></td><td class="code">  if (!row || row.expiresAt &lt; now()) throw new InviteError("invalid");</td></tr>
+                <tr class="del"><td class="n">22</td><td class="n"></td><td class="sg">&minus;</td><td class="code">  await db.update(invites).set({ usedAt: now() }).where(eq(invites.id, row.id));</td></tr>
+                <tr class="add"><td class="n"></td><td class="n">24</td><td class="sg">+</td><td class="code">  const claimed = await db.update(invites)</td></tr>
+                <tr class="add"><td class="n"></td><td class="n">25</td><td class="sg">+</td><td class="code">    .set({ usedAt: now() })</td></tr>
+                <tr class="add"><td class="n"></td><td class="n">26</td><td class="sg">+</td><td class="code">    .where(and(eq(invites.id, row.id), isNull(invites.usedAt)))</td></tr>
+                <tr class="add"><td class="n"></td><td class="n">27</td><td class="sg">+</td><td class="code">    .returning();</td></tr>
+                <tr class="add"><td class="n"></td><td class="n">28</td><td class="sg">+</td><td class="code">  if (claimed.length === 0) throw new InviteError("already-used");</td></tr>
+                <tr><td class="n">23</td><td class="n">29</td><td class="sg"></td><td class="code">  return row;</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </figure>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SCREEN 03: ISSUES LIST -->
+  <section class="frame" aria-labelledby="f3">
+    <div class="frame-cap"><span class="cap-no">03</span><h2 id="f3">Issues &middot; list</h2></div>
+    <div class="screen">
+
+      <nav class="topbar glass" aria-label="Global" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px 10px 16px;">
+        <a href="#" style="display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:600;letter-spacing:-.01em;">
+          <svg class="logo"><use href="#i-logo"/></svg>
+          <span style="font-size:17px;">ether</span>
+        </a>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn" type="button"><svg class="ic"><use href="#i-plus"/></svg><span>New repository</span></button>
+          <button class="btn" type="button" aria-label="Open user menu for admin" style="padding:0 10px 0 4px;">
+            <span class="avatar av-a">AD</span>
+            <span class="hide-sm">admin</span>
+            <svg class="ic sm"><use href="#i-chev"/></svg>
+          </button>
+        </div>
+      </nav>
+
+      <div class="page-crumb">
+        <a href="#">admin / ether-core</a><span>/</span><strong>Issues</strong>
+      </div>
+
+      <div class="issues-bar">
+        <div class="seg" role="group" aria-label="Filter by state">
+          <button class="seg-btn" type="button" aria-pressed="true"><svg class="ic sm"><use href="#i-issue-open"/></svg>5 Open</button>
+          <button class="seg-btn" type="button" aria-pressed="false"><svg class="ic sm"><use href="#i-issue-closed"/></svg>9 Closed</button>
+        </div>
+        <label class="search">
+          <svg class="ic sm"><use href="#i-search"/></svg>
+          <input type="search" value="is:issue is:open" aria-label="Search issues">
+        </label>
+        <button class="btn btn-primary" type="button"><svg class="ic"><use href="#i-plus"/></svg>New issue</button>
+      </div>
+
+      <ol class="issue-list glass">
+        <li>
+          <a href="#" class="issue">
+            <svg class="ic state state-open"><use href="#i-issue-open"/></svg>
+            <div>
+              <div class="issue-title">Session cookies vanish after a server restart <span class="labels"><span class="label l-bug">bug</span></span></div>
+              <div class="issue-meta"><span class="mono">#14</span> opened 3 days ago by kat</div>
+            </div>
+            <span class="issue-comments"><svg class="ic xs"><use href="#i-comment"/></svg>4</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="issue">
+            <svg class="ic state state-open"><use href="#i-issue-open"/></svg>
+            <div>
+              <div class="issue-title">Show LFS pointers as a placeholder in the file browser <span class="labels"><span class="label l-enh">enhancement</span></span></div>
+              <div class="issue-meta"><span class="mono">#13</span> opened 3 days ago by jonas</div>
+            </div>
+            <span class="issue-comments"><svg class="ic xs"><use href="#i-comment"/></svg>2</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="issue">
+            <svg class="ic state state-open"><use href="#i-issue-open"/></svg>
+            <div>
+              <div class="issue-title">Invite emails with a copy-paste fallback <span class="labels"><span class="label l-enh">enhancement</span><span class="label l-doc">docs</span></span></div>
+              <div class="issue-meta"><span class="mono">#11</span> opened 4 days ago by mira</div>
+            </div>
+            <span class="issue-comments"><svg class="ic xs"><use href="#i-comment"/></svg>0</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="issue">
+            <svg class="ic state state-open"><use href="#i-issue-open"/></svg>
+            <div>
+              <div class="issue-title">Rate-limit the clone endpoint per token <span class="labels"><span class="label l-sec">security</span></span></div>
+              <div class="issue-meta"><span class="mono">#10</span> opened 4 days ago by admin</div>
+            </div>
+            <span class="issue-comments"><svg class="ic xs"><use href="#i-comment"/></svg>1</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="issue">
+            <svg class="ic state state-open"><use href="#i-issue-open"/></svg>
+            <div>
+              <div class="issue-title">Add an e2e case for signup with an expired invite</div>
+              <div class="issue-meta"><span class="mono">#9</span> opened 5 days ago by kat</div>
+            </div>
+            <span class="issue-comments"><svg class="ic xs"><use href="#i-comment"/></svg>3</span>
+          </a>
+        </li>
+      </ol>
+
+    </div>
+  </section>
+
+</main>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById('theme');
+    var label = document.getElementById('theme-label');
+    var daylightQuery = window.matchMedia('(prefers-color-scheme: light)');
+    function isDark() {
+      return root.dataset.theme ? root.dataset.theme === 'dark' : !daylightQuery.matches;
+    }
+    function sync() {
+      var dark = isDark();
+      label.textContent = dark ? 'Daylight' : 'Night';
+      btn.setAttribute('aria-pressed', String(!dark));
+    }
+    btn.addEventListener('click', function () {
+      root.dataset.theme = isDark() ? 'light' : 'dark';
+      sync();
+    });
+    sync();
+  })();
+</script>
+</body>
+</html>

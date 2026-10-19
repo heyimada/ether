@@ -1,0 +1,777 @@
+<!doctype html>
+<!--
+Direction 05: Swiss typographic grid (International Typographic Style).
+Palette: white paper and near-black ink, one signal red (#E3120B) as the only accent. Dark mode inverts to ink ground with a brighter red.
+Type: Inter Tight for display and body at strong scale contrast; IBM Plex Mono for every number, hash, size and timestamp so metadata reads as typography.
+Key ideas: strict 12-column grid, flush-left ragged-right, almost no boxes. Structure comes from hairline rules, alignment and baseline rhythm. Red marks state only, never decoration.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ether: Swiss grid mock</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600;700;800&display=swap">
+<style>
+  :root {
+    --paper: #ffffff;
+    --ink: #111111;
+    --ink-2: #4a4a4a;
+    --ink-3: #8a8a8a;
+    --rule: #111111;
+    --rule-soft: #d9d9d6;
+    --signal: #e3120b;
+    --signal-ink: #ffffff;
+    --add-bg: #eef7ee;
+    --del-bg: #fbeceb;
+    --merge: #1f7a3a;
+    --merge-ink: #ffffff;
+    --sans: "Inter Tight", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    --gutter: 24px;
+    --col: 1fr;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0d0d0d;
+      --ink: #f2f2f0;
+      --ink-2: #b9b9b5;
+      --ink-3: #7b7b78;
+      --rule: #f2f2f0;
+      --rule-soft: #2c2c2b;
+      --signal: #ff4a3d;
+      --signal-ink: #0d0d0d;
+      --add-bg: #13261a;
+      --del-bg: #2a1716;
+      --merge: #2fa352;
+      --merge-ink: #04140a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0d0d0d;
+    --ink: #f2f2f0;
+    --ink-2: #b9b9b5;
+    --ink-3: #7b7b78;
+    --rule: #f2f2f0;
+    --rule-soft: #2c2c2b;
+    --signal: #ff4a3d;
+    --signal-ink: #0d0d0d;
+    --add-bg: #13261a;
+    --del-bg: #2a1716;
+    --merge: #2fa352;
+    --merge-ink: #04140a;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 15px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-bottom: 96px;
+    overflow-x: hidden;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .mono { font-family: var(--mono); font-size: 13px; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  .label { font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+  .muted { color: var(--ink-2); }
+
+  /* Frame chrome: the mock sits on a labelled sheet */
+  .sheet { max-width: 1280px; margin: 0 auto; }
+  .frame { margin-top: 64px; }
+  .frame-head {
+    display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter);
+    align-items: baseline; padding-bottom: 10px; border-bottom: 1px solid var(--rule);
+  }
+  .frame-head .label:first-child { grid-column: 1 / span 3; color: var(--signal); }
+  .frame-head .label:last-child { grid-column: 9 / span 4; text-align: right; }
+  .frame-head h2 { grid-column: 4 / span 5; margin: 0; font: 600 13px/1 var(--sans); letter-spacing: 0; }
+
+  /* Screen: the 12-column grid every screen uses */
+  .screen {
+    display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter);
+    padding-top: 24px;
+  }
+  .span-12 { grid-column: 1 / -1; }
+  .span-8 { grid-column: 1 / span 8; }
+  .span-4 { grid-column: 9 / span 4; }
+  .span-9 { grid-column: 1 / span 9; }
+  .span-3 { grid-column: 10 / span 3; }
+  .span-6 { grid-column: 1 / span 6; }
+  .span-5 { grid-column: 8 / span 5; }
+  .min0 { min-width: 0; }
+
+  /* Top bar */
+  .topbar {
+    grid-column: 1 / -1; display: flex; align-items: center; gap: 28px;
+    padding-block: 14px; border-bottom: 2px solid var(--rule);
+  }
+  .logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font: 800 17px/1 var(--sans); letter-spacing: -0.03em; }
+  .logo-mark { width: 18px; height: 18px; background: var(--signal); position: relative; }
+  .logo-mark::after { content: ""; position: absolute; left: 0; bottom: 0; width: 60%; height: 40%; background: var(--ink); }
+  .topbar nav { display: flex; gap: 20px; font-size: 14px; }
+  .topbar nav a { text-decoration: none; color: var(--ink-2); }
+  .topbar nav a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+  .topbar .spacer { flex: 1; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px;
+    border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+    font: 500 14px/1 var(--sans); text-decoration: none; cursor: pointer; border-radius: 0;
+  }
+  .btn:hover { background: var(--ink); color: var(--paper); }
+  .btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .btn.solid { background: var(--ink); color: var(--paper); }
+  .btn.solid:hover { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+  .btn.merge { background: var(--merge); border-color: var(--merge); color: var(--merge-ink); height: 40px; padding: 0 18px; font-weight: 600; }
+  .btn.merge:hover { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  .avatar {
+    width: 30px; height: 30px; display: inline-grid; place-items: center; flex: none;
+    background: var(--ink); color: var(--paper); font: 600 12px/1 var(--sans); letter-spacing: 0.02em;
+  }
+  .avatar.signal { background: var(--signal); color: var(--signal-ink); }
+  .avatar.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--rule); }
+  .avatar.sm { width: 22px; height: 22px; font-size: 10px; }
+  .avatar.menu { cursor: pointer; border: 0; padding: 0; }
+  .avatar.menu:hover { background: var(--signal); color: var(--signal-ink); }
+
+  /* Repo header */
+  .repo-title { grid-column: 1 / span 9; margin: 40px 0 0; font: 500 20px/1.2 var(--sans); letter-spacing: -0.01em; color: var(--ink-2); }
+  .repo-title b { font-weight: 800; color: var(--ink); }
+  .repo-title .sep { color: var(--ink-3); padding: 0 4px; font-weight: 400; }
+  .badge-private {
+    display: inline-block; vertical-align: 4px; margin-left: 14px; padding: 4px 7px 3px;
+    font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--signal); border: 1px solid var(--signal);
+  }
+  .repo-desc { grid-column: 1 / span 8; margin: 12px 0 0; font-size: 17px; line-height: 1.45; color: var(--ink-2); max-width: 60ch; }
+  .repo-actions { grid-column: 9 / span 4; align-self: end; display: flex; justify-content: flex-end; gap: 8px; margin-top: 40px; }
+
+  /* Tabs: underline by rule weight, no pills */
+  .tabs { grid-column: 1 / -1; display: flex; gap: 0; margin-top: 28px; border-bottom: 1px solid var(--rule-soft); }
+  .tab {
+    position: relative; padding: 12px 0; margin-right: 32px; text-decoration: none;
+    font: 500 15px/1 var(--sans); color: var(--ink-2); display: inline-flex; align-items: baseline; gap: 6px;
+  }
+  .tab .count { font: 400 12px/1 var(--mono); color: var(--ink-3); }
+  .tab:hover { color: var(--ink); }
+  .tab[aria-current="page"] { color: var(--ink); font-weight: 700; }
+  .tab[aria-current="page"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: var(--ink); }
+  .tab:focus-visible { outline-offset: 4px; }
+
+  /* Toolbar */
+  .toolbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding-block: 16px; flex-wrap: wrap; }
+  .branch { display: inline-flex; align-items: center; gap: 10px; height: 34px; padding: 0 12px; border: 1px solid var(--rule); background: var(--paper); font: 500 14px/1 var(--sans); cursor: pointer; color: var(--ink); }
+  .branch:hover { background: var(--rule-soft); }
+  .branch .mono { color: var(--ink-3); }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .meta { font: 400 13px/1 var(--mono); color: var(--ink-2); }
+
+  /* Latest commit bar */
+  .commit-bar {
+    grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 16px;
+    padding: 14px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule-soft);
+  }
+  .commit-bar .who { font-weight: 600; text-decoration: none; }
+  .commit-bar .msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); min-width: 0; text-decoration: none; }
+  .commit-bar .msg:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .commit-bar .sha { color: var(--signal); text-decoration: none; }
+  .commit-bar .sha:hover { text-decoration: underline; }
+  .commit-bar .when { color: var(--ink-3); white-space: nowrap; }
+  .commit-inner { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+  /* File table */
+  .files { grid-column: 1 / span 8; width: 100%; border-collapse: collapse; }
+  .files th { text-align: left; font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); padding: 12px 0 10px; border-bottom: 1px solid var(--rule-soft); }
+  .files td { padding: 10px 0; border-bottom: 1px solid var(--rule-soft); vertical-align: baseline; }
+  .files td.name { width: 30%; }
+  .files td.msg { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
+  .files td.num, .files th.num { text-align: right; width: 12%; white-space: nowrap; }
+  .files td.when { width: 14%; text-align: right; color: var(--ink-3); white-space: nowrap; }
+  .files a.row-name { text-decoration: none; display: inline-flex; align-items: center; gap: 10px; }
+  .files a.row-name:hover { color: var(--signal); }
+  .files tbody tr:hover td { background: var(--rule-soft); }
+  .files tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--signal); }
+  .files .folder { font-weight: 600; }
+  .files .ico { color: var(--ink-3); }
+
+  /* Right column: clone + about */
+  .side { grid-column: 9 / span 4; display: flex; flex-direction: column; gap: 32px; min-width: 0; }
+  .side h3 { margin: 0 0 12px; font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+  .clone { border-top: 2px solid var(--rule); padding-top: 14px; }
+  .clone-row { display: flex; align-items: stretch; border: 1px solid var(--rule); min-width: 0; }
+  .clone-row code {
+    flex: 1; min-width: 0; padding: 9px 10px; font: 400 13px/1.3 var(--mono); white-space: nowrap; overflow-x: auto;
+    scrollbar-width: thin; color: var(--ink);
+  }
+  .clone-row button {
+    border: 0; border-left: 1px solid var(--rule); background: var(--paper); color: var(--ink); padding: 0 12px;
+    font: 500 13px/1 var(--sans); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .clone-row button:hover { background: var(--ink); color: var(--paper); }
+  .clone-row button:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
+  .clone-hint { margin: 8px 0 0; font-size: 13px; color: var(--ink-3); }
+  .about dl { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px 16px; margin: 0; font-size: 14px; }
+  .about dt { color: var(--ink-3); }
+  .about dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .about dd.mono { font-size: 13px; }
+
+  /* README */
+  .readme { grid-column: 1 / span 8; margin-top: 48px; padding-top: 0; border-top: 2px solid var(--rule); }
+  .readme-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 14px 0 18px; }
+  .readme-head .label { color: var(--ink-3); }
+  .readme h1, .readme h2 { font-family: var(--sans); letter-spacing: -0.03em; margin: 0; text-wrap: balance; }
+  .readme h2 { font: 800 clamp(40px, 5.2vw, 64px)/0.95 var(--sans); letter-spacing: -0.045em; }
+  .readme p { max-width: 62ch; font-size: 17px; line-height: 1.55; color: var(--ink-2); margin: 20px 0 0; }
+  .readme h3 { margin: 40px 0 0; padding-top: 12px; border-top: 1px solid var(--rule-soft); font: 700 13px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+  .readme pre {
+    margin: 16px 0 0; padding: 16px 18px; background: transparent; border: 1px solid var(--rule);
+    font: 400 13px/1.6 var(--mono); overflow-x: auto; max-width: 100%;
+  }
+  .readme pre .k { color: var(--signal); }
+  .readme pre .c { color: var(--ink-3); }
+  .readme ul { margin: 16px 0 0; padding: 0; list-style: none; max-width: 62ch; }
+  .readme li { display: grid; grid-template-columns: 40px minmax(0, 1fr); padding: 10px 0; border-bottom: 1px solid var(--rule-soft); color: var(--ink-2); }
+  .readme li span.mono { color: var(--ink); }
+
+  /* ===== Screen 2: Pull request ===== */
+  .pr-head { grid-column: 1 / -1; padding-top: 40px; }
+  .pr-title-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end; }
+  .pr-title { margin: 0; font: 800 clamp(40px, 5vw, 60px)/0.98 var(--sans); letter-spacing: -0.045em; text-wrap: balance; }
+  .pr-title .num { font: 400 0.42em/1 var(--mono); letter-spacing: 0; color: var(--ink-3); vertical-align: 0.9em; margin-left: 12px; }
+  .state {
+    display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px;
+    background: var(--ink); color: var(--paper); font: 600 13px/1 var(--sans); text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .state::before { content: ""; width: 8px; height: 8px; background: var(--signal); border-radius: 50%; }
+  .pr-sub { grid-column: 1 / -1; margin-top: 16px; font-size: 16px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+  .pr-sub .branch-name { font: 500 13px/1 var(--mono); padding: 5px 7px; background: var(--rule-soft); color: var(--ink); }
+  .pr-sub b { color: var(--ink); font-weight: 600; }
+  .pr-tabs { margin-top: 28px; }
+
+  .thread { grid-column: 1 / span 8; padding-top: 32px; display: flex; flex-direction: column; min-width: 0; }
+  .comment { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 16px; padding: 0 0 36px; }
+  .comment + .comment { border-top: 1px solid var(--rule-soft); padding-top: 32px; }
+  .comment-meta { display: flex; align-items: baseline; gap: 10px; font-size: 14px; flex-wrap: wrap; }
+  .comment-meta b { font-weight: 700; }
+  .comment-meta span { color: var(--ink-3); }
+  .comment-body { margin-top: 10px; font-size: 16px; line-height: 1.6; color: var(--ink); max-width: 64ch; }
+  .comment-body p { margin: 0 0 12px; }
+  .comment-body code { font: 400 13px/1 var(--mono); padding: 3px 5px; background: var(--rule-soft); }
+  .comment-body .quote { border-left: 2px solid var(--signal); padding-left: 14px; color: var(--ink-2); margin: 0 0 12px; }
+
+  .merge-box { grid-column: 1 / span 8; margin-top: 8px; border-top: 2px solid var(--rule); padding: 20px 0 0; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 16px; }
+  .merge-box .status-line { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+  .merge-box h4 { margin: 0; font: 700 16px/1.3 var(--sans); }
+  .merge-box p { margin: 4px 0 0; color: var(--ink-2); font-size: 14px; }
+  .ok-dot { width: 22px; height: 22px; display: grid; place-items: center; background: var(--merge); color: var(--merge-ink); }
+  .ok-dot svg { width: 14px; height: 14px; stroke-width: 2.4; }
+  .merge-foot { margin-top: 18px; padding: 16px 0 0; border-top: 1px solid var(--rule-soft); font-size: 13px; color: var(--ink-3); display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+
+  .pr-side { grid-column: 9 / span 4; padding-top: 32px; display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+  .pr-side h3 { margin: 0 0 10px; font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+  .pr-side .kv { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+  .pr-side .kv div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--rule-soft); padding-bottom: 8px; }
+  .pr-side .kv span { color: var(--ink-3); }
+  .pr-side .kv b { font-weight: 600; }
+  .stat-row { display: flex; gap: 20px; font: 500 14px/1 var(--mono); }
+  .stat-row .add { color: var(--merge); }
+  .stat-row .del { color: var(--signal); }
+
+  .diff { grid-column: 1 / -1; margin-top: 56px; border-top: 2px solid var(--rule); }
+  .diff-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--rule-soft); flex-wrap: wrap;
+  }
+  .diff-head .path { font: 500 14px/1 var(--mono); display: flex; gap: 10px; align-items: center; min-width: 0; overflow-wrap: anywhere; }
+  .diff-head .pm { font: 500 13px/1 var(--mono); display: flex; gap: 10px; }
+  .diff-head .pm .add { color: var(--merge); }
+  .diff-head .pm .del { color: var(--signal); }
+  .diff-scroll { overflow-x: auto; max-width: 100%; }
+  .diff table { width: 100%; border-collapse: collapse; font: 400 13px/1.55 var(--mono); min-width: 620px; }
+  .diff td { padding: 0 12px; vertical-align: top; white-space: pre; }
+  .diff td.ln { width: 1%; color: var(--ink-3); text-align: right; user-select: none; padding: 0 10px; border-right: 1px solid var(--rule-soft); }
+  .diff td.sign { width: 1%; padding: 0 4px 0 12px; user-select: none; }
+  .diff tr.add td { background: var(--add-bg); }
+  .diff tr.del td { background: var(--del-bg); }
+  .diff tr.hunk td { color: var(--ink-3); background: var(--rule-soft); padding: 4px 12px; }
+  .diff tr.add td.sign { color: var(--merge); }
+  .diff tr.del td.sign { color: var(--signal); }
+  .diff tr:hover td:not(.ln) { filter: brightness(0.98); }
+  .diff .k { color: var(--signal); }
+
+  /* ===== Screen 3: Issues ===== */
+  .issues-head { grid-column: 1 / -1; padding-top: 40px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); align-items: end; }
+  .issues-head h1 { grid-column: 1 / span 7; margin: 0; font: 800 clamp(48px, 7vw, 92px)/0.9 var(--sans); letter-spacing: -0.06em; }
+  .issues-head .new { grid-column: 11 / span 2; justify-self: end; }
+  .issues-head .count { grid-column: 1 / span 12; margin-top: 18px; font: 400 13px/1 var(--mono); color: var(--ink-3); }
+  .toggle { grid-column: 1 / -1; display: flex; align-items: stretch; border-top: 2px solid var(--rule); border-bottom: 1px solid var(--rule-soft); margin-top: 32px; gap: 0; }
+  .toggle button {
+    appearance: none; background: none; border: 0; color: var(--ink-3); font: 600 15px/1 var(--sans);
+    padding: 16px 0; margin-right: 32px; cursor: pointer; display: inline-flex; align-items: baseline; gap: 8px; position: relative;
+  }
+  .toggle button .mono { font-weight: 400; font-size: 13px; color: inherit; }
+  .toggle button:hover { color: var(--ink); }
+  .toggle button[aria-pressed="true"] { color: var(--ink); }
+  .toggle button[aria-pressed="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: var(--ink); }
+  .toggle button:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .toggle .spacer { flex: 1; }
+  .filter-note { align-self: center; font-size: 13px; color: var(--ink-3); }
+
+  .issue-list { grid-column: 1 / -1; list-style: none; margin: 0; padding: 0; }
+  .issue {
+    display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 20px; align-items: start;
+    padding: 22px 0; border-bottom: 1px solid var(--rule-soft); position: relative;
+  }
+  .issue:hover .issue-title { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; }
+  .issue:hover { background: linear-gradient(to right, var(--rule-soft), transparent 70%); }
+  .issue:focus-within { background: var(--rule-soft); }
+  .issue .state-ico { width: 20px; height: 20px; margin-top: 4px; }
+  .issue .state-ico.open { color: var(--merge); }
+  .issue .state-ico.closed { color: var(--ink-3); }
+  .issue-title { margin: 0; font: 700 clamp(22px, 2.6vw, 30px)/1.12 var(--sans); letter-spacing: -0.025em; text-wrap: balance; }
+  .issue-title a { text-decoration: none; }
+  .issue-title a::after { content: ""; position: absolute; inset: 0; }
+  .issue-title a:focus-visible { outline: none; }
+  .issue:focus-within .issue-title a { text-decoration: underline; text-underline-offset: 5px; }
+  .issue-meta { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 14px; color: var(--ink-3); }
+  .issue-meta .mono { color: var(--ink-2); }
+  .issue-meta b { color: var(--ink); font-weight: 600; }
+  .labels { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+  .label-chip { font: 500 11px/1 var(--mono); padding: 4px 6px 3px; border: 1px solid currentColor; text-transform: lowercase; letter-spacing: 0.02em; }
+  .label-chip.bug { color: var(--signal); }
+  .label-chip.infra { color: var(--ink); }
+  .label-chip.docs { color: var(--merge); }
+  .comments { display: inline-flex; align-items: center; gap: 6px; font: 400 13px/1 var(--mono); color: var(--ink-2); padding-top: 4px; }
+  .comments svg { color: var(--ink-3); }
+  .issue-end { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; padding-top: 2px; }
+  .issue:hover .issue-end .comments { color: var(--ink); }
+
+  .foot-note { grid-column: 1 / -1; margin-top: 40px; font-size: 13px; color: var(--ink-3); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .foot-note a { color: var(--ink-2); }
+
+  .spacer { flex: 1; }
+
+  /* Responsive: the grid collapses to one column, rules and labels remain */
+  @media (max-width: 900px) {
+    :root { --gutter: 16px; }
+    .frame-head .label:first-child { grid-column: 1 / -1; }
+    .frame-head h2 { grid-column: 1 / -1; margin-top: 6px; }
+    .frame-head .label:last-child { display: none; }
+    .topbar { flex-wrap: wrap; row-gap: 12px; }
+    .topbar nav { display: none; }
+    .repo-title, .repo-desc, .files, .readme, .thread, .merge-box, .diff-scroll, .repo-actions, .side, .pr-side, .span-8, .span-4 { grid-column: 1 / -1; }
+    .repo-actions { justify-content: flex-start; margin-top: 16px; }
+    .side, .pr-side { margin-top: 32px; }
+    .pr-title-row { grid-template-columns: 1fr; }
+    .issues-head h1 { grid-column: 1 / -1; }
+    .issues-head .new { grid-column: 1 / -1; justify-self: start; margin-top: 20px; }
+    .commit-bar { grid-template-columns: auto minmax(0, 1fr); row-gap: 6px; }
+    .commit-bar .sha, .commit-bar .when { grid-column: 2; }
+    .files td.when, .files th.when, .files th.num, .files td.num { display: none; }
+    .files td.msg { max-width: 0; }
+  }
+  @media (max-width: 560px) {
+    body { font-size: 14px; }
+    .tab { margin-right: 20px; }
+    .toggle button { margin-right: 20px; }
+    .issue { grid-template-columns: 20px minmax(0, 1fr); }
+    .issue-end { grid-column: 2; flex-direction: row; align-items: center; justify-content: flex-start; }
+    .readme h2 { font-size: 40px; }
+    .clone-row code { font-size: 12px; }
+    .readme li { grid-template-columns: 28px minmax(0, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.1l1.4 1.6h6.5a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 1.8h5.2L12.5 5v9.2H4z M9 1.8V5h3.5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5" y="5" width="8.5" height="8.5"/><path d="M3 10.5V3h7.5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 16 16"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M4.5 5v6M11.5 7c0 2.5-7 1.5-7 3.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8l2.2 1.6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3L13 4.5"/></symbol>
+  <symbol id="i-issue-open" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/></symbol>
+  <symbol id="i-issue-closed" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M5.6 8.2l1.6 1.6 3.2-3.4"/></symbol>
+  <symbol id="i-pr" viewBox="0 0 16 16"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="12.5" r="1.5"/><path d="M4.5 5v6M11.5 11V6.5a2 2 0 0 0-2-2H7"/></symbol>
+  <symbol id="i-comment" viewBox="0 0 16 16"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></symbol>
+</svg>
+
+<div class="sheet">
+
+  <!-- ============ SCREEN 1 ============ -->
+  <section class="frame" aria-labelledby="s1">
+    <div class="frame-head">
+      <span class="label">Screen 01</span>
+      <h2 id="s1">Repository code view</h2>
+      <span class="label">admin / ether-core</span>
+    </div>
+
+    <div class="screen">
+      <header class="topbar">
+        <a class="logo" href="#" aria-label="Ether home"><span class="logo-mark" aria-hidden="true"></span>Ether</a>
+        <nav aria-label="Primary">
+          <a href="#">Repositories</a>
+          <a href="#">Activity</a>
+          <a href="#">Members</a>
+        </nav>
+        <span class="spacer"></span>
+        <a class="btn" href="#"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New repository</a>
+        <button class="avatar menu" aria-label="User menu for admin">A</button>
+      </header>
+
+      <div class="repo-title min0"><b>admin</b><span class="sep">/</span><b>ether-core</b><span class="badge-private">Private</span></div>
+      <p class="repo-desc">Core server, sync engine and web UI for Ether. Built as a single binary that runs on the home server and is reached over Tailscale.</p>
+      <div class="repo-actions">
+        <button class="btn"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg>Settings</button>
+        <button class="btn solid"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Clone</button>
+      </div>
+
+      <nav class="tabs" aria-label="Repository">
+        <a class="tab" href="#" aria-current="page">Code</a>
+        <a class="tab" href="#">Issues <span class="count">5</span></a>
+        <a class="tab" href="#">Pull requests <span class="count">1</span></a>
+        <a class="tab" href="#">Settings</a>
+      </nav>
+
+      <div class="toolbar">
+        <button class="branch" aria-label="Switch branch, current main"><svg class="i" aria-hidden="true"><use href="#i-branch"/></svg>main<span class="mono">6 branches</span><svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></button>
+        <span class="spacer"></span>
+        <span class="meta">148 commits</span>
+        <a class="btn" href="#"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg>Commits</a>
+      </div>
+
+      <div class="commit-bar">
+        <div class="commit-inner">
+          <span class="avatar sm">MK</span>
+          <a class="who" href="#">mira</a>
+        </div>
+        <a class="msg" href="#">Fix drizzle migration ordering for sqlite tables</a>
+        <a class="sha mono" href="#">3a9f2c1</a>
+        <span class="when">2 hours ago</span>
+      </div>
+
+      <table class="files">
+        <caption class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Files at main</caption>
+        <thead>
+          <tr><th scope="col">Name</th><th scope="col">Last commit</th><th scope="col" class="num">Size</th><th scope="col" class="when">Updated</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="name"><a class="row-name folder" href="#"><svg class="i ico" aria-hidden="true"><use href="#i-folder"/></svg>src/</a></td>
+            <td class="msg">Add git smart HTTP handler for clone and push</td>
+            <td class="num mono">&mdash;</td>
+            <td class="when">2 hours ago</td>
+          </tr>
+          <tr>
+            <td class="name"><a class="row-name folder" href="#"><svg class="i ico" aria-hidden="true"><use href="#i-folder"/></svg>e2e/</a></td>
+            <td class="msg">Cover invite redemption in playwright suite</td>
+            <td class="num mono">&mdash;</td>
+            <td class="when">3 days ago</td>
+          </tr>
+          <tr>
+            <td class="name"><a class="row-name folder" href="#"><svg class="i ico" aria-hidden="true"><use href="#i-folder"/></svg>drizzle/</a></td>
+            <td class="msg">Fix drizzle migration ordering for sqlite tables</td>
+            <td class="num mono">&mdash;</td>
+            <td class="when">2 hours ago</td>
+          </tr>
+          <tr>
+            <td class="name"><a class="row-name" href="#"><svg class="i ico" aria-hidden="true"><use href="#i-file"/></svg>README.md</a></td>
+            <td class="msg">Document tailnet-only deploy steps</td>
+            <td class="num mono">2.1 KB</td>
+            <td class="when">5 days ago</td>
+          </tr>
+          <tr>
+            <td class="name"><a class="row-name" href="#"><svg class="i ico" aria-hidden="true"><use href="#i-file"/></svg>package.json</a></td>
+            <td class="msg">Bump hono to 4.6.x</td>
+            <td class="num mono">1.4 KB</td>
+            <td class="when">1 week ago</td>
+          </tr>
+          <tr>
+            <td class="name"><a class="row-name" href="#"><svg class="i ico" aria-hidden="true"><use href="#i-file"/></svg>tsconfig.json</a></td>
+            <td class="msg">Enable strict null checks across server</td>
+            <td class="num mono">0.6 KB</td>
+            <td class="when">2 weeks ago</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <aside class="side">
+        <div class="clone">
+          <h3>Clone</h3>
+          <div class="clone-row">
+            <code id="clone-url">https://ether.example.ts.net/admin/ether-core.git</code>
+            <button type="button" aria-label="Copy clone URL"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy</button>
+          </div>
+          <p class="clone-hint">Use HTTPS with your Ether username and access token.</p>
+        </div>
+        <div class="about">
+          <h3>About</h3>
+          <dl>
+            <dt>Default</dt><dd class="mono">main</dd>
+            <dt>Size</dt><dd class="mono">18.4 MB</dd>
+            <dt>Language</dt><dd>TypeScript</dd>
+            <dt>Open</dt><dd>5 issues, 1 pull request</dd>
+          </dl>
+        </div>
+      </aside>
+
+      <article class="readme">
+        <div class="readme-head">
+          <span class="label">README.md</span>
+          <span class="label">Rendered</span>
+        </div>
+        <h2>ether-core</h2>
+        <p>Ether keeps a handful of private repositories on hardware you own. This package holds the server, the git transport and the web interface, so one process serves all of them.</p>
+        <h3>Run locally</h3>
+        <pre><span class="c"># install and start with a seeded admin account</span>
+<span class="k">pnpm</span> install
+<span class="k">pnpm</span> dev --seed-admin</pre>
+        <h3>What is here</h3>
+        <ul>
+          <li><span class="mono">src/</span>Hono server, git smart HTTP and the sync engine.</li>
+          <li><span class="mono">e2e/</span>Playwright flows for invite, push and merge.</li>
+          <li><span class="mono">drizzle/</span>SQLite schema and ordered migrations.</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 2 ============ -->
+  <section class="frame" aria-labelledby="s2">
+    <div class="frame-head">
+      <span class="label">Screen 02</span>
+      <h2 id="s2">Pull request</h2>
+      <span class="label">admin / ether-core #12</span>
+    </div>
+
+    <div class="screen">
+      <header class="pr-head span-12" style="grid-column:1/-1">
+        <div class="pr-title-row">
+          <h1 class="pr-title">Add invite-only registration<span class="num">#12</span></h1>
+          <span class="state">Open</span>
+        </div>
+        <p class="pr-sub">
+          <span class="avatar sm">AD</span>
+          <b>admin</b> wants to merge <span class="branch-name">feature/invites</span> into <span class="branch-name">main</span>
+          <span class="mono" style="color:var(--ink-3);font-size:13px">&middot; 3 commits &middot; opened 2 days ago</span>
+        </p>
+      </header>
+
+      <nav class="tabs pr-tabs" aria-label="Pull request">
+        <a class="tab" href="#" aria-current="page">Conversation</a>
+        <a class="tab" href="#">Commits <span class="count">3</span></a>
+        <a class="tab" href="#">Files changed <span class="count">4</span></a>
+      </nav>
+
+      <section class="thread" aria-label="Conversation">
+        <article class="comment">
+          <span class="avatar">MK</span>
+          <div class="min0">
+            <div class="comment-meta"><b>mira</b><span>commented 1 day ago</span></div>
+            <div class="comment-body">
+              <p>Can we make the invite token single-use? Right now a leaked link works for the full 7 days.</p>
+              <p class="quote">Redeeming an invite now marks it used in the same transaction as account creation.</p>
+              <p>Pulled that into <code>redeemInvite()</code> so a retry cannot create two accounts. Looks right to me once the e2e test passes.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="comment">
+          <span class="avatar signal">JS</span>
+          <div class="min0">
+            <div class="comment-meta"><b>jonas</b><span>commented 18 hours ago</span></div>
+            <div class="comment-body">
+              <p>Tokens are hashed at rest, good. Nit: the 404 for an unknown invite leaks nothing, but the 410 for an expired one tells a caller the code once existed. Same response for both would be safer.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="comment">
+          <span class="avatar">A</span>
+          <div class="min0">
+            <div class="comment-meta"><b>admin</b><span>commented 2 hours ago</span></div>
+            <div class="comment-body">
+              <p>Done in 3a9f2c1. Both paths return 404 now. The e2e suite covers expired and used codes.</p>
+            </div>
+          </div>
+        </article>
+
+        <div class="merge-box">
+          <span class="ok-dot" aria-hidden="true"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span>
+          <div class="min0">
+            <div class="status-line">
+              <div>
+                <h4>This branch has no conflicts with the base branch</h4>
+                <p>Merging can be performed automatically.</p>
+              </div>
+              <button class="btn merge" type="button">Merge pull request</button>
+            </div>
+            <div class="merge-foot">
+              <span>3 checks passed</span>
+              <span>Squash and merge is the default for this repository</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="pr-side" aria-label="Pull request details">
+        <div>
+          <h3>Reviewers</h3>
+          <div class="kv">
+            <div><b>mira</b><span>Approved</span></div>
+            <div><b>jonas</b><span>Commented</span></div>
+          </div>
+        </div>
+        <div>
+          <h3>Labels</h3>
+          <div class="labels"><span class="label-chip infra">auth</span><span class="label-chip docs">docs</span></div>
+        </div>
+        <div>
+          <h3>Changes</h3>
+          <div class="stat-row"><span class="add">+148</span><span class="del">&minus;31</span><span style="color:var(--ink-3)">4 files</span></div>
+        </div>
+      </aside>
+
+      <section class="diff" aria-label="Diff excerpt">
+        <div class="diff-head">
+          <span class="path"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>server/src/routes/auth.ts</span>
+          <span class="pm"><span class="add">+14</span><span class="del">&minus;3</span></span>
+        </div>
+        <div class="diff-scroll">
+          <table>
+            <tbody>
+              <tr class="hunk"><td colspan="4">@@ -41,9 +41,20 @@ export const authRoutes = new Hono()</td></tr>
+              <tr><td class="ln">41</td><td class="ln">41</td><td class="sign"> </td><td>  authRoutes.post("/invites/redeem", async (c) =&gt; {</td></tr>
+              <tr><td class="ln">42</td><td class="ln">42</td><td class="sign"> </td><td>    const { code, username, password } = await c.req.json()</td></tr>
+              <tr class="del"><td class="ln">43</td><td class="ln"></td><td class="sign">-</td><td>    const invite = await db.query.invites.findFirst({ where: eq(invites.code, code) })</td></tr>
+              <tr class="del"><td class="ln">44</td><td class="ln"></td><td class="sign">-</td><td>    if (!invite) return c.json({ error: "not found" }, 404)</td></tr>
+              <tr class="add"><td class="ln"></td><td class="ln">43</td><td class="sign">+</td><td>    const invite = await redeemInvite(db, code)</td></tr>
+              <tr class="add"><td class="ln"></td><td class="ln">44</td><td class="sign">+</td><td>    if (!invite) return c.json({ error: "invite not available" }, 404)</td></tr>
+              <tr><td class="ln">45</td><td class="ln">45</td><td class="sign"> </td><td>    const hash = await hashPassword(password)</td></tr>
+              <tr class="add"><td class="ln"></td><td class="ln">46</td><td class="sign">+</td><td>    const user = await createUser(db, { username, hash, invitedBy: invite.createdBy })</td></tr>
+              <tr class="del"><td class="ln">46</td><td class="ln"></td><td class="sign">-</td><td>    await db.insert(users).values({ username, passwordHash: hash })</td></tr>
+              <tr><td class="ln">47</td><td class="ln">47</td><td class="sign"> </td><td>    return c.json({ id: user.id, username }, 201)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 3 ============ -->
+  <section class="frame" aria-labelledby="s3">
+    <div class="frame-head">
+      <span class="label">Screen 03</span>
+      <h2 id="s3">Issues</h2>
+      <span class="label">admin / ether-core</span>
+    </div>
+
+    <div class="screen">
+      <header class="issues-head">
+        <h1>Issues</h1>
+        <a class="btn solid new" href="#"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New issue</a>
+        <p class="count">admin / ether-core &middot; filtered by repository</p>
+      </header>
+
+      <div class="toggle" role="group" aria-label="Filter issues by state">
+        <button type="button" aria-pressed="true">5 Open</button>
+        <button type="button" aria-pressed="false">9 Closed</button>
+        <span class="spacer"></span>
+        <span class="filter-note">Sorted by newest</span>
+      </div>
+
+      <ol class="issue-list">
+        <li class="issue">
+          <svg class="i state-ico open" aria-hidden="true"><use href="#i-issue-open"/></svg>
+          <div class="min0">
+            <h3 class="issue-title"><a href="#">Session cookies survive a server restart</a></h3>
+            <div class="issue-meta">
+              <span class="mono">#21</span>
+              <span>opened 3 days ago by <b>mira</b></span>
+              <span class="labels"><span class="label-chip bug">bug</span></span>
+            </div>
+          </div>
+          <div class="issue-end">
+            <span class="comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>4</span>
+          </div>
+        </li>
+
+        <li class="issue">
+          <svg class="i state-ico open" aria-hidden="true"><use href="#i-issue-open"/></svg>
+          <div class="min0">
+            <h3 class="issue-title"><a href="#">Show pending invites on the members page</a></h3>
+            <div class="issue-meta">
+              <span class="mono">#19</span>
+              <span>opened 3 days ago by <b>admin</b></span>
+            </div>
+          </div>
+          <div class="issue-end">
+            <span class="comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>1</span>
+          </div>
+        </li>
+
+        <li class="issue">
+          <svg class="i state-ico open" aria-hidden="true"><use href="#i-issue-open"/></svg>
+          <div class="min0">
+            <h3 class="issue-title"><a href="#">Backups fail silently when the disk is full</a></h3>
+            <div class="issue-meta">
+              <span class="mono">#17</span>
+              <span>opened 5 days ago by <b>jonas</b></span>
+              <span class="labels"><span class="label-chip bug">bug</span><span class="label-chip infra">infra</span></span>
+            </div>
+          </div>
+          <div class="issue-end">
+            <span class="comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>7</span>
+          </div>
+        </li>
+
+        <li class="issue">
+          <svg class="i state-ico open" aria-hidden="true"><use href="#i-issue-open"/></svg>
+          <div class="min0">
+            <h3 class="issue-title"><a href="#">Document the Tailscale ACL snippet</a></h3>
+            <div class="issue-meta">
+              <span class="mono">#14</span>
+              <span>opened 1 week ago by <b>kat</b></span>
+              <span class="labels"><span class="label-chip docs">docs</span></span>
+            </div>
+          </div>
+          <div class="issue-end">
+            <span class="comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>0</span>
+          </div>
+        </li>
+
+        <li class="issue">
+          <svg class="i state-ico open" aria-hidden="true"><use href="#i-issue-open"/></svg>
+          <div class="min0">
+            <h3 class="issue-title"><a href="#">Allow force-push only for admins on main</a></h3>
+            <div class="issue-meta">
+              <span class="mono">#11</span>
+              <span>opened 1 week ago by <b>mira</b></span>
+              <span class="labels"><span class="label-chip infra">auth</span></span>
+            </div>
+          </div>
+          <div class="issue-end">
+            <span class="comments"><svg class="i" aria-hidden="true"><use href="#i-comment"/></svg>2</span>
+          </div>
+        </li>
+      </ol>
+
+      <p class="foot-note"><span>Showing 5 of 14 issues</span><a href="#">Closed issues: 9</a></p>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
