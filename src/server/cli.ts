@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { config } from "./config";
@@ -90,7 +90,8 @@ switch (command) {
     const repos = join(config.dataDir, "repos");
     if (existsSync(repos))
       for (const owner of readdirSync(repos))
-        for (const repo of readdirSync(join(repos, owner))) copyRepoConsistently(join(repos, owner, repo), join(dest, "repos", owner, repo));
+        for (const repo of readdirSync(join(repos, owner)))
+          if (statSync(join(repos, owner, repo)).isDirectory()) copyRepoConsistently(join(repos, owner, repo), join(dest, "repos", owner, repo));
     for (const extra of ["avatars", "releases", "ssh_host_ed25519_key"])
       if (existsSync(join(config.dataDir, extra))) cpSync(join(config.dataDir, extra), join(dest, extra), { recursive: true });
     if (existsSync(join(config.dataDir, "auth-secret"))) cpSync(join(config.dataDir, "auth-secret"), join(dest, "auth-secret"));
