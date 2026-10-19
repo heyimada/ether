@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { HttpError, findUser, readableRepos, requireUser, type ReadableRepo } from "../access";
 import { config } from "../config";
 import { db } from "../db/client";
-import { comment, commitEmail, follow, issue, orgMember, organization, pin, profile, user } from "../db/schema";
+import { comment, commitEmail, follow, issue, orgMember, organization, pin, profile, star, user } from "../db/schema";
 import { pushSuggestions } from "../contrib";
 import * as git from "../git";
 
@@ -272,6 +272,14 @@ export const profileRoutes = new Elysia()
       followers: followers.length,
       following: following.length,
       isFollowing: followers.some((f) => f.id === viewer.id),
+      // Only stars on repositories the viewer can read.
+      stars: db
+        .select({ repoId: star.repoId })
+        .from(star)
+        .where(eq(star.userId, target.id))
+        .orderBy(desc(star.createdAt))
+        .all()
+        .flatMap((s) => (readableById.has(s.repoId) ? [repoCard(readableById.get(s.repoId)!)] : [])),
       pinned: pins.flatMap((p) => (readableById.has(p.repoId) ? [repoCard(readableById.get(p.repoId)!)] : [])),
       repos: own.map(repoCard),
       readme,

@@ -31,17 +31,18 @@ type ProfileData = {
   following: number;
   isFollowing: boolean;
   pinned: RepoCard[];
+  stars: RepoCard[];
   repos: RepoCard[];
   readme: string | null;
   contributions: { days: { date: string; count: number }[]; total: number };
   activity: Event[];
 };
 type Person = { username: string; displayName: string; avatarVersion: number | null };
-type Tab = "overview" | "repositories" | "followers" | "following";
+type Tab = "overview" | "repositories" | "stars" | "followers" | "following";
 
 export const Route = createFileRoute("/_authed/$owner/")({
   validateSearch: (s: Record<string, unknown>): { tab?: Tab } => ({
-    tab: s.tab === "repositories" || s.tab === "followers" || s.tab === "following" ? s.tab : undefined,
+    tab: s.tab === "repositories" || s.tab === "stars" || s.tab === "followers" || s.tab === "following" ? s.tab : undefined,
   }),
   loaderDeps: ({ search }) => ({ tab: search.tab }),
   loader: async ({ params, deps }) => {
@@ -72,6 +73,7 @@ function Profile() {
             [
               ["overview", "Overview", null],
               ["repositories", "Repositories", data.repos.length],
+              ["stars", "Stars", data.stars.length],
             ] as const
           ).map(([key, label, count]) => (
             <Link key={key} to="/$owner" params={{ owner }} search={key === "overview" ? {} : { tab: key }} className={tab === key ? "active" : ""} activeOptions={{ includeSearch: true }}>
@@ -82,6 +84,24 @@ function Profile() {
         </nav>
         {tab === "overview" && <Overview data={data} />}
         {tab === "repositories" && <Repositories data={data} />}
+        {tab === "stars" &&
+          (data.stars.length ? (
+            <ul className="card list" aria-label="Starred repositories">
+              {data.stars.map((r) => (
+                <li key={`${r.owner}/${r.name}`} className="repo-row">
+                  <div className="stack-sm" style={{ gap: 4 }}>
+                    <Link to="/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="repo-link">
+                      <BookLock size={16} aria-hidden className="muted" />
+                      {r.owner}/{r.name}
+                    </Link>
+                    {r.description && <span className="muted">{r.description}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="empty card">{data.isSelf ? "Star repositories to keep track of them here." : "No starred repositories you can see."}</p>
+          ))}
         {(tab === "followers" || tab === "following") && <PeopleList title={tab === "followers" ? "Followers" : "Following"} people={people ?? []} />}
       </div>
     </main>
