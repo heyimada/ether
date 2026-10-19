@@ -51,6 +51,10 @@ export const repo = sqliteTable(
     visibility: text("visibility", { enum: ["private", "public"] }).notNull().default("private"),
     // Branch protection for pull requests: merging needs an approving review.
     requireApproval: integer("require_approval", { mode: "boolean" }).notNull().default(false),
+    // CI runs .ether/ci.yml on push when the instance also allows it.
+    ciEnabled: integer("ci_enabled", { mode: "boolean" }).notNull().default(false),
+    // Branch protection: the head commit's CI run must have passed to merge.
+    requireChecks: integer("require_checks", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("repo_owner_name_idx").on(t.ownerId, t.name)],
@@ -419,3 +423,36 @@ export const sshKey = sqliteTable(
   },
   (t) => [index("ssh_key_user_idx").on(t.userId)],
 );
+
+export const ciRun = sqliteTable(
+  "ci_run",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    sha: text("sha").notNull(),
+    ref: text("ref").notNull(),
+    status: text("status", { enum: ["queued", "running", "success", "failure", "cancelled", "error"] }).notNull(),
+    // Why a run errored before any job ran, e.g. an invalid workflow file.
+    message: text("message").notNull().default(""),
+    createdAt: createdAt(),
+    startedAt: integer("started_at", { mode: "timestamp_ms" }),
+    finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("ci_run_repo_sha_idx").on(t.repoId, t.sha)],
+);
+
+export const ciJob = sqliteTable("ci_job", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  runId: integer("run_id")
+    .notNull()
+    .references(() => ciRun.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  // JSON: [{ name, run, shell, timeoutMinutes }]
+  steps: text("steps").notNull(),
+  status: text("status", { enum: ["queued", "running", "success", "failure", "cancelled", "error"] }).notNull(),
+  log: text("log").notNull().default(""),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }),
+  finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+});

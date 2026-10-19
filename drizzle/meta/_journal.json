@@ -85,6 +85,13 @@
       "when": 1792447651694,
       "tag": "0011_ssh_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1792448006139,
+      "tag": "0012_ci",
+      "breakpoints": true
     }
   ]
 }

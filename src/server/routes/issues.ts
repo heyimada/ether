@@ -6,6 +6,7 @@ import { HttpError, allows, readerOrVisitor, requireRepo, requireUser, type Repo
 import { db } from "../db/client";
 import { comment, issue, issueAssignee, issueLabel, label, repo, user } from "../db/schema";
 import * as git from "../git";
+import { latestRun } from "../ci";
 import { reviewSummary } from "./reviews";
 
 const merges = new Mutex();
@@ -141,6 +142,14 @@ function listIssues(a: RepoAccess, isPull: boolean, q: Record<string, string | u
   return { items: presentAll(rows), open, closed };
 }
 
+// The CI run for the pull request's head commit, if any.
+async function headChecks(a: RepoAccess, row: NonNullable<IssueRow>) {
+  if (!row.issue.headRef) return null;
+  const sha = await git.resolveCommit(a.path, `refs/heads/${row.issue.headRef}`);
+  const run = sha ? latestRun(a.repo.id, sha) : null;
+  return run ? { id: run.id, status: run.status } : null;
+}
+
 export async function pullStatus(a: RepoAccess, row: NonNullable<IssueRow>) {
   const base = row.issue.baseRef!;
   const head = row.issue.headRef!;
@@ -231,6 +240,8 @@ export const issueRoutes = new Elysia()
       comments: listComments(row.issue.id),
       role: a.role,
       requireApproval: a.repo.requireApproval,
+      requireChecks: a.repo.requireChecks,
+      checks: await headChecks(a, row),
       ...reviewSummary(row.issue.id),
       ...(await pullStatus(a, row)),
     };
@@ -245,6 +256,10 @@ export const issueRoutes = new Elysia()
       // With protection on, merging needs an approval and no outstanding request for changes.
       const decision = reviewSummary(row.issue.id).reviewDecision;
       if (a.repo.requireApproval && decision !== "approved") throw new HttpError(409, "Merging requires an approving review");
+      if (a.repo.requireChecks) {
+        const checks = await headChecks(a, row);
+        if (checks && checks.status !== "success") throw new HttpError(409, "Merging requires passing checks");
+      }
       const result = await git.mergeBranches(
         a.path,
         row.issue.baseRef!,

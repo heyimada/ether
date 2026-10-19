@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Server, utils, type Connection } from "ssh2";
 import { allows, repoAccess, type Viewer } from "./access";
 import { config } from "./config";
+import { onPush } from "./ci";
 import { recordPush } from "./contrib";
 import { db } from "./db/client";
 import { sshKey, user } from "./db/schema";
@@ -79,7 +80,7 @@ function onClient(client: Connection) {
         if (!allows(access.role, need)) return deny(stream, `you need ${need} access to ${owner}/${name}`);
         const path = isWiki ? await ensureWiki(access.path) : access.path;
 
-        const before = service === "git-receive-pack" ? (await listRefs(path)).map((r) => r.sha) : [];
+        const before = service === "git-receive-pack" ? await listRefs(path) : [];
         const proc = Bun.spawn(["git", service.slice(4), path], {
           stdin: "pipe",
           stdout: "pipe",
@@ -99,8 +100,9 @@ function onClient(client: Connection) {
         const code = await proc.exited;
         if (service === "git-receive-pack" && code === 0) {
           await fixHead(path).catch(() => {});
-          const after = (await listRefs(path)).map((r) => r.sha);
-          recordPush(viewer.id, await newAuthorEmails(path, before, after).catch(() => []));
+          const after = await listRefs(path);
+          recordPush(viewer.id, await newAuthorEmails(path, before.map((r) => r.sha), after.map((r) => r.sha)).catch(() => []));
+          if (!isWiki) await onPush(access.repo.id, path, before, after).catch(() => {});
         }
         stream.exit(code);
         stream.end();
@@ -113,6 +115,8 @@ function onClient(client: Connection) {
 export function startSsh(): Server | null {
   if (!config.sshPort) return null;
   const server = new Server({ hostKeys: [hostKey()], ident: "Ether" }, onClient);
+  // A busy port shouldn't take the web app down with it.
+  server.on("error", (e: Error) => console.error(`Git over SSH unavailable: ${e.message}`));
   server.listen(config.sshPort, config.host);
   return server;
 }

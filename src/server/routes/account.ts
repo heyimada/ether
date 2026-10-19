@@ -15,6 +15,7 @@ import {
 } from "../access";
 import { auth, placeholderEmail } from "../auth";
 import { USERNAME_RE } from "../auth-plugins";
+import { ciAllowed } from "../ci";
 import { config } from "../config";
 import { db } from "../db/client";
 import { accessToken, instanceSetting, invite, profile, user, userPref } from "../db/schema";
@@ -51,18 +52,21 @@ export const accountRoutes = new Elysia()
   // Public: tells the web app whether signed-out visitors may browse public repositories.
   .get("/instance", () => ({
     anonymousRead: anonymousRead(),
+    ciEnabled: ciAllowed(),
     // Base for ssh:// clone URLs, or null when git over SSH is off.
     sshBase: config.sshPort ? `ssh://git@${config.sshHost}${config.sshPort === 22 ? "" : `:${config.sshPort}`}` : null,
   }))
   .put("/admin/settings", async ({ request, body }) => {
     await requireAdmin(request);
-    const { anonymousRead: allow } = (body ?? {}) as { anonymousRead?: unknown };
-    if (typeof allow !== "boolean") throw new HttpError(400, "anonymousRead must be true or false");
-    db.insert(instanceSetting)
-      .values({ key: "anonymousRead", value: String(allow) })
-      .onConflictDoUpdate({ target: instanceSetting.key, set: { value: String(allow) } })
-      .run();
-    return { anonymousRead: allow };
+    const b = (body ?? {}) as Record<string, unknown>;
+    const keys = ["anonymousRead", "ciEnabled"].filter((k) => k in b);
+    if (keys.length === 0 || keys.some((k) => typeof b[k] !== "boolean")) throw new HttpError(400, "Settings are anonymousRead and ciEnabled, each true or false");
+    for (const key of keys)
+      db.insert(instanceSetting)
+        .values({ key, value: String(b[key]) })
+        .onConflictDoUpdate({ target: instanceSetting.key, set: { value: String(b[key]) } })
+        .run();
+    return { anonymousRead: anonymousRead(), ciEnabled: ciAllowed() };
   })
   .get("/me", async ({ request }) => {
     const viewer = await requireUser(request);

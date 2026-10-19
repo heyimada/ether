@@ -26,7 +26,7 @@ function copyRepoConsistently(from: string, to: string) {
   if (existsSync(join(from, "objects"))) cpSync(join(from, "objects"), join(to, "objects"), { recursive: true });
 }
 
-const DATA_FILES = ["ether.db", "repos", "avatars", "auth-secret"];
+const DATA_FILES = ["ether.db", "repos", "avatars", "releases", "auth-secret", "ssh_host_ed25519_key"];
 
 // Restore never imports the database layer: that would create a fresh ether.db first.
 if (command === "restore") {
@@ -91,7 +91,8 @@ switch (command) {
     if (existsSync(repos))
       for (const owner of readdirSync(repos))
         for (const repo of readdirSync(join(repos, owner))) copyRepoConsistently(join(repos, owner, repo), join(dest, "repos", owner, repo));
-    if (existsSync(join(config.dataDir, "avatars"))) cpSync(join(config.dataDir, "avatars"), join(dest, "avatars"), { recursive: true });
+    for (const extra of ["avatars", "releases", "ssh_host_ed25519_key"])
+      if (existsSync(join(config.dataDir, extra))) cpSync(join(config.dataDir, extra), join(dest, extra), { recursive: true });
     if (existsSync(join(config.dataDir, "auth-secret"))) cpSync(join(config.dataDir, "auth-secret"), join(dest, "auth-secret"));
     else console.warn("No auth-secret file (BETTER_AUTH_SECRET is set in the environment); keep that value with this backup.");
     console.log(`Backed up to ${dest}`);

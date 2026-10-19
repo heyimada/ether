@@ -4,6 +4,7 @@ import { HttpError, findUser, isOrg, readableRepos, requireRepo, requireUser, re
 import { db } from "../db/client";
 import { collaborator, orgMember, repo, star, user } from "../db/schema";
 import * as git from "../git";
+import { ciAllowed } from "../ci";
 import { addDefaultLabels } from "./labels";
 
 type Q = Record<string, string | undefined>;
@@ -77,6 +78,8 @@ export const repoRoutes = new Elysia()
         description: a.repo.description,
         visibility: a.repo.visibility,
         requireApproval: a.repo.requireApproval,
+        ciEnabled: a.repo.ciEnabled,
+        requireChecks: a.repo.requireChecks,
         defaultBranch,
         empty: refs.length === 0,
       },
@@ -90,12 +93,17 @@ export const repoRoutes = new Elysia()
   .patch("/repos/:owner/:repo", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "owner");
-    const { description, defaultBranch, visibility, requireApproval } = (body ?? {}) as {
+    const { description, defaultBranch, visibility, requireApproval, ciEnabled, requireChecks } = (body ?? {}) as {
       description?: unknown;
       defaultBranch?: unknown;
       visibility?: unknown;
       requireApproval?: unknown;
+      ciEnabled?: unknown;
+      requireChecks?: unknown;
     };
+    if (ciEnabled === true && !ciAllowed()) throw new HttpError(400, "An admin has to allow CI on this server first");
+    if (typeof ciEnabled === "boolean") db.update(repo).set({ ciEnabled }).where(eq(repo.id, a.repo.id)).run();
+    if (typeof requireChecks === "boolean") db.update(repo).set({ requireChecks }).where(eq(repo.id, a.repo.id)).run();
     if (typeof requireApproval === "boolean") db.update(repo).set({ requireApproval }).where(eq(repo.id, a.repo.id)).run();
     if (visibility !== undefined) {
       if (visibility !== "private" && visibility !== "public") throw new HttpError(400, "Visibility must be private or public");

@@ -17,7 +17,7 @@ export const Route = createFileRoute("/_authed/site-admin")({
     const [invites, users, instance] = await Promise.all([
       api<{ invites: Invite[] }>("/api/invites"),
       api<{ users: UserRow[] }>("/api/users"),
-      api<{ anonymousRead: boolean }>("/api/instance"),
+      api<{ anonymousRead: boolean; ciEnabled: boolean }>("/api/instance"),
     ]);
     return { invites: invites.invites, users: users.users.filter((u) => !u.isOrg), instance };
   },
@@ -29,6 +29,19 @@ function Admin() {
   const { invites, users, instance } = Route.useLoaderData();
   const [saved, setSaved] = useState("");
   const [allowVisitors, setAllowVisitors] = useState(instance.anonymousRead);
+  const [allowCi, setAllowCi] = useState(instance.ciEnabled);
+  const setCi = useAction(async (ciEnabled: boolean) => {
+    setSaved("");
+    setAllowCi(ciEnabled);
+    try {
+      await put("/api/admin/settings", { ciEnabled });
+    } catch (e) {
+      setAllowCi(!ciEnabled);
+      throw e;
+    }
+    setSaved("Saved");
+    await router.invalidate();
+  });
   const setAnonymous = useAction(async (anonymousRead: boolean) => {
     setSaved("");
     setAllowVisitors(anonymousRead);
@@ -62,6 +75,17 @@ function Admin() {
             <span className="hint" style={{ display: "block" }}>
               They can browse and clone public repositories and read their issues and pull requests. Everything else still needs an account. Leave this off if
               people outside your team can reach this server.
+            </span>
+          </span>
+        </label>
+        <ErrorNote error={setCi.error} />
+        <label className="radio" style={{ alignItems: "flex-start" }}>
+          <input type="checkbox" checked={allowCi} onChange={(e) => setCi.run(e.target.checked)} disabled={setCi.pending} />
+          <span>
+            Run CI jobs on this server
+            <span className="hint" style={{ display: "block" }}>
+              Repositories that turn CI on run the commands in their <code>.ether/ci.yml</code> on this machine, as the user Ether runs as. Only allow this
+              if you trust everyone with write access to those repositories.
             </span>
           </span>
         </label>
