@@ -48,6 +48,24 @@ Backups: `bun run ether backup <dir>` writes a timestamped snapshot while the se
 
 Restore: stop Ether, then `ETHER_DATA=<empty folder> bun run ether restore <dir>/<timestamp>` and start Ether with that `ETHER_DATA`. Restore refuses to write into a folder that already holds Ether data.
 
+## Command-line client
+
+`cli/` is a Rust client in the spirit of GitHub's `gh`, built as `ether`:
+
+```sh
+cd cli && cargo build --release        # binary at cli/target/release/ether(.exe)
+echo "$TOKEN" | ether auth login --host https://ether.example.com --with-token
+ether repo create my-tool --public     # or --org acme
+ether repo clone ada/my-tool           # git push/pull then use your login
+ether issue create --title "Bug" --body "Steps…"
+ether issue list | view 3 | comment 3 --body "…" | close 3
+ether pr create --title "Fix it"       # head = current branch, base = default branch
+ether pr list | view 4 | merge 4 | checkout 4
+ether api /api/me                      # any endpoint, JSON out
+```
+
+Inside a clone the repository is taken from `origin`; elsewhere pass `-R OWNER/REPO`. The token is stored in your config directory (`ETHER_CONFIG_DIR` overrides it), and the API accepts it as `Authorization: Bearer <token>`. This is separate from the server's admin commands (`bun run ether …`).
+
 ## Tests
 
 `bun run test:e2e` builds the app, boots a real server on a random port against a throwaway data directory, and drives the git CLI and Chromium. Each run writes a timestamped report to `e2e-report/<timestamp>/`, containing an HTML report with screenshots, `results.json` and `server.log`.

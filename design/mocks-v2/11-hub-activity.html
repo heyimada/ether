@@ -206,10 +206,10 @@ code, pre, .mono { font-family: var(--font-mono); }
 
 /* Page and frames */
 .page { max-width: 1280px; margin: 0 auto; padding: var(--s-5) var(--s-4) var(--s-6); }
-.page-intro { margin-bottom: var(--s-6); }
+.page-intro { margin-bottom: var(--s-5); }
 .page-intro h1 { font: 600 var(--fs-20) / 28px var(--font-ui); }
 .page-intro p { color: var(--muted); max-width: 75ch; margin-top: var(--s-1); }
-.frame { max-width: 1280px; width: 100%; margin: 0 auto var(--s-6); min-width: 0; }
+.frame { max-width: 1280px; width: 100%; margin: 0 auto var(--s-5); min-width: 0; }
 .frame-label {
   display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: baseline;
   margin-bottom: var(--s-2); font: 600 var(--fs-12) / 16px var(--font-ui); color: var(--muted);
@@ -411,12 +411,13 @@ code, pre, .mono { font-family: var(--font-mono); }
   padding: var(--s-4); min-width: 0;
 }
 .repo-body > * { min-width: 0; }
+.main-col { display: grid; gap: var(--s-4); align-content: start; min-width: 0; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
 .toolbar .field { flex: 1 1 200px; max-width: 320px; }
 .toolbar .btn-code { margin-left: auto; }
 .commit-bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3);
-  margin-top: var(--s-3); padding: var(--s-2) var(--s-3);
+  padding: var(--s-2) var(--s-3);
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card);
 }
 .commit-bar .msg { flex: 1 1 180px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 500; }
@@ -425,7 +426,7 @@ code, pre, .mono { font-family: var(--font-mono); }
 .commit-bar .meta.num { font-variant-numeric: tabular-nums; }
 .sha { font: 400 var(--fs-12) / 20px var(--font-mono); color: var(--accent); }
 
-.files { width: 100%; min-width: 560px; border-collapse: collapse; margin-top: var(--s-3); }
+.files { width: 100%; min-width: 560px; border-collapse: collapse; }
 .files td, .files th { padding: 0 var(--s-3); height: 36px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
 .files tbody tr { transition: background-color .15s; }
 .files tbody tr:hover { background: var(--surface-2); }
@@ -439,12 +440,12 @@ code, pre, .mono { font-family: var(--font-mono); }
 .files .c-size { width: 80px; text-align: right; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .files .c-name a:focus-visible { border-radius: 4px; }
 
-.readme { margin-top: var(--s-4); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; background: var(--canvas); }
+.readme { border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; background: var(--canvas); }
 .readme-head {
-  display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 var(--s-3);
+  display: flex; align-items: center; gap: var(--s-2); min-height: 40px; padding: 0 var(--s-3);
   background: var(--surface); border-bottom: 1px solid var(--border); font-weight: 600;
 }
-.readme-body { padding: var(--s-5) var(--s-5) var(--s-5); max-width: 100%; }
+.readme-body { padding: var(--s-5); max-width: 100%; }
 .readme-body h2 { font: 600 var(--fs-24) / 32px var(--font-ui); padding-bottom: var(--s-2); border-bottom: 1px solid var(--border); margin-bottom: var(--s-4); }
 .readme-body p { max-width: 75ch; color: var(--text); }
 .readme-body p + p { margin-top: var(--s-3); }
@@ -456,8 +457,9 @@ code, pre, .mono { font-family: var(--font-mono); }
 .readme-body ul { list-style: disc; padding-left: var(--s-5); margin-top: var(--s-3); max-width: 75ch; }
 .readme-body li + li { margin-top: var(--s-1); }
 
-.side { display: flex; flex-direction: column; gap: var(--s-5); }
-.side-block { padding-bottom: var(--s-5); border-bottom: 1px solid var(--border); }
+.side { display: flex; flex-direction: column; gap: 0; }
+.side-block { padding: var(--s-5) 0; border-bottom: 1px solid var(--border); }
+.side-block:first-child { padding-top: 0; }
 .side-block:last-child { border-bottom: 0; padding-bottom: 0; }
 .side h2 { font: 600 var(--fs-14) / 20px var(--font-ui); margin-bottom: var(--s-2); }
 .side p { color: var(--muted); max-width: 40ch; }
@@ -491,7 +493,7 @@ code, pre, .mono { font-family: var(--font-mono); }
 .pr-title .num-ref { color: var(--muted); font-weight: 400; }
 .pr-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-2); color: var(--muted); padding-bottom: var(--s-4); }
 .pr-meta strong { color: var(--text); font-weight: 600; }
-.pr-body { padding: var(--s-4); display: grid; gap: var(--s-5); min-width: 0; }
+.pr-body { padding: var(--s-4); display: grid; gap: var(--s-4); min-width: 0; }
 .pr-body > * { min-width: 0; }
 .timeline { display: grid; gap: var(--s-4); min-width: 0; }
 .tl-item { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: var(--s-3); min-width: 0; }
@@ -519,13 +521,14 @@ code, pre, .mono { font-family: var(--font-mono); }
 .merge-status .ok { color: var(--open); }
 .merge-status .bad { color: var(--danger); }
 .merge-status strong { display: block; font-weight: 600; }
-.merge-status p { color: var(--muted); margin-top: 2px; }
+.merge-status p { color: var(--muted); margin-top: var(--s-1); }
 .merge-action { display: grid; gap: var(--s-2); justify-items: start; flex: 0 1 260px; }
 .merge-action p { font-size: var(--fs-12); line-height: 18px; color: var(--muted); }
 .conflict-list { margin-top: var(--s-2); display: grid; gap: 4px; }
 .conflict-list li { font: 400 var(--fs-12) / 20px var(--font-mono); overflow-wrap: anywhere; }
 
 .composer { display: grid; gap: var(--s-2); min-width: 0; }
+.composer .field-label { margin-bottom: 0; }
 .composer-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2); }
 .composer-foot p { font-size: var(--fs-12); color: var(--muted); }
 
@@ -586,7 +589,7 @@ table.diff tr.hunk td { background: var(--hunk-bg); color: var(--hunk-fg); paddi
 .issue-row > .i { color: var(--open); }
 .issue-title { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
 .issue-title:hover { color: var(--accent); }
-.issue-meta { margin-top: 2px; color: var(--muted); font-size: var(--fs-12); line-height: 18px; }
+.issue-meta { margin-top: var(--s-1); color: var(--muted); font-size: var(--fs-12); line-height: 18px; }
 .issue-meta .num { font-variant-numeric: tabular-nums; }
 .issue-comments {
   display: inline-flex; align-items: center; gap: 4px; min-width: 32px; justify-content: flex-end;
@@ -647,14 +650,14 @@ table.diff tr.hunk td { background: var(--hunk-bg); color: var(--hunk-fg); paddi
 .pop-item .pill { height: 18px; }
 .pop-foot { padding: var(--s-2) var(--s-3); border-top: 1px solid var(--border); font-size: var(--fs-12); color: var(--muted); }
 
-.skeleton { display: grid; gap: 12px; padding: var(--s-2) 0; }
+.skeleton { display: grid; gap: var(--s-3); }
 .skel-row { display: grid; grid-template-columns: 16px 1fr 64px; gap: var(--s-3); align-items: center; }
 .skel {
   height: 12px; border-radius: 4px; background: var(--surface-2);
 }
 .skel-dot { width: 16px; height: 16px; border-radius: 4px; background: var(--surface-2); }
 .skel-end { justify-self: end; width: 56px; }
-.skel-table { background: var(--canvas); border-radius: var(--r-control); border: 1px solid var(--border); padding: var(--s-2) var(--s-3); }
+.skel-table { background: var(--canvas); border-radius: var(--r-control); border: 1px solid var(--border); padding: var(--s-3) var(--s-4); }
 
 .force-focus { outline: 2px solid var(--focus); outline-offset: 2px; }
 .focus-row { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: center; }
@@ -708,12 +711,12 @@ table.diff tr.hunk td { background: var(--hunk-bg); color: var(--hunk-fg); paddi
 
 /* Layout breakpoints */
 @media (max-width: 1099px) {
-  .repo-body { grid-template-columns: minmax(0, 1fr) 240px; gap: var(--s-4); }
+  .repo-body { grid-template-columns: minmax(0, 1fr) 240px; }
 }
 @media (max-width: 899px) {
   .repo-body { grid-template-columns: minmax(0, 1fr); }
   .side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-5); }
-  .side-block { border-bottom: 0; padding-bottom: 0; }
+  .side-block { border-bottom: 0; padding: 0; }
   .states-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 759px) {
@@ -726,7 +729,7 @@ table.diff tr.hunk td { background: var(--hunk-bg); color: var(--hunk-fg); paddi
   .act-cell + .act-cell { border-left: 0; border-top: 1px solid var(--border); }
   .pr-body { padding: var(--s-3); }
   .repo-head { padding: var(--s-3) var(--s-3) 0; }
-  .repo-body { padding: var(--s-3); }
+  .repo-body { padding: var(--s-3); gap: var(--s-4); }
   .readme-body { padding: var(--s-4); }
   .issue-bar, .issue-row, .list-foot { padding-left: var(--s-3); padding-right: var(--s-3); }
   .states-grid { padding: var(--s-3); }
