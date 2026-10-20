@@ -27,6 +27,7 @@
     "dompurify": "^3.4.17",
     "drizzle-orm": "0.45.4",
     "elysia": "2.0.0-rc.0",
+    "linguist-languages": "9.5.0",
     "lucide-react": "^1.59.0",
     "marked": "^18.1.1",
     "motion": "^14.4.0",

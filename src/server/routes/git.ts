@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { VISITOR, allows, anonymousRead, repoAccess, tokenUser, type RepoAccess, type Viewer } from "../access";
 import { onPush } from "../ci";
 import { recordPush } from "../contrib";
+import { recordPushEvents } from "../events";
 import { NAME_RE, ensureWiki, listRefs, newAuthorEmails, repoExists, wikiPath } from "../git";
 import { advertiseRefs, basicCredentials, challenge, runService, type Service } from "../smart-http";
 
@@ -53,6 +54,9 @@ export const gitRoutes = new Elysia()
     return runService("git-receive-pack", access.path, request, async () => {
       const after = await listRefs(access.path);
       recordPush(access.viewer.id, await newAuthorEmails(access.path, before.map((r) => r.sha), after.map((r) => r.sha)));
-      if (!access.path.endsWith(".wiki.git")) await onPush(access.repo.id, access.path, before, after);
+      // A wiki push moves the wiki's own main, which is not news about the repository's code.
+      if (access.path.endsWith(".wiki.git")) return;
+      await recordPushEvents(access.repo.id, access.viewer.id, access.path, before, after);
+      await onPush(access.repo.id, access.path, before, after, access.viewer.id);
     });
   });

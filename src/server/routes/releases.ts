@@ -6,6 +6,7 @@ import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess }
 import { config } from "../config";
 import { db } from "../db/client";
 import { release, releaseAsset, user } from "../db/schema";
+import { record } from "../events";
 import * as git from "../git";
 
 const MAX_ASSET = 500 * 1024 * 1024;
@@ -63,7 +64,8 @@ export const releaseRoutes = new Elysia()
       if (!sha) throw new HttpError(400, `No branch named ${target}`);
       await git.gitText(a.path, ["update-ref", `refs/tags/${tag}`, sha, ""]);
     }
-    db.insert(release)
+    const created = db
+      .insert(release)
       .values({
         repoId: a.repo.id,
         tag,
@@ -72,7 +74,9 @@ export const releaseRoutes = new Elysia()
         prerelease: prerelease === true,
         authorId: viewer.id,
       })
-      .run();
+      .returning()
+      .get();
+    record(a.repo.id, viewer.id, "release", { tag, title: created.title, prerelease: created.prerelease });
     return { release: { tag } };
   })
   .patch("/repos/:owner/:repo/releases/:tag", async ({ request, params, body }) => {

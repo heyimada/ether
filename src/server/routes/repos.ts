@@ -1,10 +1,13 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, findUser, isOrg, readableRepos, requireRepo, requireUser, readerOrVisitor } from "../access";
 import { db } from "../db/client";
 import { collaborator, orgMember, repo, star, user } from "../db/schema";
 import * as git from "../git";
 import { ciAllowed } from "../ci";
+import { usernamesByEmail } from "../contrib";
+import { lastActivity, record } from "../events";
+import { languages } from "../languages";
 import { addDefaultLabels } from "./labels";
 
 type Q = Record<string, string | undefined>;
@@ -22,11 +25,33 @@ const cleanPath = (p: string | undefined) => {
   return path;
 };
 
+// Adds the account behind each git author email, when someone has claimed it.
+function withUsernames<T extends { email: string }>(items: T[]): (T & { username: string | null })[] {
+  const names = usernamesByEmail(items.map((c) => c.email));
+  return items.map((c) => ({ ...c, username: names.get(c.email.toLowerCase()) ?? null }));
+}
+
+export function starCounts(repoIds: number[]): Map<number, number> {
+  if (repoIds.length === 0) return new Map();
+  return new Map(
+    db
+      .select({ repoId: star.repoId, n: count() })
+      .from(star)
+      .where(inArray(star.repoId, repoIds))
+      .groupBy(star.repoId)
+      .all()
+      .map((r) => [r.repoId, r.n]),
+  );
+}
+
 export const repoRoutes = new Elysia()
   .get("/repos", async ({ request }) => {
     const viewer = await readerOrVisitor(request);
+    const readable = readableRepos(viewer.id);
+    const updated = lastActivity(readable.map((r) => r.id));
+    const stars = starCounts(readable.map((r) => r.id));
     return {
-      repos: readableRepos(viewer.id).map((r) => ({
+      repos: readable.map((r) => ({
         owner: r.owner,
         name: r.name,
         description: r.description,
@@ -34,6 +59,8 @@ export const repoRoutes = new Elysia()
         relation: r.relation,
         ownerIsOrg: r.ownerIsOrg,
         mine: r.relation === "owner",
+        stars: stars.get(r.id) ?? 0,
+        updatedAt: updated.get(r.id) ?? r.createdAt,
       })),
     };
   })
@@ -64,6 +91,7 @@ export const repoRoutes = new Elysia()
       .returning({ id: repo.id })
       .get();
     addDefaultLabels(created.id);
+    record(created.id, viewer.id, "create", {});
     return { repo: { owner: ownerRow.username, name: lower } };
   })
   .get("/repos/:owner/:repo", async ({ request, params }) => {
@@ -119,7 +147,9 @@ export const repoRoutes = new Elysia()
   .put("/repos/:owner/:repo/star", async ({ request, params }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
-    db.insert(star).values({ userId: viewer.id, repoId: a.repo.id }).onConflictDoNothing().run();
+    // Only a new star is news; starring twice changes nothing.
+    const added = db.insert(star).values({ userId: viewer.id, repoId: a.repo.id }).onConflictDoNothing().returning({ repoId: star.repoId }).get();
+    if (added) record(a.repo.id, viewer.id, "star", {});
     return { ok: true };
   })
   .delete("/repos/:owner/:repo/star", async ({ request, params }) => {
@@ -185,7 +215,7 @@ export const repoRoutes = new Elysia()
       sha,
       path,
       entries: entries.map((e) => ({ ...e, lastCommit: commits[e.name] ?? null })),
-      lastCommit: last ?? null,
+      lastCommit: last ? withUsernames([last])[0] : null,
       commitCount: path ? null : await git.commitCount(a.path, sha),
     };
   })
@@ -223,14 +253,24 @@ export const repoRoutes = new Elysia()
     const q = query as Q;
     const sha = await resolveRev(a.path, q.ref);
     const page = Math.max(0, Number(q.page ?? 0) || 0);
-    const commits = await git.log(a.path, sha, { path: cleanPath(q.path), skip: page * 30, limit: 31 });
-    return { commits: commits.slice(0, 30), hasMore: commits.length > 30 };
+    const limit = Math.min(30, Math.max(1, Number(q.limit ?? 30) || 30));
+    const commits = await git.log(a.path, sha, { path: cleanPath(q.path), skip: page * limit, limit: limit + 1 });
+    return { commits: withUsernames(commits.slice(0, limit)), hasMore: commits.length > limit };
   })
   .get("/repos/:owner/:repo/activity", async ({ request, params }) => {
     const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const sha = await git.resolveCommit(a.path, await git.headBranch(a.path));
-    return sha ? git.activity(a.path, sha) : { since: null, weeks: [], total: 0, authors: [] };
+    if (!sha) return { since: null, weeks: [], total: 0, authors: [] };
+    const act = await git.activity(a.path, sha);
+    return { ...act, authors: withUsernames(act.authors) };
+  })
+  // Languages of the default branch by bytes, largest first.
+  .get("/repos/:owner/:repo/languages", async ({ request, params }) => {
+    const viewer = await readerOrVisitor(request);
+    const a = requireRepo(viewer, params.owner, params.repo, "read");
+    const sha = await git.resolveCommit(a.path, await git.headBranch(a.path));
+    return { languages: sha ? await languages(a.path, sha) : [] };
   })
   .get("/repos/:owner/:repo/commit/:sha", async ({ request, params }) => {
     const viewer = await readerOrVisitor(request);

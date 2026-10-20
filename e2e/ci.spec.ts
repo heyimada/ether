@@ -69,6 +69,10 @@ test("CI runs workflows on push when enabled, shows logs, and gates merges on ch
 
     await page.context().clearCookies();
     await uiLogin(page, owner.username, owner.password);
+    // The person whose push failed hears about it on their dashboard.
+    const failed = page.getByRole("region", { name: "Feed" }).getByRole("listitem").filter({ hasText: /Checks failed/ }).first();
+    await expect(failed).toContainText(`${owner.username}/${repo}`);
+    await expect(failed.getByRole("link", { name: "trigger" })).toBeVisible();
     await page.goto(`${baseURL()}/${owner.username}/${repo}`);
     await page.getByRole("navigation", { name: "Repository" }).getByRole("link", { name: "CI" }).click();
     await page.getByRole("list", { name: "CI runs" }).getByRole("link", { name: "trigger" }).click();
@@ -113,4 +117,7 @@ test("CI runs workflows on push when enabled, shows logs, and gates merges on ch
   await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: headers() });
   const { runs } = await (await owner.ctx.get(`${api}/ci/runs`)).json();
   expect((await reader.ctx.post(`${api}/ci/runs/${runs[0].id}/rerun`, { headers: headers() })).status()).toBe(403);
+  // Failed checks are news for whoever pushed, not for everyone who can read the repository.
+  const theirs = (await (await reader.ctx.get("/api/feed")).json()).events as { kind: string; repo: string }[];
+  expect(theirs.filter((e) => e.repo === repo).map((e) => e.kind)).not.toContain("ci_failed");
 });

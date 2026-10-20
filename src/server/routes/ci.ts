@@ -41,9 +41,10 @@ export const ciRoutes = new Elysia()
     };
   })
   .post("/repos/:owner/:repo/ci/runs/:id/rerun", async ({ request, params }) => {
-    const a = requireRepo(await requireUser(request), params.owner, params.repo, "write");
+    const viewer = await requireUser(request);
+    const a = requireRepo(viewer, params.owner, params.repo, "write");
     const run = findRun(a, params.id);
-    const id = await enqueue(a.repo.id, a.path, run.sha, run.ref);
+    const id = await enqueue(a.repo.id, a.path, run.sha, run.ref, viewer.id);
     if (!id) throw new HttpError(409, "CI is turned off, or that commit has no .ether/ci.yml");
     return { run: { id } };
   })

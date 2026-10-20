@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { Elysia } from "elysia";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
+import { record } from "../events";
 import * as git from "../git";
 
 // Page slugs are file names without ".md"; titles show hyphens as spaces, like GitHub wikis.
@@ -77,6 +78,7 @@ export const wikiRoutes = new Elysia()
       if (e instanceof git.WikiConflict) throw new HttpError(409, e.message);
       throw e;
     }
+    record(a.repo.id, viewer.id, "wiki", { slug: target, title: slugToTitle(target), created: isNew });
     return { slug: target };
   })
   .delete("/repos/:owner/:repo/wiki/:slug", async ({ request, params }) => {

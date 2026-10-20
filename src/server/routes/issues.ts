@@ -7,6 +7,7 @@ import { db } from "../db/client";
 import { comment, issue, issueAssignee, issueLabel, label, repo, user } from "../db/schema";
 import * as git from "../git";
 import { latestRun } from "../ci";
+import { excerpt, record } from "../events";
 import { reviewSummary } from "./reviews";
 
 const merges = new Mutex();
@@ -179,6 +180,7 @@ export const issueRoutes = new Elysia()
     const title = str(b?.title, 256).trim();
     if (!title) throw new HttpError(400, "Title is required");
     const number = insertIssue(a, viewer, { title, body: str(b?.body, 65536) });
+    record(a.repo.id, viewer.id, "issue_opened", { number, title });
     return { issue: { number } };
   })
   .get("/repos/:owner/:repo/issues/:number", async ({ request, params }) => {
@@ -200,6 +202,12 @@ export const issueRoutes = new Elysia()
       set.state = b.state;
     }
     if (Object.keys(set).length) db.update(issue).set(set).where(eq(issue.id, row.issue.id)).run();
+    if (set.state && set.state !== row.issue.state) {
+      const ref = { number: row.issue.number, title: set.title ?? row.issue.title };
+      if (row.issue.isPull)
+        record(a.repo.id, viewer.id, set.state === "closed" ? "pull_closed" : "pull_reopened", { ...ref, base: row.issue.baseRef, head: row.issue.headRef });
+      else record(a.repo.id, viewer.id, set.state === "closed" ? "issue_closed" : "issue_reopened", ref);
+    }
     return { ok: true };
   })
   .post("/repos/:owner/:repo/issues/:number/comments", async ({ request, params, body }) => {
@@ -210,6 +218,7 @@ export const issueRoutes = new Elysia()
     if (!text.trim()) throw new HttpError(400, "Comment cannot be empty");
     db.insert(comment).values({ issueId: row.issue.id, authorId: viewer.id, body: text }).run();
     db.update(issue).set({ updatedAt: new Date() }).where(eq(issue.id, row.issue.id)).run();
+    record(a.repo.id, viewer.id, "comment", { number: row.issue.number, title: row.issue.title, isPull: row.issue.isPull, excerpt: excerpt(text) });
     return { ok: true };
   })
   // ---------- pull requests ----------
@@ -229,6 +238,7 @@ export const issueRoutes = new Elysia()
     for (const branch of [base, head])
       if (!(await git.resolveCommit(a.path, `refs/heads/${branch}`))) throw new HttpError(400, `No branch named ${branch}`);
     const number = insertIssue(a, viewer, { title, body: str(b?.body, 65536), isPull: true, baseRef: base, headRef: head });
+    record(a.repo.id, viewer.id, "pull_opened", { number, title, base, head });
     return { pull: { number } };
   })
   .get("/repos/:owner/:repo/pulls/:number", async ({ request, params }) => {
@@ -272,6 +282,7 @@ export const issueRoutes = new Elysia()
         throw new HttpError(409, reason);
       }
       db.update(issue).set({ state: "merged", mergeCommit: result.sha, mergedBy: viewer.id }).where(eq(issue.id, row.issue.id)).run();
+      record(a.repo.id, viewer.id, "pull_merged", { number: row.issue.number, title: row.issue.title, base: row.issue.baseRef, head: row.issue.headRef });
       return { ok: true, sha: result.sha };
     });
   });
