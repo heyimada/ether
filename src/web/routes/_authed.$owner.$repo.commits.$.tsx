@@ -1,6 +1,8 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { RefPicker } from "../components/code-browser";
 import { api, repoApi, shortSha, splitRefPath, timeAgo, type Commit } from "../lib/api";
+import { rise, staggered } from "../lib/motion";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/commits/$")({
   validateSearch: (s: Record<string, unknown>): { path?: string; page?: number } => ({
@@ -32,9 +34,9 @@ function Commits() {
         {commits.length === 0 ? (
           <p className="empty">No commits.</p>
         ) : (
-          <ul className="list">
-            {commits.map((c) => (
-              <li key={c.sha}>
+          <motion.ul className="list" {...staggered}>
+            {commits.map((c, i) => (
+              <motion.li key={c.sha} variants={rise} custom={i}>
                 <div>
                   <Link to="/$owner/$repo/commit/$sha" params={{ ...params, sha: c.sha }}>
                     {c.subject}
@@ -45,9 +47,9 @@ function Commits() {
                 </div>
                 <span className="spacer" />
                 <code className="muted">{shortSha(c.sha)}</code>
-              </li>
+              </motion.li>
             ))}
-          </ul>
+          </motion.ul>
         )}
       </section>
       <div className="row" style={{ marginTop: 12 }}>

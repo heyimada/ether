@@ -1,10 +1,13 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { BookLock, Building2, GitMerge, GitPullRequest, Link2, MapPin, MessageSquare, CircleDot, Plus, Smile, Users } from "lucide-react";
-import { cloneElement, useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
+import { cloneElement, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ActivityCalendar, type Activity as Day } from "react-activity-calendar";
 import { Markdown } from "../components/content";
-import { Avatar, ErrorNote, useAction } from "../components/ui";
+import { toast } from "sonner";
+import { Avatar, ErrorNote, TabBar, useAction } from "../components/ui";
 import { api, del, put, timeAgo } from "../lib/api";
+import { rise, staggered } from "../lib/motion";
 
 type RepoCard = { owner: string; name: string; description: string; createdAt: string };
 type Event = { kind: "opened-issue" | "opened-pull" | "commented" | "merged"; at: string; owner: string; repo: string; number: number; title: string };
@@ -68,7 +71,7 @@ function Profile() {
     <main className="page profile-layout">
       <ProfileCard data={data} />
       <div className="profile-main stack-md">
-        <nav className="tabs" aria-label="Profile sections">
+        <TabBar label="Profile sections" activeSelector=".active">
           {(
             [
               ["overview", "Overview", null],
@@ -81,14 +84,14 @@ function Profile() {
               {count !== null && <span className="count">{count}</span>}
             </Link>
           ))}
-        </nav>
+        </TabBar>
         {tab === "overview" && <Overview data={data} />}
         {tab === "repositories" && <Repositories data={data} />}
         {tab === "stars" &&
           (data.stars.length ? (
-            <ul className="card list" aria-label="Starred repositories">
-              {data.stars.map((r) => (
-                <li key={`${r.owner}/${r.name}`} className="repo-row">
+            <motion.ul className="card list" aria-label="Starred repositories" {...staggered}>
+              {data.stars.map((r, i) => (
+                <motion.li key={`${r.owner}/${r.name}`} className="repo-row" variants={rise} custom={i}>
                   <div className="stack-sm" style={{ gap: 4 }}>
                     <Link to="/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="repo-link">
                       <BookLock size={16} aria-hidden className="muted" />
@@ -96,9 +99,9 @@ function Profile() {
                     </Link>
                     {r.description && <span className="muted">{r.description}</span>}
                   </div>
-                </li>
+                </motion.li>
               ))}
-            </ul>
+            </motion.ul>
           ) : (
             <p className="empty card">{data.isSelf ? "Star repositories to keep track of them here." : "No starred repositories you can see."}</p>
           ))}
@@ -117,6 +120,7 @@ function ProfileCard({ data }: { data: ProfileData }) {
     const url = `/api/users/${encodeURIComponent(data.username)}/follow`;
     await (data.isFollowing ? del(url) : put(url, {}));
     await router.invalidate();
+    toast(data.isFollowing ? `Unfollowed ${data.username}` : `You're following ${data.username}`);
   });
   return (
     <aside className="profile-card" aria-label="Profile">
@@ -195,16 +199,16 @@ function ProfileCard({ data }: { data: ProfileData }) {
   );
 }
 
-function RepoTile({ r }: { r: RepoCard }) {
+function RepoTile({ r, i }: { r: RepoCard; i: number }) {
   return (
-    <li className="repo-tile">
+    <motion.li className="repo-tile" variants={rise} custom={i}>
       <Link to="/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="repo-link">
         <BookLock size={16} aria-hidden className="muted" />
         {r.owner}/{r.name}
       </Link>
       <span className="pill">Private</span>
       <p className="muted">{r.description || "No description."}</p>
-    </li>
+    </motion.li>
   );
 }
 
@@ -224,11 +228,11 @@ function Overview({ data }: { data: ProfileData }) {
       <section className="stack-sm">
         <h2 className="section-title">Pinned</h2>
         {data.pinned.length ? (
-          <ul className="repo-grid" aria-label="Pinned repositories">
-            {data.pinned.map((r) => (
-              <RepoTile key={`${r.owner}/${r.name}`} r={r} />
+          <motion.ul className="repo-grid" aria-label="Pinned repositories" {...staggered}>
+            {data.pinned.map((r, i) => (
+              <RepoTile key={`${r.owner}/${r.name}`} r={r} i={i} />
             ))}
-          </ul>
+          </motion.ul>
         ) : (
           <p className="muted">{data.isSelf ? "Pin up to six repositories in Settings to show them here." : "Nothing pinned yet."}</p>
         )}
@@ -250,11 +254,11 @@ function Overview({ data }: { data: ProfileData }) {
       <section className="stack-sm">
         <h2 className="section-title">Recent activity</h2>
         {data.activity.length ? (
-          <ol className="timeline-list" aria-label="Recent activity">
+          <motion.ol className="timeline-list" aria-label="Recent activity" {...staggered}>
             {data.activity.map((e, i) => (
-              <ActivityRow key={i} e={e} />
+              <ActivityRow key={i} e={e} i={i} />
             ))}
-          </ol>
+          </motion.ol>
         ) : (
           <p className="muted">No recent activity you can see.</p>
         )}
@@ -268,6 +272,8 @@ const LEVELS = ["var(--surface-3)", "color-mix(in srgb, var(--accent) 30%, var(-
 function Contributions({ days }: { days: { date: string; count: number }[] }) {
   const max = Math.max(1, ...days.map((d) => d.count));
   const data: Day[] = days.map((d) => ({ ...d, level: d.count === 0 ? 0 : Math.min(4, Math.ceil((d.count / max) * 4)) }));
+  // Week of each day, so the year can fill in as a wave from left to right.
+  const week = useMemo(() => new Map(days.map((d, i) => [d.date, Math.floor(i / 7)])), [days]);
   // Narrow screens scroll the year sideways; start at the most recent weeks like GitHub.
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -284,7 +290,7 @@ function Contributions({ days }: { days: { date: string; count: number }[] }) {
       showTotalCount={false}
       theme={{ light: ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"] }}
       renderBlock={(block, a) =>
-        cloneElement(block, { style: { ...block.props.style, fill: LEVELS[a.level] } }, <title>{`${plural(a.count, "contribution")} on ${a.date}`}</title>)
+        cloneElement(block, { style: { ...block.props.style, fill: LEVELS[a.level], "--w": week.get(a.date) ?? 0 } as CSSProperties }, <title>{`${plural(a.count, "contribution")} on ${a.date}`}</title>)
       }
       showColorLegend={false}
     />
@@ -299,13 +305,13 @@ function Contributions({ days }: { days: { date: string; count: number }[] }) {
   );
 }
 
-function ActivityRow({ e }: { e: Event }) {
+function ActivityRow({ e, i }: { e: Event; i: number }) {
   const Icon = e.kind === "merged" ? GitMerge : e.kind === "opened-pull" ? GitPullRequest : e.kind === "commented" ? MessageSquare : CircleDot;
   const verb = { "opened-issue": "Opened issue", "opened-pull": "Opened pull request", commented: "Commented on", merged: "Merged" }[e.kind];
   const params = { owner: e.owner, repo: e.repo, number: String(e.number) };
   const isPull = e.kind === "opened-pull" || e.kind === "merged";
   return (
-    <li>
+    <motion.li variants={rise} custom={i}>
       <Icon size={16} aria-hidden className="muted" />
       <span className="timeline-text">
         {verb}{" "}
@@ -323,7 +329,7 @@ function ActivityRow({ e }: { e: Event }) {
         </span>
       </span>
       <span className="muted timeline-when">{timeAgo(e.at)}</span>
-    </li>
+    </motion.li>
   );
 }
 
@@ -341,9 +347,9 @@ function Repositories({ data }: { data: ProfileData }) {
         )}
       </div>
       {shown.length ? (
-        <ul className="card list" aria-label="Repositories">
-          {shown.map((r) => (
-            <li key={r.name} className="repo-row">
+        <motion.ul className="card list" aria-label="Repositories" {...staggered}>
+          {shown.map((r, i) => (
+            <motion.li key={r.name} className="repo-row" variants={rise} custom={i}>
               <div className="stack-sm" style={{ gap: 4 }}>
                 <Link to="/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="repo-link">
                   <BookLock size={16} aria-hidden className="muted" />
@@ -352,9 +358,9 @@ function Repositories({ data }: { data: ProfileData }) {
                 {r.description && <span className="muted">{r.description}</span>}
                 <span className="muted hint">Created {timeAgo(r.createdAt)}</span>
               </div>
-            </li>
+            </motion.li>
           ))}
-        </ul>
+        </motion.ul>
       ) : (
         <p className="empty card">{filter ? "No repositories match." : "No repositories you can see."}</p>
       )}
@@ -367,9 +373,9 @@ function PeopleList({ title, people }: { title: string; people: Person[] }) {
     <section className="stack-sm">
       <h2 className="section-title">{title}</h2>
       {people.length ? (
-        <ul className="card list" aria-label={title}>
-          {people.map((p) => (
-            <li key={p.username}>
+        <motion.ul className="card list" aria-label={title} {...staggered}>
+          {people.map((p, i) => (
+            <motion.li key={p.username} variants={rise} custom={i}>
               <Avatar name={p.username} size={40} />
               <div>
                 {p.displayName && <strong>{p.displayName} </strong>}
@@ -377,9 +383,9 @@ function PeopleList({ title, people }: { title: string; people: Person[] }) {
                   {p.username}
                 </Link>
               </div>
-            </li>
+            </motion.li>
           ))}
-        </ul>
+        </motion.ul>
       ) : (
         <p className="empty card">Nobody yet.</p>
       )}
@@ -431,14 +437,14 @@ function OrgView({ data }: { data: ProfileData }) {
           </div>
         )}
       </header>
-      <nav className="tabs" aria-label="Organization sections">
+      <TabBar label="Organization sections" activeSelector=".active">
         <Link to="/$owner" params={{ owner }} search={{}} className={current === "repositories" ? "active" : ""} activeOptions={{ includeSearch: true }}>
           Repositories<span className="count">{data.repos.length}</span>
         </Link>
         <Link to="/$owner" params={{ owner }} search={{ tab: "followers" }} className={current === "followers" ? "active" : ""} activeOptions={{ includeSearch: true }}>
           People<span className="count">{data.members.length}</span>
         </Link>
-      </nav>
+      </TabBar>
       {current === "repositories" ? <Repositories data={{ ...data, isSelf: data.viewerOrgRole === "owner" }} /> : <PeopleList title="People" people={data.members} />}
     </main>
   );

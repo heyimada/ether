@@ -1,6 +1,8 @@
 import { Link, useRouteContext, useRouter } from "@tanstack/react-router";
 import { MessageSquare } from "lucide-react";
+import { motion } from "motion/react";
 import { useState } from "react";
+import { rise, staggered } from "../lib/motion";
 import { patch, post, repoApi, timeAgo, type Comment, type Issue, type RepoInfo } from "../lib/api";
 import { Markdown } from "./content";
 import { LabelPill } from "./labels";
@@ -52,9 +54,9 @@ export function IssueList({
       {data.items.length === 0 ? (
         <p className="empty">{state === "open" ? `There are no open ${kind === "issues" ? "issues" : "pull requests"}.` : "Nothing closed yet."}</p>
       ) : (
-        <ul className="list">
-          {data.items.map((i) => (
-            <li key={i.number}>
+        <motion.ul className="list" {...staggered}>
+          {data.items.map((i, n) => (
+            <motion.li key={i.number} variants={rise} custom={n}>
               <StateIcon state={i.state} isPull={i.isPull} />
               <div>
                 <Link
@@ -88,9 +90,9 @@ export function IssueList({
                   <MessageSquare size={14} aria-hidden /> {i.comments}
                 </span>
               )}
-            </li>
+            </motion.li>
           ))}
-        </ul>
+        </motion.ul>
       )}
     </section>
   );
@@ -119,16 +121,16 @@ export function IssueHeader({ issue }: { issue: Issue }) {
   );
 }
 
-function CommentCard({ author, at, body }: { author: string; at: string; body: string }) {
+function CommentCard({ author, at, body, i = 0 }: { author: string; at: string; body: string; i?: number }) {
   return (
-    <section className="card comment">
+    <motion.section className="card comment" variants={rise} custom={i} initial="hidden" animate="visible">
       <header>
         <Avatar name={author} size={24} />
         <strong>{author}</strong>
         <span className="muted">commented {timeAgo(at)}</span>
       </header>
       <Markdown source={body} />
-    </section>
+    </motion.section>
   );
 }
 
@@ -152,8 +154,8 @@ export function Conversation({ info, issue, comments, me }: { info: RepoInfo; is
   return (
     <div className="timeline">
       <CommentCard author={issue.author} at={issue.createdAt} body={issue.body} />
-      {comments.map((c) => (
-        <CommentCard key={c.id} author={c.author} at={c.createdAt} body={c.body} />
+      {comments.map((c, i) => (
+        <CommentCard key={c.id} author={c.author} at={c.createdAt} body={c.body} i={i + 1} />
       ))}
       {!me ? (
         <p className="card body muted" style={{ margin: 0 }}>

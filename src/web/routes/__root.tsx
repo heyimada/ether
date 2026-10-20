@@ -1,4 +1,7 @@
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
+import { MotionConfig } from "motion/react";
+import { Toaster } from "sonner";
+import { RouteProgress } from "../components/ui";
 import { PREPAINT } from "../lib/accent";
 import appCss from "../styles.css?url";
 
@@ -19,7 +22,7 @@ export const Route = createRootRoute({
       </body>
     </html>
   ),
-  component: Outlet,
+  component: Root,
   errorComponent: ({ error }) => (
     <main className="page">
       <div className="error">{error instanceof Error ? error.message : String(error)}</div>
@@ -32,3 +35,14 @@ export const Route = createRootRoute({
     </main>
   ),
 });
+
+// Motion follows the OS reduced-motion setting everywhere; toasts take their colours from the theme tokens.
+function Root() {
+  return (
+    <MotionConfig reducedMotion="user">
+      <RouteProgress />
+      <Outlet />
+      <Toaster position="bottom-right" className="toaster" gap={8} />
+    </MotionConfig>
+  );
+}

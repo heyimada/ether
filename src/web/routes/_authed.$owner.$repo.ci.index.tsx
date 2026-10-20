@@ -1,7 +1,9 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { useEffect } from "react";
 import { CiBadge, ciDone, type CiStatus } from "../components/ci";
 import { api, repoApi, shortSha, timeAgo } from "../lib/api";
+import { rise, staggered } from "../lib/motion";
 
 type Run = { id: number; sha: string; ref: string; status: CiStatus; message: string; subject: string; createdAt: string; jobs: { name: string; status: CiStatus }[] };
 
@@ -41,9 +43,9 @@ function Runs() {
       {runs.length === 0 ? (
         <p className="empty card">No runs yet.</p>
       ) : (
-        <ul className="card list" aria-label="CI runs">
-          {runs.map((r) => (
-            <li key={r.id}>
+        <motion.ul className="card list" aria-label="CI runs" {...staggered}>
+          {runs.map((r, i) => (
+            <motion.li key={r.id} variants={rise} custom={i}>
               <CiBadge status={r.status} />
               <div style={{ minWidth: 0 }}>
                 <Link to="/$owner/$repo/ci/$id" params={{ ...params, id: String(r.id) }} style={{ fontWeight: 600 }}>
@@ -56,9 +58,9 @@ function Runs() {
               </div>
               <span className="spacer" />
               <span className="muted num">{r.jobs.filter((j) => j.status === "success").length}/{r.jobs.length} jobs passed</span>
-            </li>
+            </motion.li>
           ))}
-        </ul>
+        </motion.ul>
       )}
     </div>
   );
