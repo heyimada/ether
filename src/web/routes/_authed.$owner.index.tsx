@@ -1,16 +1,25 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
-import { BookLock, Building2, GitMerge, GitPullRequest, Link2, MapPin, MessageSquare, CircleDot, Plus, Smile, Users } from "lucide-react";
+import { BookLock, Building2, Globe, Link2, MapPin, Plus, Smile, Star, Users } from "lucide-react";
 import { motion } from "motion/react";
 import { cloneElement, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ActivityCalendar, type Activity as Day } from "react-activity-calendar";
 import { Markdown } from "../components/content";
 import { toast } from "sonner";
+import { EventItem, type FeedEvent } from "../components/feed";
 import { Avatar, ErrorNote, TabBar, useAction } from "../components/ui";
 import { api, del, put, timeAgo } from "../lib/api";
 import { rise, staggered } from "../lib/motion";
 
-type RepoCard = { owner: string; name: string; description: string; createdAt: string };
-type Event = { kind: "opened-issue" | "opened-pull" | "commented" | "merged"; at: string; owner: string; repo: string; number: number; title: string };
+type RepoCard = {
+  owner: string;
+  name: string;
+  description: string;
+  visibility: "private" | "public";
+  createdAt: string;
+  updatedAt: string;
+  stars: number;
+  language: { name: string; color: string | null } | null;
+};
 type ProfileData = {
   username: string;
   isOrg: boolean;
@@ -34,11 +43,13 @@ type ProfileData = {
   following: number;
   isFollowing: boolean;
   pinned: RepoCard[];
+  popular: RepoCard[];
   stars: RepoCard[];
   repos: RepoCard[];
+  teams: number | null;
   readme: string | null;
-  contributions: { days: { date: string; count: number }[]; total: number };
-  activity: Event[];
+  contributions: { days: { date: string; count: number }[]; total: number; summary: { commits: number; pulls: number; issues: number; reviews: number } };
+  activity: FeedEvent[];
 };
 type Person = { username: string; displayName: string; avatarVersion: number | null };
 type Tab = "overview" | "repositories" | "stars" | "followers" | "following";
@@ -68,7 +79,7 @@ function Profile() {
   const { owner } = Route.useParams();
   if (data.isOrg) return <OrgView data={data} />;
   return (
-    <main className="page profile-layout">
+    <main className="page wide profile-layout">
       <ProfileCard data={data} />
       <div className="profile-main stack-md">
         <TabBar label="Profile sections" activeSelector=".active">
@@ -199,20 +210,47 @@ function ProfileCard({ data }: { data: ProfileData }) {
   );
 }
 
+// Language, stars and last activity: what tells repositories apart at a glance.
+function RepoMeta({ r, updated = false }: { r: RepoCard; updated?: boolean }) {
+  return (
+    <span className="repo-meta">
+      {r.language && (
+        <span className="repo-lang">
+          <span className="lang-dot" style={{ background: r.language.color ?? "var(--control-border)" }} aria-hidden />
+          {r.language.name}
+        </span>
+      )}
+      {r.stars > 0 && (
+        <span title={plural(r.stars, "star")}>
+          <Star size={14} aria-hidden /> <span className="num">{r.stars}</span>
+        </span>
+      )}
+      {updated && <span>Updated {timeAgo(r.updatedAt)}</span>}
+    </span>
+  );
+}
+
+const VisibilityIcon = ({ r }: { r: RepoCard }) =>
+  r.visibility === "public" ? <Globe size={16} aria-hidden className="muted" /> : <BookLock size={16} aria-hidden className="muted" />;
+
 function RepoTile({ r, i }: { r: RepoCard; i: number }) {
   return (
     <motion.li className="repo-tile" variants={rise} custom={i}>
-      <Link to="/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="repo-link">
-        <BookLock size={16} aria-hidden className="muted" />
-        {r.owner}/{r.name}
-      </Link>
-      <span className="pill">Private</span>
+      <div className="repo-tile-head">
+        <Link to="/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="repo-link">
+          <VisibilityIcon r={r} />
+          {r.owner}/{r.name}
+        </Link>
+        <span className="pill">{r.visibility === "public" ? "Public" : "Private"}</span>
+      </div>
       <p className="muted">{r.description || "No description."}</p>
+      <RepoMeta r={r} />
     </motion.li>
   );
 }
 
 function Overview({ data }: { data: ProfileData }) {
+  const s = data.contributions.summary;
   return (
     <>
       {data.readme !== null && (
@@ -225,22 +263,53 @@ function Overview({ data }: { data: ProfileData }) {
           <Markdown source={data.readme} label="Profile README" />
         </section>
       )}
-      <section className="stack-sm">
-        <h2 className="section-title">Pinned</h2>
-        {data.pinned.length ? (
+      {data.pinned.length > 0 ? (
+        <section className="stack-sm">
+          <h2 className="section-title">Pinned</h2>
           <motion.ul className="repo-grid" aria-label="Pinned repositories" {...staggered}>
             {data.pinned.map((r, i) => (
               <RepoTile key={`${r.owner}/${r.name}`} r={r} i={i} />
             ))}
           </motion.ul>
-        ) : (
-          <p className="muted">{data.isSelf ? "Pin up to six repositories in Settings to show them here." : "Nothing pinned yet."}</p>
-        )}
-      </section>
+        </section>
+      ) : data.popular.length > 0 ? (
+        <section className="stack-sm">
+          <div className="row">
+            <h2 className="section-title">Popular repositories</h2>
+            <span className="spacer" />
+            {data.isSelf && (
+              <Link to="/settings" className="hint">
+                Pin repositories
+              </Link>
+            )}
+          </div>
+          <motion.ul className="repo-grid" aria-label="Popular repositories" {...staggered}>
+            {data.popular.map((r, i) => (
+              <RepoTile key={`${r.owner}/${r.name}`} r={r} i={i} />
+            ))}
+          </motion.ul>
+        </section>
+      ) : null}
       <section className="stack-sm">
         <h2 className="section-title">{plural(data.contributions.total, "contribution")} in the last year</h2>
-        <div className="card body calendar">
-          <Contributions days={data.contributions.days} />
+        <div className="card contrib-card">
+          <div className="body calendar">
+            <Contributions days={data.contributions.days} />
+          </div>
+          <ul className="contrib-summary" aria-label="Contribution summary">
+            <li>
+              <strong className="num">{s.commits}</strong> {s.commits === 1 ? "commit" : "commits"}
+            </li>
+            <li>
+              <strong className="num">{s.pulls}</strong> {s.pulls === 1 ? "pull request" : "pull requests"}
+            </li>
+            <li>
+              <strong className="num">{s.issues}</strong> {s.issues === 1 ? "issue" : "issues"}
+            </li>
+            <li>
+              <strong className="num">{s.reviews}</strong> {s.reviews === 1 ? "review" : "reviews"}
+            </li>
+          </ul>
         </div>
         {data.isSelf && !data.hasCommitEmails ? (
           <p className="notice" style={{ margin: 0 }}>
@@ -248,22 +317,28 @@ function Overview({ data }: { data: ProfileData }) {
             (the one in <code>git config user.email</code>).
           </p>
         ) : (
-          <p className="hint">Commits from the commit emails set in Settings, plus issues, pull requests and comments, in repositories you can see.</p>
+          <p className="hint">Commits on default branches from the commit emails set in Settings, plus issues, pull requests and comments, in repositories you can see. Reviews appear in the summary only.</p>
         )}
       </section>
-      <section className="stack-sm">
-        <h2 className="section-title">Recent activity</h2>
-        {data.activity.length ? (
-          <motion.ol className="timeline-list" aria-label="Recent activity" {...staggered}>
-            {data.activity.map((e, i) => (
-              <ActivityRow key={i} e={e} i={i} />
-            ))}
-          </motion.ol>
-        ) : (
-          <p className="muted">No recent activity you can see.</p>
-        )}
-      </section>
+      <ActivitySection events={data.activity} empty="No recent activity you can see." />
     </>
+  );
+}
+
+function ActivitySection({ events, empty }: { events: FeedEvent[]; empty: string }) {
+  return (
+    <section className="stack-sm">
+      <h2 className="section-title">Recent activity</h2>
+      {events.length ? (
+        <motion.ol className="timeline-list" aria-label="Recent activity" {...staggered}>
+          {events.map((e, i) => (
+            <EventItem key={e.id} e={e} i={i} avatar={false} />
+          ))}
+        </motion.ol>
+      ) : (
+        <p className="muted">{empty}</p>
+      )}
+    </section>
   );
 }
 
@@ -305,34 +380,6 @@ function Contributions({ days }: { days: { date: string; count: number }[] }) {
   );
 }
 
-function ActivityRow({ e, i }: { e: Event; i: number }) {
-  const Icon = e.kind === "merged" ? GitMerge : e.kind === "opened-pull" ? GitPullRequest : e.kind === "commented" ? MessageSquare : CircleDot;
-  const verb = { "opened-issue": "Opened issue", "opened-pull": "Opened pull request", commented: "Commented on", merged: "Merged" }[e.kind];
-  const params = { owner: e.owner, repo: e.repo, number: String(e.number) };
-  const isPull = e.kind === "opened-pull" || e.kind === "merged";
-  return (
-    <motion.li variants={rise} custom={i}>
-      <Icon size={16} aria-hidden className="muted" />
-      <span className="timeline-text">
-        {verb}{" "}
-        {isPull ? (
-          <Link to="/$owner/$repo/pull/$number" params={params}>
-            {e.title}
-          </Link>
-        ) : (
-          <Link to="/$owner/$repo/issues/$number" params={params}>
-            {e.title}
-          </Link>
-        )}{" "}
-        <span className="muted">
-          in {e.owner}/{e.repo}
-        </span>
-      </span>
-      <span className="muted timeline-when">{timeAgo(e.at)}</span>
-    </motion.li>
-  );
-}
-
 function Repositories({ data }: { data: ProfileData }) {
   const [filter, setFilter] = useState("");
   const shown = data.repos.filter((r) => `${r.name} ${r.description}`.toLowerCase().includes(filter.trim().toLowerCase()));
@@ -350,13 +397,16 @@ function Repositories({ data }: { data: ProfileData }) {
         <motion.ul className="card list" aria-label="Repositories" {...staggered}>
           {shown.map((r, i) => (
             <motion.li key={r.name} className="repo-row" variants={rise} custom={i}>
-              <div className="stack-sm" style={{ gap: 4 }}>
-                <Link to="/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="repo-link">
-                  <BookLock size={16} aria-hidden className="muted" />
-                  {r.name}
-                </Link>
+              <div className="stack-sm" style={{ gap: 4, minWidth: 0 }}>
+                <span className="row" style={{ gap: 8 }}>
+                  <Link to="/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="repo-link">
+                    <VisibilityIcon r={r} />
+                    {r.name}
+                  </Link>
+                  <span className="pill">{r.visibility === "public" ? "Public" : "Private"}</span>
+                </span>
                 {r.description && <span className="muted">{r.description}</span>}
-                <span className="muted hint">Created {timeAgo(r.createdAt)}</span>
+                <RepoMeta r={r} updated />
               </div>
             </motion.li>
           ))}
@@ -399,8 +449,14 @@ function OrgView({ data }: { data: ProfileData }) {
   const p = data.profile;
   // Organizations have Repositories and People; "followers" doubles as the People tab key.
   const current = tab === "followers" ? "followers" : "repositories";
+  // How many repositories use each language, across what this viewer can see.
+  const languages = useMemo(() => {
+    const counts = new Map<string, { name: string; color: string | null; repos: number }>();
+    for (const r of data.repos) if (r.language) counts.set(r.language.name, { ...r.language, repos: (counts.get(r.language.name)?.repos ?? 0) + 1 });
+    return [...counts.values()].sort((a, b) => b.repos - a.repos || a.name.localeCompare(b.name)).slice(0, 6);
+  }, [data.repos]);
   return (
-    <main className="page stack">
+    <main className="page wide stack">
       <header className="org-head">
         <Avatar name={data.username} size={96} labelled />
         <div className="stack-sm" style={{ gap: 4, minWidth: 0 }}>
@@ -423,6 +479,11 @@ function OrgView({ data }: { data: ProfileData }) {
             <li>
               <Users size={16} aria-hidden /> {plural(data.members.length, "member")}
             </li>
+            {data.teams !== null && (
+              <li>
+                <Building2 size={16} aria-hidden /> {plural(data.teams, "team")}
+              </li>
+            )}
           </ul>
         </div>
         <span className="spacer" />
@@ -445,7 +506,47 @@ function OrgView({ data }: { data: ProfileData }) {
           People<span className="count">{data.members.length}</span>
         </Link>
       </TabBar>
-      {current === "repositories" ? <Repositories data={{ ...data, isSelf: data.viewerOrgRole === "owner" }} /> : <PeopleList title="People" people={data.members} />}
+      {current === "repositories" ? (
+        <div className="org-layout">
+          <div className="stack">
+            <Repositories data={{ ...data, isSelf: data.viewerOrgRole === "owner" }} />
+            <ActivitySection events={data.activity} empty="Nothing has happened in repositories you can see yet." />
+          </div>
+          <aside className="side-col">
+            <section className="side-section" aria-labelledby="org-people">
+              <h3 id="org-people">
+                <Link to="/$owner" params={{ owner }} search={{ tab: "followers" }} className="heading-link">
+                  People
+                </Link>
+              </h3>
+              <ul className="member-grid" aria-label="People">
+                {data.members.map((m) => (
+                  <li key={m.username}>
+                    <Link to="/$owner" params={{ owner: m.username }} title={m.displayName || m.username} aria-label={m.username}>
+                      <Avatar name={m.username} size={40} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+            {languages.length > 0 && (
+              <section className="side-section" aria-labelledby="org-langs">
+                <h3 id="org-langs">Top languages</h3>
+                <ul className="lang-legend lang-legend-stack">
+                  {languages.map((l) => (
+                    <li key={l.name}>
+                      <span className="lang-dot" style={{ background: l.color ?? "var(--control-border)" }} aria-hidden />
+                      <span className="lang-name">{l.name}</span> <span className="muted num">{plural(l.repos, "repository", "repositories")}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </aside>
+        </div>
+      ) : (
+        <PeopleList title="People" people={data.members} />
+      )}
     </main>
   );
 }
