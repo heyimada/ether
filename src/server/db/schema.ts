@@ -434,6 +434,8 @@ export const ciRun = sqliteTable(
     sha: text("sha").notNull(),
     ref: text("ref").notNull(),
     status: text("status", { enum: ["queued", "running", "success", "failure", "cancelled", "error"] }).notNull(),
+    // Whose push or re-run started it; failures are reported to them.
+    actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
     // Why a run errored before any job ran, e.g. an invalid workflow file.
     message: text("message").notNull().default(""),
     createdAt: createdAt(),
@@ -456,3 +458,24 @@ export const ciJob = sqliteTable("ci_job", {
   startedAt: integer("started_at", { mode: "timestamp_ms" }),
   finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
 });
+
+// What happened in a repository, for activity feeds. Payloads describe the event in the repository
+// itself (numbers, titles, branches) and never name another repository; who may see an event is
+// decided when it is read, from the reader's current access to repoId.
+export const event = sqliteTable(
+  "event",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    actorId: text("actor_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    // JSON, shaped by kind; see events.ts.
+    payload: text("payload").notNull().default("{}"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("event_repo_idx").on(t.repoId, t.createdAt), index("event_actor_idx").on(t.actorId, t.createdAt)],
+);

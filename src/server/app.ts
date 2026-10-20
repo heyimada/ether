@@ -8,6 +8,7 @@ import { accountRoutes } from "./routes/account";
 import { gitRoutes } from "./routes/git";
 import { issueRoutes } from "./routes/issues";
 import { ciRoutes } from "./routes/ci";
+import { dashboardRoutes } from "./routes/dashboard";
 import { labelRoutes } from "./routes/labels";
 import { orgRoutes } from "./routes/orgs";
 import { profileRoutes } from "./routes/profiles";
@@ -46,6 +47,7 @@ const api = new Elysia({ prefix: "/api" })
   .use(wikiRoutes)
   .use(sshKeyRoutes)
   .use(ciRoutes)
+  .use(dashboardRoutes)
   .all("/*", () => Response.json({ error: "Not found" }, { status: 404 }));
 
 // The web app is a TanStack Start SPA build: static assets plus a shell for every app route.

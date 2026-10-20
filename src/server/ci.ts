@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { db } from "./db/client";
 import { ciJob, ciRun, instanceSetting, repo, user } from "./db/schema";
+import { record } from "./events";
 import * as git from "./git";
 
 // CI runs workflows from .ether/ci.yml on this machine, so it is opt-in twice: an admin allows
@@ -113,7 +114,17 @@ async function execute(run: typeof ciRun.$inferSelect) {
   if (currentStatus(run.id) === "cancelled") {
     db.update(ciJob).set({ status: "cancelled" }).where(and(eq(ciJob.runId, run.id), inArray(ciJob.status, ["queued", "running"]))).run();
     db.update(ciRun).set({ finishedAt: new Date() }).where(eq(ciRun.id, run.id)).run();
-  } else db.update(ciRun).set({ status: ok ? "success" : "failure", finishedAt: new Date() }).where(eq(ciRun.id, run.id)).run();
+  } else {
+    db.update(ciRun).set({ status: ok ? "success" : "failure", finishedAt: new Date() }).where(eq(ciRun.id, run.id)).run();
+    if (!ok) await reportFailure(run, path, "failure");
+  }
+}
+
+// Failed checks go into the feed of whoever started the run.
+async function reportFailure(run: { id: number; repoId: number; sha: string; ref: string; actorId: string | null }, path: string, status: string) {
+  if (!run.actorId) return;
+  const [commit] = await git.log(path, run.sha, { limit: 1 }).catch(() => []);
+  record(run.repoId, run.actorId, "ci_failed", { runId: run.id, ref: run.ref, sha: run.sha, subject: commit?.subject ?? "", status });
 }
 
 const currentStatus = (runId: number) => db.select({ s: ciRun.status }).from(ciRun).where(eq(ciRun.id, runId)).get()?.s;
@@ -177,7 +188,7 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoPath: string, ctx:
 // ---------- triggers ----------
 
 // Queues a run for one commit if CI is allowed and the commit has a workflow.
-export async function enqueue(repoId: number, repoPath: string, sha: string, ref: string): Promise<number | null> {
+export async function enqueue(repoId: number, repoPath: string, sha: string, ref: string, actorId: string | null = null): Promise<number | null> {
   const r = db.select().from(repo).where(eq(repo.id, repoId)).get();
   if (!r?.ciEnabled || !ciAllowed()) return null;
   const file = await git.readBlob(repoPath, sha, WORKFLOW).catch(() => null);
@@ -186,10 +197,12 @@ export async function enqueue(repoId: number, repoPath: string, sha: string, ref
   try {
     jobs = parseWorkflow(file.content);
   } catch (e) {
-    return db.insert(ciRun).values({ repoId, sha, ref, status: "error", message: (e as Error).message, finishedAt: new Date() }).returning({ id: ciRun.id }).get().id;
+    const id = db.insert(ciRun).values({ repoId, sha, ref, actorId, status: "error", message: (e as Error).message, finishedAt: new Date() }).returning({ id: ciRun.id }).get().id;
+    await reportFailure({ id, repoId, sha, ref, actorId }, repoPath, "error");
+    return id;
   }
   const id = db.transaction((tx) => {
-    const run = tx.insert(ciRun).values({ repoId, sha, ref, status: "queued" }).returning({ id: ciRun.id }).get();
+    const run = tx.insert(ciRun).values({ repoId, sha, ref, actorId, status: "queued" }).returning({ id: ciRun.id }).get();
     tx.insert(ciJob).values(jobs.map((j) => ({ runId: run.id, name: j.name, steps: JSON.stringify(j.steps), status: "queued" as const }))).run();
     return run.id;
   });
@@ -198,11 +211,11 @@ export async function enqueue(repoId: number, repoPath: string, sha: string, ref
 }
 
 // After a push: one run per branch that moved to a new commit.
-export async function onPush(repoId: number, repoPath: string, before: git.Ref[], after: git.Ref[]) {
+export async function onPush(repoId: number, repoPath: string, before: git.Ref[], after: git.Ref[], actorId: string) {
   for (const ref of after) {
     if (ref.kind !== "branch") continue;
     if (before.some((b) => b.kind === "branch" && b.name === ref.name && b.sha === ref.sha)) continue;
-    await enqueue(repoId, repoPath, ref.sha, ref.name);
+    await enqueue(repoId, repoPath, ref.sha, ref.name, actorId);
   }
 }
 

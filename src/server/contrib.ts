@@ -1,6 +1,6 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db/client";
-import { commitEmail, pushEmail } from "./db/schema";
+import { commitEmail, pushEmail, user } from "./db/schema";
 
 // Called after a successful push with the author email of every commit it brought in.
 // Remembers them as suggestions for the pusher. If the pusher has no commit emails yet and
@@ -40,4 +40,19 @@ export function pushSuggestions(userId: string) {
     .filter((m) => !owners.has(m.email) || owners.get(m.email) === userId)
     .sort((a, b) => b.commits - a.commits)
     .map((m) => ({ ...m, yours: owners.get(m.email) === userId }));
+}
+
+// Accounts behind commit author emails, so git authors can show as people with avatars.
+export function usernamesByEmail(emails: string[]): Map<string, string> {
+  const wanted = [...new Set(emails.map((e) => e.toLowerCase()))];
+  if (wanted.length === 0) return new Map();
+  return new Map(
+    db
+      .select({ email: commitEmail.email, username: user.username })
+      .from(commitEmail)
+      .innerJoin(user, eq(user.id, commitEmail.userId))
+      .where(inArray(commitEmail.email, wanted))
+      .all()
+      .map((r) => [r.email, r.username!]),
+  );
 }

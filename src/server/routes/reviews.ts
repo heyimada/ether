@@ -4,6 +4,7 @@ import { HttpError, allows, findUser, readableRepos, repoAccess, requireRepo, re
 import { db } from "../db/client";
 import { issue, review, reviewComment, reviewRequest, user } from "../db/schema";
 import * as git from "../git";
+import { record } from "../events";
 import { findIssue, pullStatus } from "./issues";
 
 export type Decision = "approved" | "changes_requested" | null;
@@ -122,6 +123,7 @@ export const reviewRoutes = new Elysia()
       // A submitted review answers the request.
       tx.delete(reviewRequest).where(and(eq(reviewRequest.issueId, row.issue.id), eq(reviewRequest.userId, viewer.id))).run();
     });
+    record(a.repo.id, viewer.id, "review", { number: row.issue.number, title: row.issue.title, state });
     return { ok: true };
   })
   .get("/me/review-requests", async ({ request }) => {

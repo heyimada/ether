@@ -6,6 +6,7 @@ import { allows, repoAccess, type Viewer } from "./access";
 import { config } from "./config";
 import { onPush } from "./ci";
 import { recordPush } from "./contrib";
+import { recordPushEvents } from "./events";
 import { db } from "./db/client";
 import { sshKey, user } from "./db/schema";
 import { NAME_RE, ensureWiki, fixHead, listRefs, newAuthorEmails, repoExists, wikiPath } from "./git";
@@ -102,7 +103,10 @@ function onClient(client: Connection) {
           await fixHead(path).catch(() => {});
           const after = await listRefs(path);
           recordPush(viewer.id, await newAuthorEmails(path, before.map((r) => r.sha), after.map((r) => r.sha)).catch(() => []));
-          if (!isWiki) await onPush(access.repo.id, path, before, after).catch(() => {});
+          if (!isWiki) {
+            await recordPushEvents(access.repo.id, viewer.id, path, before, after).catch(() => {});
+            await onPush(access.repo.id, path, before, after, viewer.id).catch(() => {});
+          }
         }
         stream.exit(code);
         stream.end();

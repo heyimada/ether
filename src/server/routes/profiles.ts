@@ -5,8 +5,11 @@ import { join } from "node:path";
 import { HttpError, findUser, readableRepos, readerOrVisitor, requireUser, type ReadableRepo } from "../access";
 import { config } from "../config";
 import { db } from "../db/client";
-import { comment, commitEmail, follow, issue, orgMember, organization, pin, profile, star, user } from "../db/schema";
+import { comment, commitEmail, follow, issue, orgMember, organization, pin, profile, review, star, team, user } from "../db/schema";
 import { pushSuggestions } from "../contrib";
+import { lastActivity, listEvents } from "../events";
+import { primaryLanguage } from "../languages";
+import { starCounts } from "./repos";
 import * as git from "../git";
 
 const MAX_AVATAR = 1024 * 1024;
@@ -64,7 +67,30 @@ const people = (ids: string[]) =>
         .all()
         .map((p) => ({ username: p.username!, displayName: p.displayName ?? "", avatarVersion: p.avatarVersion ?? null }));
 
-const repoCard = (r: ReadableRepo) => ({ owner: r.owner, name: r.name, description: r.description, createdAt: r.createdAt });
+type Card = { owner: string; name: string; description: string; visibility: "private" | "public"; createdAt: Date; updatedAt: Date; stars: number; language: { name: string; color: string | null } | null };
+
+// Repository tiles with what lists show next to the name: language, stars and last activity.
+async function repoCards(repos: ReadableRepo[], withLanguage: Set<number>): Promise<Map<number, Card>> {
+  const ids = repos.map((r) => r.id);
+  const updated = lastActivity(ids);
+  const stars = starCounts(ids);
+  const cards = await Promise.all(
+    repos.map(async (r): Promise<[number, Card]> => [
+      r.id,
+      {
+        owner: r.owner,
+        name: r.name,
+        description: r.description,
+        visibility: r.visibility,
+        createdAt: r.createdAt,
+        updatedAt: updated.get(r.id) ?? r.createdAt,
+        stars: stars.get(r.id) ?? 0,
+        language: withLanguage.has(r.id) ? await primaryLanguage(r.path).catch(() => null) : null,
+      },
+    ]),
+  );
+  return new Map(cards);
+}
 
 async function profileReadme(target: { username: string }, readable: ReadableRepo[]) {
   const special = readable.find((r) => r.owner === target.username && r.name === target.username.toLowerCase());
@@ -80,10 +106,12 @@ async function profileReadme(target: { username: string }, readable: ReadableRep
 const day = (at: number) => new Date(at).toISOString().slice(0, 10);
 
 // Commits by any of the user's commit emails plus issues, pull requests and comments, counted
-// per day over the last year, only from repositories the viewer can read.
+// per day over the last year, only from repositories the viewer can read. The summary splits the
+// year into kinds of work, and adds reviews, which the calendar doesn't count.
 async function contributions(targetId: string, readable: ReadableRepo[]) {
   const since = new Date(Date.now() - YEAR_MS);
   const counts = new Map<string, number>();
+  const summary = { commits: 0, pulls: 0, issues: 0, reviews: 0 };
   const add = (at: number) => counts.set(day(at), (counts.get(day(at)) ?? 0) + 1);
   const emails = new Set(db.select({ email: commitEmail.email }).from(commitEmail).where(eq(commitEmail.userId, targetId)).all().map((e) => e.email));
   if (emails.size) {
@@ -91,18 +119,30 @@ async function contributions(targetId: string, readable: ReadableRepo[]) {
       readable.map(async (r) => {
         const head = await git.resolveCommit(r.path, await git.headBranch(r.path));
         if (!head) return;
-        for (const c of await git.authorTimes(r.path, head, since)) if (emails.has(c.email)) add(c.at);
+        for (const c of await git.authorTimes(r.path, head, since))
+          if (emails.has(c.email)) {
+            add(c.at);
+            summary.commits++;
+          }
       }),
     );
   }
   const ids = readable.map((r) => r.id);
   if (ids.length) {
     for (const i of db
-      .select({ at: issue.createdAt })
+      .select({ at: issue.createdAt, isPull: issue.isPull })
       .from(issue)
       .where(and(eq(issue.authorId, targetId), inArray(issue.repoId, ids), gte(issue.createdAt, since)))
-      .all())
+      .all()) {
       add(i.at.getTime());
+      summary[i.isPull ? "pulls" : "issues"]++;
+    }
+    summary.reviews = db
+      .select({ id: review.id })
+      .from(review)
+      .innerJoin(issue, eq(review.issueId, issue.id))
+      .where(and(eq(review.authorId, targetId), inArray(issue.repoId, ids), gte(review.createdAt, since)))
+      .all().length;
     for (const c of db
       .select({ at: comment.createdAt })
       .from(comment)
@@ -113,49 +153,7 @@ async function contributions(targetId: string, readable: ReadableRepo[]) {
   }
   const days: { date: string; count: number }[] = [];
   for (let t = since.getTime(); t <= Date.now(); t += 24 * 60 * 60 * 1000) days.push({ date: day(t), count: counts.get(day(t)) ?? 0 });
-  return { days, total: [...counts.values()].reduce((a, b) => a + b, 0) };
-}
-
-type Event = { kind: "opened-issue" | "opened-pull" | "commented" | "merged"; at: Date; owner: string; repo: string; number: number; title: string };
-
-function recentActivity(targetId: string, readable: ReadableRepo[]): Event[] {
-  if (readable.length === 0) return [];
-  const byId = new Map(readable.map((r) => [r.id, r]));
-  const ids = [...byId.keys()];
-  const events: Event[] = [];
-  const where = (r: ReadableRepo | undefined) => r ?? null;
-  for (const i of db
-    .select()
-    .from(issue)
-    .where(and(eq(issue.authorId, targetId), inArray(issue.repoId, ids)))
-    .orderBy(desc(issue.createdAt))
-    .limit(20)
-    .all()) {
-    const r = where(byId.get(i.repoId));
-    if (r) events.push({ kind: i.isPull ? "opened-pull" : "opened-issue", at: i.createdAt, owner: r.owner, repo: r.name, number: i.number, title: i.title });
-  }
-  for (const i of db
-    .select()
-    .from(issue)
-    .where(and(eq(issue.mergedBy, targetId), inArray(issue.repoId, ids)))
-    .orderBy(desc(issue.updatedAt))
-    .limit(20)
-    .all()) {
-    const r = where(byId.get(i.repoId));
-    if (r) events.push({ kind: "merged", at: i.updatedAt, owner: r.owner, repo: r.name, number: i.number, title: i.title });
-  }
-  for (const c of db
-    .select({ at: comment.createdAt, repoId: issue.repoId, number: issue.number, title: issue.title })
-    .from(comment)
-    .innerJoin(issue, eq(comment.issueId, issue.id))
-    .where(and(eq(comment.authorId, targetId), inArray(issue.repoId, ids)))
-    .orderBy(desc(comment.createdAt))
-    .limit(20)
-    .all()) {
-    const r = where(byId.get(c.repoId));
-    if (r) events.push({ kind: "commented", at: c.at, owner: r.owner, repo: r.name, number: c.number, title: c.title });
-  }
-  return events.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 20);
+  return { days, total: [...counts.values()].reduce((a, b) => a + b, 0), summary };
 }
 
 // Shared by people and organizations: validated partial update of profile fields.
@@ -237,6 +235,24 @@ export const profileRoutes = new Elysia()
       ? people(db.select({ id: orgMember.userId }).from(orgMember).where(eq(orgMember.orgId, target.id)).all().map((m) => m.id))
       : [];
     const myOrgRole = org ? (db.select({ role: orgMember.role }).from(orgMember).where(and(eq(orgMember.orgId, target.id), eq(orgMember.userId, viewer.id))).get()?.role ?? null) : null;
+    const starredRepos = db
+      .select({ repoId: star.repoId })
+      .from(star)
+      .where(eq(star.userId, target.id))
+      .orderBy(desc(star.createdAt))
+      .all()
+      .flatMap((s) => readableById.get(s.repoId) ?? []);
+    const pinnedRepos = pins.flatMap((p) => readableById.get(p.repoId) ?? []);
+    const cards = await repoCards([...new Set([...own, ...pinnedRepos, ...starredRepos])], new Set([...own, ...pinnedRepos].map((r) => r.id)));
+    const card = (r: ReadableRepo) => cards.get(r.id)!;
+    const ownCards = own.map(card).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    // With nothing pinned (that this viewer can see), show their most starred, most active work.
+    const popular = pinnedRepos.length ? [] : [...ownCards].sort((a, b) => b.stars - a.stars).slice(0, 6);
+    // People: what they did. Organizations: what happened in their repositories.
+    const activity = org
+      ? listEvents(viewer.id, readable, { repoIds: own.map((r) => r.id), limit: 20 }).events
+      : listEvents(viewer.id, readable, { actorId: target.id, limit: 20 }).events;
+    const teams = org && myOrgRole ? db.select({ id: team.id }).from(team).where(eq(team.orgId, target.id)).all().length : null;
     // Organizations a person belongs to, shown on their profile like GitHub does.
     const orgsOf = org
       ? []
@@ -273,18 +289,15 @@ export const profileRoutes = new Elysia()
       following: following.length,
       isFollowing: followers.some((f) => f.id === viewer.id),
       // Only stars on repositories the viewer can read.
-      stars: db
-        .select({ repoId: star.repoId })
-        .from(star)
-        .where(eq(star.userId, target.id))
-        .orderBy(desc(star.createdAt))
-        .all()
-        .flatMap((s) => (readableById.has(s.repoId) ? [repoCard(readableById.get(s.repoId)!)] : [])),
-      pinned: pins.flatMap((p) => (readableById.has(p.repoId) ? [repoCard(readableById.get(p.repoId)!)] : [])),
-      repos: own.map(repoCard),
+      stars: starredRepos.map(card),
+      pinned: pinnedRepos.map(card),
+      popular,
+      repos: ownCards,
+      // Teams are only counted for the organization's own members.
+      teams,
       readme,
       contributions: contrib,
-      activity: recentActivity(target.id, readable),
+      activity,
     };
   })
   .get("/users/:name/followers", async ({ request, params }) => {
