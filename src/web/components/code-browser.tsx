@@ -1,5 +1,5 @@
 import { Link, useRouteContext } from "@tanstack/react-router";
-import { BookOpen, FileText, Folder, FolderGit2, History, Tag } from "lucide-react";
+import { BookOpen, FileText, Folder, FolderGit2, GitBranch, History, Star, Tag } from "lucide-react";
 import { motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import formatSize from "pretty-bytes";
@@ -202,6 +202,17 @@ export function TreeView({
         <section className="side-section" aria-labelledby="side-about">
           <h3 id="side-about">About</h3>
           <p className="side-text">{info.repo.description || <span className="muted">No description.</span>}</p>
+          <ul className="repo-facts">
+            <li>
+              <Star size={14} aria-hidden /> <span className="num">{info.stars}</span> {info.stars === 1 ? "star" : "stars"}
+            </li>
+            <li>
+              <GitBranch size={14} aria-hidden /> <span className="num">{info.branches.length}</span> {info.branches.length === 1 ? "branch" : "branches"}
+            </li>
+            <li>
+              <Tag size={14} aria-hidden /> <span className="num">{info.tags.length}</span> {info.tags.length === 1 ? "tag" : "tags"}
+            </li>
+          </ul>
         </section>
         <section className="side-section" aria-labelledby="side-clone">
           <h3 id="side-clone">Clone</h3>
@@ -224,6 +235,10 @@ export function TreeView({
               </Link>
               <span className="pill">Latest</span>
               <span className="muted mono">{releases[0].tag}</span>
+              <span className="muted release-when">
+                {releases[0].author ? `${releases[0].author} · ` : ""}
+                {timeAgo(releases[0].createdAt)}
+              </span>
             </div>
           ) : info.tags.length ? (
             <div className="side-text release">

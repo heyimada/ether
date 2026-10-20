@@ -166,6 +166,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .topbar nav { display: flex; gap: 16px; margin-left: auto; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .topbar nav a, .topbar nav button { color: var(--text); font-weight: 500; }
 .page { position: relative; isolation: isolate; max-width: 1120px; margin: 0 auto; padding: 24px; }
+/* Content-heavy pages (dashboard, repository, profiles) use the wider measure GitHub uses. */
+.page.wide { max-width: 1280px; }
 /* A faint wash of the accent behind the top of every page: atmosphere, not chrome. */
 .page::before { content: ""; position: absolute; inset: 0 0 auto; z-index: -1; height: 240px; pointer-events: none; background: radial-gradient(ellipse 60% 100% at 50% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%); }
 .page-head h1 { font-size: 26px; }
@@ -524,9 +526,9 @@ img.avatar { object-fit: cover; background: var(--surface-3); }
 .calendar rect:hover { stroke: var(--text); stroke-width: 1px; }
 /* Recent activity hangs off a rail; each event's icon sits in a bead on it. */
 .timeline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.timeline-list li { position: relative; display: flex; gap: 12px; align-items: center; padding: 8px 0; }
-.timeline-list li:not(:last-child)::before { content: ""; position: absolute; left: 12px; top: calc(50% + 15px); bottom: calc(-50% + 15px); width: 1px; background: var(--border); }
-.timeline-list svg { flex: none; box-sizing: content-box; padding: 4px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); }
+.timeline-list > li { position: relative; display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; }
+.timeline-list > li:not(:last-child)::before { content: ""; position: absolute; left: 12px; top: 36px; bottom: -6px; width: 1px; background: var(--border); }
+.timeline-list .feed-bead { flex: none; box-sizing: content-box; padding: 4px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); }
 .timeline-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .timeline-when { white-space: nowrap; font-size: 13px; }
 @media (max-width: 860px) {
@@ -619,6 +621,125 @@ a.label-pill:hover { text-decoration: none; transform: translateY(-1px); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 1s linear infinite; }
 
+/* ---------- dashboard ---------- */
+/* Repositories on the left, the feed in the middle, your work on the right. Narrower screens move
+   your work above the feed, then stack everything with your work first. */
+.dash-grid { display: grid; grid-template-columns: 260px minmax(0, 1fr) 300px; grid-template-areas: "left main right"; gap: 24px 32px; align-items: start; }
+.dash-grid-2 { grid-template-columns: 280px minmax(0, 1fr); grid-template-areas: "left main"; }
+.dash-left { grid-area: left; min-width: 0; }
+.dash-main { grid-area: main; min-width: 0; }
+.dash-right { grid-area: right; min-width: 0; }
+@media (max-width: 1180px) {
+  .dash-grid { grid-template-columns: 240px minmax(0, 1fr); grid-template-areas: "left right" "left main"; }
+}
+@media (max-width: 820px) {
+  .dash-grid, .dash-grid-2 { grid-template-columns: minmax(0, 1fr); grid-template-areas: "right" "left" "main"; }
+}
+.dash-filter { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0 10px; border: 1px solid var(--control-border); border-radius: var(--radius-sm); background: var(--surface); font-weight: 400; transition: border-color var(--dur-fast) ease, box-shadow var(--dur) ease; }
+.dash-filter:focus-within { border-color: var(--focus); box-shadow: 0 0 0 5px color-mix(in srgb, var(--focus) 16%, transparent); }
+.dash-filter input { border: 0; padding: 6px 0; background: none; min-width: 0; }
+.dash-filter input:focus-visible { outline: none; box-shadow: none; }
+.dash-repos { display: flex; flex-direction: column; gap: 6px; }
+.dash-repos-head { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.dash-repos-title { margin: 0; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.dash-repo-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dash-repo-list li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dash-repo { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 4px 6px; margin: 0 -6px; border-radius: var(--radius-sm); color: var(--text); font-size: 14px; transition: background-color var(--dur-fast) ease; }
+.dash-repo:hover { background: var(--surface-3); text-decoration: none; }
+.dash-repo svg { flex: none; }
+.dash-repo-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-repo-name strong { font-weight: 600; }
+.dash-repo-stars { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; flex: none; }
+.dash-empty { margin: 0; font-size: 13px; color: var(--muted); }
+.dash-more { align-self: flex-start; font-size: 13px; color: var(--link); padding: 2px 0; min-height: 0; }
+.dash-more:hover:not(:disabled) { background: none; text-decoration: underline; text-underline-offset: 3px; }
+/* Right-hand panels: quiet cards, one per kind of work, each only when it has something. */
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm), var(--highlight); }
+.panel-head { display: flex; align-items: center; gap: 4px; margin: 0; padding: 10px 14px; font-size: 14px; border-bottom: 1px solid var(--border); }
+.panel-list { list-style: none; margin: 0; padding: 4px 0; }
+.panel-list li { display: flex; flex-direction: column; gap: 2px; padding: 8px 14px; min-width: 0; }
+.panel-list li + li { border-top: 1px solid var(--border); }
+.panel-title { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.panel-meta { font-size: 12px; overflow-wrap: anywhere; }
+.panel-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.server-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.server-stats > div { display: flex; flex-direction: column-reverse; gap: 2px; padding: 12px 14px; border-top: 1px solid var(--border); }
+.server-stats > div:nth-child(-n + 2) { border-top: 0; }
+.server-stats > div:nth-child(even) { border-left: 1px solid var(--border); }
+.server-stats dt { font-size: 12px; color: var(--muted); }
+.server-stats dd { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+
+/* ---------- feed ---------- */
+.feed { display: flex; flex-direction: column; gap: 20px; }
+.feed-day { display: flex; flex-direction: column; gap: 8px; }
+.feed-day-label { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.feed-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm), var(--highlight); }
+.feed-list > .feed-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; }
+.feed-list > .feed-item + .feed-item { border-top: 1px solid var(--border); }
+.feed-avatar { position: relative; flex: none; }
+.feed-badge { position: absolute; right: -4px; bottom: -4px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+.feed-badge.starred { color: var(--star); }
+.feed-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.feed-line { margin: 0; display: flex; gap: 4px 12px; align-items: baseline; flex-wrap: wrap; justify-content: space-between; overflow-wrap: anywhere; }
+.feed-line > span { min-width: 0; flex: 1 1 260px; }
+.feed-actor { color: var(--text); font-weight: 700; }
+.feed-repo { color: var(--text); font-weight: 600; }
+.feed-object { font-weight: 500; }
+.feed-ref { padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--text); font-size: 12px; }
+.feed-when { font-size: 12px; white-space: nowrap; }
+.feed-detail { margin: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.feed-inline { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.feed-commits { list-style: none; margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.feed-commits li { display: flex; gap: 10px; min-width: 0; align-items: baseline; }
+.feed-sha { flex: none; font-size: 12px; }
+.feed-subject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-more { font-size: 12px; }
+.feed-quote { padding: 6px 10px; border-left: 3px solid var(--border); color: var(--muted); font-size: 13px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.feed-older { align-self: center; }
+/* The same rows as a rail of beads on profiles and organizations. */
+.timeline-list .feed-body { gap: 4px; padding-top: 2px; }
+
+/* ---------- repository extras ---------- */
+.repo-facts { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+.repo-facts li { display: flex; align-items: center; gap: 8px; }
+.repo-facts .num { color: var(--text); font-weight: 600; }
+.release-when { flex-basis: 100%; font-size: 12px; }
+.lang-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; gap: 2px; background: var(--surface-3); }
+.lang-bar span { display: block; min-width: 2px; transform-origin: left; animation: bar-grow-x 420ms var(--ease-out) backwards; animation-delay: calc(var(--i, 0) * 50ms); }
+.lang-legend { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+.lang-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.lang-legend-stack { flex-direction: column; margin: 0; }
+.lang-name { font-weight: 600; }
+.lang-dot { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 15%, transparent); }
+.recent-commits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.recent-commits li { display: flex; gap: 8px; align-items: flex-start; min-width: 0; }
+.recent-commit-body { display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
+.recent-commit-subject { color: var(--text); font-weight: 500; overflow-wrap: anywhere; }
+.recent-commit-meta { font-size: 12px; overflow-wrap: anywhere; }
+.recent-commit-author { font-weight: 600; color: var(--text); }
+
+/* ---------- profile and organization extras ---------- */
+.repo-tile-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.repo-tile p { flex: 1; }
+.repo-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 12px; color: var(--muted); }
+.repo-meta > span { display: inline-flex; align-items: center; gap: 4px; }
+.repo-lang { color: var(--text); }
+.contrib-card .calendar { border-bottom: 1px solid var(--border); }
+.contrib-summary { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.contrib-summary li { padding: 12px 16px; color: var(--muted); font-size: 13px; border-left: 1px solid var(--border); }
+.contrib-summary li:first-child { border-left: 0; }
+.contrib-summary strong { display: block; color: var(--text); font-size: 20px; letter-spacing: -0.02em; }
+@media (max-width: 640px) {
+  .contrib-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .contrib-summary li:nth-child(3) { border-left: 0; }
+  .contrib-summary li:nth-child(n + 3) { border-top: 1px solid var(--border); }
+}
+.org-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 32px; align-items: start; }
+@media (max-width: 860px) { .org-layout { grid-template-columns: minmax(0, 1fr); } }
+.member-grid { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.member-grid a { display: block; border-radius: 50%; transition: transform var(--dur) var(--ease-out); }
+.member-grid a:hover { transform: translateY(-2px); }
+
 /* ---------- toasts and route progress ---------- */
 :root [data-sonner-toaster][data-sonner-theme] { --normal-bg: var(--surface); --normal-text: var(--text); --normal-border: var(--border); --border-radius: var(--radius); font-family: var(--sans); }
 :root [data-sonner-toaster] [data-sonner-toast] { box-shadow: var(--shadow); font-weight: 500; }
@@ -632,6 +753,7 @@ main.page, .route-enter { animation: page-in 280ms var(--ease-out) backwards; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.97); } }
 @keyframes pop-out { to { opacity: 0; transform: translateY(-2px) scale(0.98); } }
 @keyframes bar-grow { from { transform: scaleY(0); } }
+@keyframes bar-grow-x { from { transform: scaleX(0); } }
 @keyframes cell-in { from { opacity: 0; transform: scale(0.3); } }
 @keyframes shake { 0%, 100% { transform: none; } 25% { transform: translateX(-4px); } 60% { transform: translateX(3px); } }
 @keyframes breathe { 0% { opacity: 0.5; transform: scale(0.8); } 70%, 100% { opacity: 0; transform: scale(1.35); } }

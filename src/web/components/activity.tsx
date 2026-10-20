@@ -2,11 +2,17 @@ import { Link } from "@tanstack/react-router";
 import { addDays, format } from "date-fns";
 import { motion } from "motion/react";
 import type { CSSProperties } from "react";
-import { api, repoApi, type Issue, type RepoInfo } from "../lib/api";
+import { api, repoApi, shortSha, timeAgo, type Commit, type Issue, type RepoInfo } from "../lib/api";
 import { rise, staggered } from "../lib/motion";
 import { Avatar } from "./ui";
 
-export type Activity = { since: number | null; weeks: number[]; total: number; authors: { name: string; email: string; commits: number }[] };
+export type Activity = { since: number | null; weeks: number[]; total: number; authors: { name: string; email: string; commits: number; username: string | null }[] };
+export type LanguageShare = { name: string; color: string | null; bytes: number; percent: number };
+export type AuthoredCommit = Commit & { username: string | null };
+
+export const loadLanguages = (info: RepoInfo) => api<{ languages: LanguageShare[] }>(`${repoApi(info.repo.owner, info.repo.name)}/languages`).then((r) => r.languages);
+export const loadRecentCommits = (info: RepoInfo) =>
+  api<{ commits: AuthoredCommit[] }>(`${repoApi(info.repo.owner, info.repo.name)}/commits?${new URLSearchParams({ ref: info.repo.defaultBranch, limit: "5" })}`).then((r) => r.commits);
 
 export const loadActivity = (info: RepoInfo) => api<Activity>(`${repoApi(info.repo.owner, info.repo.name)}/activity`);
 
@@ -43,7 +49,7 @@ export function ActivityStrip({ info, open, latest, activity }: { info: RepoInfo
           {top.length ? (
             top.map((a) => (
               <span key={a.email || a.name} className="activity-person">
-                <Avatar name={a.name} />
+                <Avatar name={a.username ?? a.name} />
                 {a.name} <span className="muted num">{a.commits}</span>
               </span>
             ))
@@ -107,9 +113,82 @@ export function Contributors({ activity }: { activity: Activity }) {
       <motion.ul className="people" aria-label="Contributors" {...staggered}>
         {activity.authors.map((a, i) => (
           <motion.li key={a.email || a.name} variants={rise} custom={i}>
-            <Avatar name={a.name} />
+            <Avatar name={a.username ?? a.name} />
             <span className="people-name">{a.name}</span>
             <span className="muted num">{plural(a.commits, "commit")}</span>
+          </motion.li>
+        ))}
+      </motion.ul>
+    </section>
+  );
+}
+
+const fmtPercent = (p: number) => `${p.toFixed(1)}%`;
+// Languages too small to see in the bar still get a legend entry; the colour is decoration.
+const fallbackColor = "var(--control-border)";
+
+// GitHub-style: one bar split by bytes, with a legend of name and share.
+export function LanguageBar({ languages }: { languages: LanguageShare[] }) {
+  if (languages.length === 0) return null;
+  const shown = languages.slice(0, 6);
+  const other = languages.slice(6).reduce((s, l) => s + l.percent, 0);
+  return (
+    <section className="side-section" aria-labelledby="side-languages">
+      <h3 id="side-languages">Languages</h3>
+      <div className="lang-bar" aria-hidden>
+        {shown.map((l, i) => (
+          <span key={l.name} style={{ width: `${l.percent}%`, background: l.color ?? fallbackColor, "--i": i } as CSSProperties} />
+        ))}
+        {other > 0 && <span style={{ width: `${other}%`, background: fallbackColor }} />}
+      </div>
+      <ul className="lang-legend" aria-label="Languages">
+        {shown.map((l) => (
+          <li key={l.name}>
+            <span className="lang-dot" style={{ background: l.color ?? fallbackColor }} aria-hidden />
+            <span className="lang-name">{l.name}</span> <span className="muted num">{fmtPercent(l.percent)}</span>
+          </li>
+        ))}
+        {other > 0 && (
+          <li>
+            <span className="lang-dot" style={{ background: fallbackColor }} aria-hidden />
+            <span className="lang-name">Other</span> <span className="muted num">{fmtPercent(other)}</span>
+          </li>
+        )}
+      </ul>
+    </section>
+  );
+}
+
+// The newest commits on the default branch, with whoever wrote them.
+export function RecentCommits({ info, commits }: { info: RepoInfo; commits: AuthoredCommit[] }) {
+  if (commits.length === 0) return null;
+  const params = { owner: info.repo.owner, repo: info.repo.name };
+  return (
+    <section className="side-section" aria-labelledby="side-commits">
+      <h3 id="side-commits">
+        <Link to="/$owner/$repo/commits/$" params={{ ...params, _splat: info.repo.defaultBranch }} className="heading-link">
+          Recent commits
+        </Link>
+      </h3>
+      <motion.ul className="recent-commits" aria-label="Recent commits" {...staggered}>
+        {commits.map((c, i) => (
+          <motion.li key={c.sha} variants={rise} custom={i}>
+            <Avatar name={c.username ?? c.author} size={24} />
+            <div className="recent-commit-body">
+              <Link to="/$owner/$repo/commit/$sha" params={{ ...params, sha: c.sha }} className="recent-commit-subject">
+                {c.subject}
+              </Link>
+              <span className="muted recent-commit-meta">
+                {c.username ? (
+                  <Link to="/$owner" params={{ owner: c.username }} className="recent-commit-author">
+                    {c.username}
+                  </Link>
+                ) : (
+                  <span className="recent-commit-author">{c.author}</span>
+                )}{" "}
+                · <span className="mono">{shortSha(c.sha)}</span> · {timeAgo(c.date)}
+              </span>
+            </div>
           </motion.li>
         ))}
       </motion.ul>
