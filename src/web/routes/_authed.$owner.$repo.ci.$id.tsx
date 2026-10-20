@@ -1,5 +1,5 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { CiBadge, ciDone, type CiStatus } from "../components/ci";
 import { ErrorNote, useAction } from "../components/ui";
 import { api, post, repoApi, shortSha, timeAgo } from "../lib/api";
@@ -63,7 +63,7 @@ function RunPage() {
       </p>
       {run.message && <p className="error">{run.message}</p>}
       {jobs.map((j) => (
-        <section key={j.id} className="card" aria-labelledby={`job-${j.id}`}>
+        <section key={j.id} className={`card job job-${j.status}`} aria-labelledby={`job-${j.id}`}>
           <header>
             <h3 id={`job-${j.id}`} style={{ margin: 0 }}>
               <span className="sr-only">Job </span>
@@ -73,11 +73,37 @@ function RunPage() {
             <span className="spacer" />
             <span className="muted num">{duration(j.startedAt, j.finishedAt)}</span>
           </header>
-          <pre className="ci-log" role="log" aria-label={`${j.name} log`}>
+          <LiveLog live={j.status === "running"} label={`${j.name} log`}>
             {j.log || (j.status === "queued" ? "Waiting for a runner…" : "")}
-          </pre>
+          </LiveLog>
         </section>
       ))}
     </div>
+  );
+}
+
+// A job's output. While the job runs it shows a caret and follows new lines, unless the
+// reader has scrolled up to look at something.
+function LiveLog({ live, label, children }: { live: boolean; label: string; children: ReactNode }) {
+  const ref = useRef<HTMLPreElement>(null);
+  const pinned = useRef(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (el && live && pinned.current) el.scrollTop = el.scrollHeight;
+  }, [children, live]);
+  return (
+    <pre
+      ref={ref}
+      className="ci-log"
+      data-live={live || undefined}
+      role="log"
+      aria-label={label}
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+      }}
+    >
+      {children}
+    </pre>
   );
 }

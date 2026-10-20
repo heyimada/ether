@@ -1,6 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { addDays, format } from "date-fns";
+import { motion } from "motion/react";
+import type { CSSProperties } from "react";
 import { api, repoApi, type Issue, type RepoInfo } from "../lib/api";
+import { rise, staggered } from "../lib/motion";
 import { Avatar } from "./ui";
 
 export type Activity = { since: number | null; weeks: number[]; total: number; authors: { name: string; email: string; commits: number }[] };
@@ -81,7 +84,7 @@ export function CommitSparkline({ activity }: { activity: Activity }) {
           const label = `Week of ${format(addDays(since, i * 7), "MMM d")}: ${plural(n, "commit")}`;
           return (
             <li key={i} title={label}>
-              <span className="spark-bar" style={{ height: `${n === 0 ? 0 : Math.max(8, (n / max) * 100)}%` }} aria-hidden />
+              <span className="spark-bar" style={{ height: `${n === 0 ? 0 : Math.max(8, (n / max) * 100)}%`, "--i": i } as CSSProperties} aria-hidden />
               <span className="sr-only">{label}</span>
             </li>
           );
@@ -101,15 +104,15 @@ export function Contributors({ activity }: { activity: Activity }) {
   return (
     <section className="side-section">
       <h3>Contributors</h3>
-      <ul className="people" aria-label="Contributors">
-        {activity.authors.map((a) => (
-          <li key={a.email || a.name}>
+      <motion.ul className="people" aria-label="Contributors" {...staggered}>
+        {activity.authors.map((a, i) => (
+          <motion.li key={a.email || a.name} variants={rise} custom={i}>
             <Avatar name={a.name} />
             <span className="people-name">{a.name}</span>
             <span className="muted num">{plural(a.commits, "commit")}</span>
-          </li>
+          </motion.li>
         ))}
-      </ul>
+      </motion.ul>
     </section>
   );
 }

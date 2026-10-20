@@ -1,8 +1,10 @@
 import { Link, useRouteContext } from "@tanstack/react-router";
 import { BookOpen, FileText, Folder, FolderGit2, History, Tag } from "lucide-react";
+import { motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import formatSize from "pretty-bytes";
 import { api, repoApi, shortSha, timeAgo, type Commit, type RepoInfo, type TreeEntry } from "../lib/api";
+import { rise, staggered } from "../lib/motion";
 import { CodeView, Markdown } from "./content";
 import { RefPicker } from "./ref-picker";
 import type { Release } from "./releases";
@@ -148,7 +150,7 @@ export function TreeView({
               <col className="col-when" />
               <col className="col-size" />
             </colgroup>
-            <tbody>
+            <motion.tbody {...staggered}>
               {data.path && (
                 <tr>
                   <td colSpan={4}>
@@ -158,8 +160,8 @@ export function TreeView({
                   </td>
                 </tr>
               )}
-              {data.entries.map((e) => (
-                <tr key={e.path}>
+              {data.entries.map((e, i) => (
+                <motion.tr key={e.path} variants={rise} custom={i}>
                   <td className="name">
                     <span className="file-name">
                       {e.type === "tree" ? <Folder size={16} aria-hidden className="dir-icon" /> : e.type === "commit" ? <FolderGit2 size={16} aria-hidden /> : <FileText size={16} aria-hidden className="muted" />}
@@ -181,9 +183,9 @@ export function TreeView({
                   </td>
                   <td className="when">{e.lastCommit ? timeAgo(e.lastCommit.date) : ""}</td>
                   <td className="size num">{e.size !== null ? formatSize(e.size) : ""}</td>
-                </tr>
+                </motion.tr>
               ))}
-            </tbody>
+            </motion.tbody>
           </table>
         </section>
         {data.readme !== null && (

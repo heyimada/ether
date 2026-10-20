@@ -29,10 +29,12 @@
     "elysia": "2.0.0-rc.0",
     "lucide-react": "^1.59.0",
     "marked": "^18.1.1",
+    "motion": "^14.4.0",
     "pretty-bytes": "7.2.0",
     "react": "^19.3.1",
     "react-activity-calendar": "^3.2.1",
     "react-dom": "^19.3.1",
+    "sonner": "^2.0.8",
     "ssh2": "^1.17.0",
     "yaml": "^2.9.1"
   },

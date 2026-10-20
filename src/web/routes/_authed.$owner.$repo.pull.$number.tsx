@@ -4,7 +4,7 @@ import { Conversation, IssueHeader } from "../components/conversation";
 import { CiBadge, ciDone, type CiStatus } from "../components/ci";
 import { IssueSidebar } from "../components/labels";
 import { ReviewList, ReviewPanel, ReviewersSection, type ReviewData } from "../components/reviews";
-import { ErrorNote, useAction } from "../components/ui";
+import { ErrorNote, TabBar, useAction } from "../components/ui";
 import { api, post, repoApi, shortSha, type Comment, type Commit, type Issue } from "../lib/api";
 
 type PullData = ReviewData & {
@@ -37,7 +37,7 @@ function PullPage() {
   return (
     <div>
       <IssueHeader issue={pull} />
-      <nav className="tabs subtabs" aria-label="Pull request">
+      <TabBar label="Pull request" className="tabs subtabs" activeSelector=".active">
         <Link to="/$owner/$repo/pull/$number" params={params} search={{}} className={!tab ? "active" : ""}>
           Conversation
         </Link>
@@ -47,7 +47,7 @@ function PullPage() {
         <Link to="/$owner/$repo/pull/$number" params={params} search={{ tab: "files" }} className={tab === "files" ? "active" : ""}>
           Files changed
         </Link>
-      </nav>
+      </TabBar>
       {tab === "files" ? (
         <div className="stack-md">
           {me && pull.state === "open" && <ReviewPanel info={info} pull={pull} diff={data.diff} me={me.username} />}

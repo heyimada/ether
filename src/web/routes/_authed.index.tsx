@@ -1,8 +1,10 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { BookLock, Building2, Globe, Plus } from "lucide-react";
+import { BookLock, Building2, ChevronRight, Globe, Plus } from "lucide-react";
+import { motion } from "motion/react";
 import { useId, type ReactNode } from "react";
 import { Avatar } from "../components/ui";
 import { api } from "../lib/api";
+import { rise, staggered } from "../lib/motion";
 
 type RepoRow = { owner: string; name: string; description: string; visibility: "private" | "public"; relation: "owner" | "org" | "collaborator" | "public" };
 type OrgRow = { name: string; role: "owner" | "member" };
@@ -27,7 +29,7 @@ function Dashboard() {
   if (!me)
     return (
       <main className="page stack">
-        <div className="row">
+        <div className="row page-head">
           <h1 style={{ margin: 0 }}>Public repositories</h1>
           <span className="spacer" />
           <Link to="/login" className="button primary small">
@@ -39,7 +41,7 @@ function Dashboard() {
     );
   return (
     <main className="page stack">
-      <div className="row">
+      <div className="row page-head">
         <h1 style={{ margin: 0 }}>Welcome, {me.username}</h1>
         <span className="spacer" />
         <Link to="/organizations/new" className="button small">
@@ -53,18 +55,18 @@ function Dashboard() {
               Waiting for your review
             </h2>
           </header>
-          <ul className="list">
-            {reviews.map((p) => (
-              <li key={`${p.owner}/${p.repo}#${p.number}`}>
+          <motion.ul className="list" {...staggered}>
+            {reviews.map((p, i) => (
+              <motion.li key={`${p.owner}/${p.repo}#${p.number}`} variants={rise} custom={i}>
                 <Link to="/$owner/$repo/pull/$number" params={{ owner: p.owner, repo: p.repo, number: String(p.number) }}>
                   {p.title}
                 </Link>
                 <span className="muted">
                   {p.owner}/{p.repo}#{p.number}
                 </span>
-              </li>
+              </motion.li>
             ))}
-          </ul>
+          </motion.ul>
         </section>
       )}
       <RepoSection
@@ -128,10 +130,10 @@ function RepoSection({
       {repos.length === 0 ? (
         <p className="empty">{empty}</p>
       ) : (
-        <ul className="list">
-          {repos.map((r) => (
-            <li key={`${r.owner}/${r.name}`}>
-              <div>
+        <motion.ul className="list" {...staggered}>
+          {repos.map((r, i) => (
+            <motion.li key={`${r.owner}/${r.name}`} className="repo-row" variants={rise} custom={i}>
+              <div className="repo-row-main">
                 <Link to="/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="repo-link">
                   {r.visibility === "public" ? <Globe size={16} aria-hidden className="muted" /> : <BookLock size={16} aria-hidden className="muted" />}
                   {r.owner}/{r.name}
@@ -140,9 +142,10 @@ function RepoSection({
               </div>
               <span className="spacer" />
               <span className="pill">{r.visibility === "public" ? "Public" : "Private"}</span>
-            </li>
+              <ChevronRight size={16} aria-hidden className="row-chevron" />
+            </motion.li>
           ))}
-        </ul>
+        </motion.ul>
       )}
     </section>
   );

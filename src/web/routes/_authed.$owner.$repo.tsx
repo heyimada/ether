@@ -1,6 +1,9 @@
-import { Link, Outlet, createFileRoute, redirect, useRouteContext, useRouter } from "@tanstack/react-router";
+import { Link, Outlet, createFileRoute, redirect, useLocation, useRouteContext, useRouter } from "@tanstack/react-router";
 import { Star as StarIcon } from "lucide-react";
-import { useAction } from "../components/ui";
+import { motion } from "motion/react";
+import { toast } from "sonner";
+import { TabBar, useAction } from "../components/ui";
+import { snappy } from "../lib/motion";
 import { ApiError, api, del, put, repoApi, type Issue, type RepoInfo } from "../lib/api";
 
 type Counts = { open: number; items: Issue[] };
@@ -26,6 +29,7 @@ function RepoLayout() {
   const { info, counts } = Route.useRouteContext();
   const { owner, repo } = Route.useParams();
   const params = { owner, repo };
+  const { pathname } = useLocation();
   return (
     <main className="page">
       <div className="repo-head">
@@ -43,7 +47,7 @@ function RepoLayout() {
         <StarButton info={info} />
       </div>
       {info.repo.description && <p className="muted" style={{ margin: 0 }}>{info.repo.description}</p>}
-      <nav className="tabs" aria-label="Repository">
+      <TabBar label="Repository">
         <Link to="/$owner/$repo" params={params} activeOptions={{ exact: true }}>
           Code
         </Link>
@@ -64,8 +68,11 @@ function RepoLayout() {
             Settings
           </Link>
         )}
-      </nav>
-      <Outlet />
+      </TabBar>
+      {/* Keyed by path so each tab's content eases in; the header above stays put. */}
+      <div key={pathname} className="route-enter">
+        <Outlet />
+      </div>
     </main>
   );
 }
@@ -77,6 +84,7 @@ function StarButton({ info }: { info: RepoInfo }) {
     const url = `${repoApi(info.repo.owner, info.repo.name)}/star`;
     await (info.starred ? del(url) : put(url, {}));
     await router.invalidate();
+    toast(info.starred ? `Unstarred ${info.repo.name}` : `Starred ${info.repo.name}`);
   });
   if (!me)
     return (
@@ -86,9 +94,13 @@ function StarButton({ info }: { info: RepoInfo }) {
     );
   return (
     <button className="star-button" onClick={() => toggle.run()} disabled={toggle.pending} aria-pressed={info.starred}>
-      <StarIcon size={16} aria-hidden fill={info.starred ? "currentColor" : "none"} className={info.starred ? "starred" : ""} />
+      <motion.span key={String(info.starred)} className="star-icon" initial={info.starred ? { scale: 0.3, rotate: -40 } : false} animate={{ scale: 1, rotate: 0 }} transition={snappy}>
+        <StarIcon size={16} aria-hidden fill={info.starred ? "currentColor" : "none"} className={info.starred ? "starred" : ""} />
+      </motion.span>
       {info.starred ? "Unstar" : "Star"}
-      <span className="count">{info.stars}</span>
+      <motion.span key={info.stars} className="count" initial={{ y: info.starred ? 6 : -6, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={snappy}>
+        {info.stars}
+      </motion.span>
     </button>
   );
 }
