@@ -44,6 +44,7 @@
   --star: #bf8700;
   --term-bg: #161b22;
   --term-fg: #e6edf3;
+  --sheen: rgba(255, 255, 255, 0.16);
   --radius: 10px;
   --radius-sm: 7px;
   /* Motion: one strong ease-out for things arriving, a symmetric one for things travelling. */
@@ -94,6 +95,7 @@
     --star: #e3b341;
     --term-bg: #010409;
     --term-fg: #e6edf3;
+    --sheen: rgba(255, 255, 255, 0.16);
     color-scheme: dark;
   }
 }
@@ -134,6 +136,7 @@
   --star: #e3b341;
   --term-bg: #010409;
   --term-fg: #e6edf3;
+  --sheen: rgba(255, 255, 255, 0.16);
   color-scheme: dark;
 }
 
@@ -175,10 +178,12 @@ button:hover:not(:disabled), .button:hover { border-color: var(--control-border)
 button:active:not(:disabled), .button:active { transform: scale(0.97); }
 button:disabled { opacity: 0.55; cursor: not-allowed; }
 /* Primary fills change colour at once: the accent checks read them right after a theme switch. */
-button.primary, .button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; box-shadow: var(--shadow-xs), inset 0 1px 0 rgba(255, 255, 255, 0.16); transition: box-shadow var(--dur) ease, transform var(--dur-fast) var(--ease-out); }
-button.primary:hover:not(:disabled), .button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.16); }
+button.primary, .button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; box-shadow: var(--shadow-xs), inset 0 1px 0 var(--sheen); transition: box-shadow var(--dur) ease, transform var(--dur-fast) var(--ease-out); }
+button.primary:hover:not(:disabled), .button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent), inset 0 1px 0 var(--sheen); }
 button.primary svg, .button.primary svg { transition: transform var(--dur) var(--ease-out); }
-button.primary:hover:not(:disabled) svg, .button.primary:hover svg { transform: rotate(90deg); }
+/* A plus turns a quarter on hover; any other icon leans the way it points. */
+button.primary:hover:not(:disabled) svg, .button.primary:hover svg { transform: translateX(2px); }
+button.primary:hover:not(:disabled) svg.lucide-plus, .button.primary:hover svg.lucide-plus { transform: rotate(90deg); }
 button.danger { color: var(--danger); }
 button.ghost { background: none; border-color: transparent; padding: 2px 6px; box-shadow: none; }
 button.small { font-size: 12px; }
@@ -269,7 +274,8 @@ textarea { min-height: 120px; resize: vertical; font-family: var(--sans); }
 .clone { display: flex; gap: 8px; align-items: center; }
 .clone input { flex: 1; min-width: 0; padding: 5px 8px; font-size: 12px; background: var(--surface-2); }
 .copy-icon { display: inline-flex; }
-.copy-button[data-copied] { color: var(--open); border-color: color-mix(in srgb, var(--open) 45%, var(--border)); }
+.copy-button[data-copied] { border-color: color-mix(in srgb, var(--open) 45%, var(--border)); }
+.copy-button[data-copied] .copy-icon { color: var(--open); }
 pre.setup { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; overflow-x: auto; }
 .layout-2 { display: grid; grid-template-columns: 1fr 260px; gap: 24px; }
 @media (max-width: 860px) { .layout-2 { grid-template-columns: 1fr; } }
@@ -343,7 +349,7 @@ a.activity-head:hover .activity-num { color: var(--link); }
 .spark { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; align-items: end; height: 56px; border-bottom: 1px solid var(--border); }
 .spark li { height: 100%; display: flex; align-items: flex-end; }
 /* Bars grow from the axis one week after another (--i is the week). */
-.spark-bar { display: block; width: 100%; background: linear-gradient(to top, color-mix(in srgb, var(--accent) 70%, transparent), var(--accent)); border-radius: 3px 3px 0 0; transform-origin: bottom; animation: bar-grow 420ms var(--ease-out) backwards; animation-delay: calc(var(--i, 0) * 22ms + 80ms); transition: opacity var(--dur-fast) ease; }
+.spark-bar { display: block; width: 100%; background: linear-gradient(to top, color-mix(in srgb, var(--accent) 70%, transparent), var(--accent)); border-radius: 3px 3px 0 0; transform-origin: bottom; animation: bar-grow 340ms var(--ease-out) backwards; animation-delay: calc(var(--i, 0) * 18ms + 40ms); transition: opacity var(--dur-fast) ease; }
 .spark:hover .spark-bar { opacity: 0.55; }
 .spark li:hover .spark-bar { opacity: 1; }
 .spark-axis { display: flex; justify-content: space-between; font-size: 12px; margin-top: 4px; }
@@ -417,11 +423,11 @@ a.activity-head:hover .activity-num { color: var(--link); }
 .auth-hero { position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 20px; padding: 64px clamp(24px, 6vw, 88px); background: radial-gradient(ellipse 80% 60% at 0% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%), radial-gradient(ellipse 70% 50% at 100% 100%, color-mix(in srgb, var(--merged) 9%, transparent), transparent 70%), var(--surface); border-right: 1px solid var(--border); }
 /* Dot grid that fades out toward the edges. */
 .auth-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: radial-gradient(var(--dot) 1px, transparent 1.5px); background-size: 22px 22px; -webkit-mask-image: radial-gradient(ellipse 70% 70% at 40% 40%, #000 30%, transparent 80%); mask-image: radial-gradient(ellipse 70% 70% at 40% 40%, #000 30%, transparent 80%); }
-.auth-hero > * { animation: page-in 600ms var(--ease-out) backwards; }
-.auth-hero > :nth-child(2) { animation-delay: 60ms; }
-.auth-hero > :nth-child(3) { animation-delay: 120ms; }
-.auth-hero > :nth-child(4) { animation-delay: 180ms; }
-.auth-hero > :nth-child(5) { animation-delay: 260ms; }
+.auth-hero > * { animation: page-in 360ms var(--ease-out) backwards; }
+.auth-hero > :nth-child(2) { animation-delay: 40ms; }
+.auth-hero > :nth-child(3) { animation-delay: 80ms; }
+.auth-hero > :nth-child(4) { animation-delay: 120ms; }
+.auth-hero > :nth-child(5) { animation-delay: 160ms; }
 .auth-brand { display: flex; align-items: center; gap: 12px; }
 .auth-brand p { margin: 0; }
 .brand-mark-lg { width: 40px; height: 40px; border-width: 3px; box-shadow: 0 0 0 6px var(--accent-soft); }
@@ -438,16 +444,16 @@ a.activity-head:hover .activity-num { color: var(--link); }
 .auth-preview-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
 .auth-preview-title { font-weight: 600; }
 .auth-preview-diff { display: flex; flex-direction: column; font-size: 12px; padding: 6px 0; }
-.auth-preview-diff > span { padding: 1px 14px; white-space: pre; animation: page-in 420ms var(--ease-out) backwards; }
-.auth-preview-diff > span:nth-child(3) { animation-delay: 420ms; }
-.auth-preview-diff > span:nth-child(4) { animation-delay: 520ms; }
-.auth-preview-diff > span:nth-child(5) { animation-delay: 600ms; }
+.auth-preview-diff > span { padding: 1px 14px; white-space: pre; animation: page-in 300ms var(--ease-out) backwards; }
+.auth-preview-diff > span:nth-child(3) { animation-delay: 240ms; }
+.auth-preview-diff > span:nth-child(4) { animation-delay: 290ms; }
+.auth-preview-diff > span:nth-child(5) { animation-delay: 340ms; }
 .auth-preview-diff .dl-add { color: var(--add-fg); }
 .auth-preview-diff .dl-del { color: var(--del-fg); }
 .auth-preview-foot { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border); }
 .auth-preview-foot .avatar { width: 22px; height: 22px; }
-.auth-preview-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: color-mix(in srgb, currentColor 12%, transparent); animation: pop-in 360ms var(--ease-out) 820ms backwards; }
-.auth-preview-chip + .auth-preview-chip { animation-delay: 940ms; }
+.auth-preview-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); animation: pop-in 260ms var(--ease-out) 440ms backwards; }
+.auth-preview-chip + .auth-preview-chip { animation-delay: 500ms; }
 .auth-panel { width: 100%; max-width: 420px; margin: 0 auto; padding: 48px 24px; display: flex; flex-direction: column; justify-content: center; animation: page-in 300ms var(--ease-out) backwards; }
 .auth-title { font-size: 26px; margin: 0; }
 .auth-footer { font-size: 13px; text-wrap: balance; }
@@ -514,7 +520,7 @@ img.avatar { object-fit: cover; background: var(--surface-3); }
 .repo-link { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; overflow-wrap: anywhere; }
 .calendar { overflow-x: auto; }
 /* The year fills in as a wave, week by week (--w is the week). */
-.calendar rect { transform-box: fill-box; transform-origin: center; animation: cell-in 320ms var(--ease-out) backwards; animation-delay: calc(var(--w, 0) * 6ms); }
+.calendar rect { transform-box: fill-box; transform-origin: center; animation: cell-in 260ms var(--ease-out) backwards; animation-delay: calc(var(--w, 0) * 4ms); }
 .calendar rect:hover { stroke: var(--text); stroke-width: 1px; }
 /* Recent activity hangs off a rail; each event's icon sits in a bead on it. */
 .timeline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
@@ -597,7 +603,7 @@ a.label-pill:hover { text-decoration: none; transform: translateY(-1px); }
 .clone-tabs { padding: 0; }
 
 /* ---------- CI ---------- */
-.ci-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 6px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--muted); background: color-mix(in srgb, currentColor 11%, transparent); }
+.ci-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 6px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--muted); border: 1px solid color-mix(in srgb, currentColor 35%, transparent); }
 .ci-success { color: var(--open); }
 .ci-failure, .ci-error { color: var(--danger); }
 .ci-running { color: var(--link); }
