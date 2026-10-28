@@ -89,7 +89,11 @@ for attempt in 1 2; do
     echo "WARNING: server crashed on a malformed generated SSH host key (known ssh2 flake, log in $RUN_DIR/server-failed-start.log); retrying with a fresh data dir" >&2
     continue
   fi
-  [[ $rc == 3 ]] && echo "server did not answer /api/health within 20s; run cleanup.sh $RUN_DIR" >&2
+  if [[ $rc == 3 ]]; then
+    # The server is still alive but not healthy; stop it so a failed launch leaves nothing running.
+    echo "server did not answer /api/health within 20s; stopping it (logs kept in $RUN_DIR)" >&2
+    "$ROOT/.claude/skills/verify-ether/scripts/cleanup.sh" "$RUN_DIR" >&2
+  fi
   exit 1
 done
 exit 1

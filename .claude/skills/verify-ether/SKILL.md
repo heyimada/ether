@@ -21,7 +21,7 @@ Surfaces: the **web UI** is primary and is what this skill drives. Secondary sur
 V=.claude/skills/verify-ether/scripts
 RUN_DIR="$($V/launch.sh | sed -n 's/^RUN_DIR=//p')"   # builds dist/ first; always do this after code changes
 RUN_DIR="$($V/launch.sh --no-build | sed -n 's/^RUN_DIR=//p')"   # reuse dist/ only if nothing in src/web changed
-[ -n "$RUN_DIR" ] || echo "launch failed; see the newest e2e-report/verify/<run-id>/ logs"
+[ -n "$RUN_DIR" ] || echo "launch failed; see the newest e2e-report/verify/<run-id>/ logs (a failed launch stops its own server and data dir)"
 ```
 
 Keep `RUN_DIR` and pass it to every later command (doctor, drive, cleanup). Every helper falls back to `e2e-report/verify/latest`, which is the newest launch by anyone, so another agent's launch would redirect your drive or cleanup to their instance. Rely on `latest` only when you know you are the only one verifying. Shell variables don't survive between separate tool calls, so either chain the commands in one call or paste the literal path.
