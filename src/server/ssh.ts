@@ -11,7 +11,7 @@ import { db } from "./db/client";
 import { deployKey, sshKey, user } from "./db/schema";
 import { NAME_RE, ensureWiki, fixHead, listRefs, newAuthorEmails, repoExists, wikiPath } from "./git";
 import { ProtectionUnavailable, receivePackGuard, type Guard } from "./protection";
-import { channelPump } from "./ssh-relay";
+import { channelPump, hangUps } from "./ssh-relay";
 
 // One persistent host key per data directory, so clients see a stable identity.
 function hostKey(): Buffer {
@@ -146,7 +146,7 @@ function onClient(client: Connection) {
           stderr: "pipe",
           env: { ...process.env, ...guard.env, GIT_PROTOCOL: gitProtocol, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" },
         });
-        const relay = channelPump([stream, client], () => proc.kill());
+        const relay = channelPump(hangUps(stream, client), () => proc.kill());
         // Both directions wait for the other side, so a slow peer can't make either end buffer a whole pack in memory.
         // Not an async iterator: finishing one destroys the channel, which the response still needs.
         stream.on("data", (chunk: Buffer) => {

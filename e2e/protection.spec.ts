@@ -134,6 +134,11 @@ test("protection holds against case tricks and re-created branches, and checks e
   const back = git(src, ["push", "-q", url, "evil:stable"], auth);
   expect(back.code).not.toBe(0);
   expect(back.stderr).toContain("stable is protected: it requires pull requests and may be deleted, so it can't be created by a push");
+  // Nor under another spelling, which a case-insensitive disk would store as stable.
+  const recased = git(src, ["push", "-q", url, "evil:refs/heads/STABLE"], auth);
+  expect(recased.code).not.toBe(0);
+  expect(recased.stderr).toContain("STABLE is protected: it requires pull requests and may be deleted, so it can't be created by a push");
+  expect(serverSha(owner.username, repo, "refs/heads/stable")).not.toBe(gitOk(src, ["rev-parse", "evil"]).trim());
 
   // One refused ref doesn't hold back the others in the same push.
   await protect({ pattern: "keep", requirePullRequest: true });

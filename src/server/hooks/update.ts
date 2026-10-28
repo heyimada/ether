@@ -16,7 +16,6 @@ const git = async (args: string[]) => {
 };
 
 const why = await refusal(rules, { ref, old, new: next }, {
-  // New objects are still in quarantine; git finds them through the environment receive-pack set.
   isAncestor: async (a, b) => (await git(["merge-base", "--is-ancestor", a, b])).ok,
   branches: async () => (await git(["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads/"])).out.split("\n").filter(Boolean),
   freshRepo: process.env.ETHER_FRESH_REPO === "1",

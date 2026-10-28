@@ -18,6 +18,10 @@ describe("patterns", () => {
     expect(matches("v?.x", "v1.x")).toBe(true);
     expect(matches("a.b", "aXb")).toBe(false);
   });
+  test("case is ignored, since a case-insensitive disk treats both spellings as one ref", () => {
+    expect(matches("release/*", "RELEASE/1.0")).toBe(true);
+    expect(matches("Main", "main")).toBe(true);
+  });
   test("bad patterns are explained", () => {
     expect(patternProblem("refs/heads/main")).not.toBeNull();
     expect(patternProblem("a b")).not.toBeNull();
@@ -41,6 +45,20 @@ describe("refusal", () => {
     expect(await refusal(rules, push("Main", A, Z), ctx())).toContain("only in case");
     expect(await refusal([], push("Feature", Z, B), ctx({ branches: async () => ["feature"] }))).toContain("only in case");
     expect(await refusal(rules, push("other", Z, B), ctx())).toBeNull();
+  });
+
+  test("where both spellings really exist, each can be updated and deleted", async () => {
+    const both = ctx({ branches: async () => ["Foo", "foo"] });
+    expect(await refusal([rule("bar")], push("Foo", A, B), both)).toBeNull();
+    expect(await refusal([rule("bar")], push("foo", A, Z), both)).toBeNull();
+    // A third spelling is still a clash.
+    expect(await refusal([rule("bar")], push("FOO", Z, B), both)).toContain("only in case");
+  });
+
+  test("a deleted protected branch can't come back under another spelling", async () => {
+    const rules = [rule("release/*", { requirePullRequest: true, allowDeletion: true })];
+    const gone = ctx({ branches: async () => ["main"] });
+    expect(await refusal(rules, push("RELEASE/1.0", Z, B), gone)).toContain("can't be created by a push");
   });
 
   test("deleting and creating again can't get around pull requests", async () => {

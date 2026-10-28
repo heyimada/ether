@@ -13,7 +13,8 @@ export function patternProblem(pattern: string): string | null {
   return null;
 }
 
-// * matches within one path segment, ** across segments, ? one character.
+// * matches within one path segment, ** across segments, ? one character. Case is ignored: on a
+// case-insensitive disk RELEASE/1.0 is the same ref as release/1.0, so a rule must cover both spellings.
 export function matches(pattern: string, branch: string): boolean {
   let re = "";
   for (let i = 0; i < pattern.length; i++) {
@@ -23,7 +24,7 @@ export function matches(pattern: string, branch: string): boolean {
     else if (c === "?") re += "[^/]";
     else re += c.replace(/[.\-/]/g, "\\$&");
   }
-  return new RegExp(`^${re}$`).test(branch);
+  return new RegExp(`^${re}$`, "i").test(branch);
 }
 
 // Every matching rule applies; the strictest setting wins.
@@ -53,10 +54,13 @@ export type PushContext = {
 export async function refusal(rules: BranchRule[], u: RefUpdate, ctx: PushContext): Promise<string | null> {
   if (!u.ref.startsWith("refs/heads/")) return null;
   const branch = u.ref.slice("refs/heads/".length);
-  // On a case-insensitive filesystem refs/heads/MAIN is the file of refs/heads/main, so a name that
-  // differs from a branch only in case would write that branch past its rules.
+  // On a case-insensitive disk refs/heads/MAIN is the file of refs/heads/main, so a name that isn't a
+  // branch itself but differs from one only in case would write that branch, whether git calls it a
+  // creation or (with a forged old value) an update. Where both spellings really exist, as a
+  // case-sensitive disk allows, each is its own branch and may be changed.
+  const branches = await ctx.branches();
   const lower = branch.toLowerCase();
-  const clash = (await ctx.branches()).find((b) => b !== branch && b.toLowerCase() === lower);
+  const clash = branches.includes(branch) ? undefined : branches.find((b) => b.toLowerCase() === lower);
   if (clash) return `${branch} differs from the existing branch ${clash} only in case`;
 
   const rule = effectiveRule(rules, branch);
