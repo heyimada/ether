@@ -8,7 +8,7 @@ import { db } from "../db/client";
 import { release, releaseAsset, user } from "../db/schema";
 import { record } from "../events";
 import * as git from "../git";
-import { BodyTooLarge, writeBody } from "../upload";
+import { BodyIncomplete, BodyTooLarge, writeBody } from "../upload";
 
 const MAX_ASSET = 500 * 1024 * 1024;
 const ASSET_RE = /^[A-Za-z0-9_][A-Za-z0-9._+-]{0,127}$/;
@@ -103,19 +103,22 @@ export const releaseRoutes = new Elysia()
     const a = requireRepo(await requireUser(request), params.owner, params.repo, "write");
     const r = findRelease(a, params.tag);
     if (!ASSET_RE.test(params.name)) throw new HttpError(400, "Asset names are letters, digits, '.', '_', '+' or '-'");
-    if (Number(request.headers.get("content-length") ?? 0) > MAX_ASSET) throw new HttpError(413, "Assets can be at most 500 MB");
+    const length = request.headers.get("content-length");
+    const expected = length !== null && /^\d+$/.test(length) ? Number(length) : undefined;
+    if ((expected ?? 0) > MAX_ASSET) throw new HttpError(413, "Assets can be at most 500 MB");
     const existing = db.select().from(releaseAsset).where(and(eq(releaseAsset.releaseId, r.id), eq(releaseAsset.name, params.name))).get();
     const row = existing ?? db.insert(releaseAsset).values({ releaseId: r.id, name: params.name, size: 0 }).returning().get();
     mkdirSync(releaseDir(r.id), { recursive: true });
     const file = join(releaseDir(r.id), String(row.id));
     let size: number;
     try {
-      size = await writeBody(request.body, file, MAX_ASSET);
+      size = await writeBody(request.body, file, MAX_ASSET, expected);
     } catch (e) {
-      if (!(e instanceof BodyTooLarge)) throw e;
-      rmSync(file, { force: true });
-      db.delete(releaseAsset).where(eq(releaseAsset.id, row.id)).run();
-      throw new HttpError(413, "Assets can be at most 500 MB");
+      // A failed upload changes nothing: a replaced asset keeps its old file, a new one is forgotten.
+      if (!existing) db.delete(releaseAsset).where(eq(releaseAsset.id, row.id)).run();
+      if (e instanceof BodyTooLarge) throw new HttpError(413, "Assets can be at most 500 MB");
+      if (e instanceof BodyIncomplete) throw new HttpError(400, `The upload was cut off (${e.message})`);
+      throw e;
     }
     db.update(releaseAsset).set({ size }).where(eq(releaseAsset.id, row.id)).run();
     return { asset: { name: params.name, size } };
