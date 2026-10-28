@@ -1,6 +1,7 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { copyRepoConsistently, copyTree, listIfPresent } from "./backup-copy";
 import { config } from "./config";
 
 const usage = `Usage:
@@ -17,14 +18,6 @@ const { positionals, values } = parseArgs({
 
 const [command, arg] = positionals;
 const MIN_PASSWORD = 10;
-
-// Copies a bare repository refs-first. Objects are only ever added, so every ref in the copy
-// points at objects that are copied after it, even if a push lands mid-copy.
-function copyRepoConsistently(from: string, to: string) {
-  mkdirSync(to, { recursive: true });
-  for (const entry of readdirSync(from)) if (entry !== "objects") cpSync(join(from, entry), join(to, entry), { recursive: true });
-  if (existsSync(join(from, "objects"))) cpSync(join(from, "objects"), join(to, "objects"), { recursive: true });
-}
 
 const DATA_FILES = ["ether.db", "repos", "avatars", "releases", "auth-secret", "ssh_host_ed25519_key"];
 
@@ -88,12 +81,10 @@ switch (command) {
     const { Database } = await import("bun:sqlite");
     new Database(join(config.dataDir, "ether.db")).exec(`VACUUM INTO '${join(dest, "ether.db").replaceAll("'", "''")}'`);
     const repos = join(config.dataDir, "repos");
-    if (existsSync(repos))
-      for (const owner of readdirSync(repos))
-        for (const repo of readdirSync(join(repos, owner)))
-          if (statSync(join(repos, owner, repo)).isDirectory()) copyRepoConsistently(join(repos, owner, repo), join(dest, "repos", owner, repo));
-    for (const extra of ["avatars", "releases", "ssh_host_ed25519_key"])
-      if (existsSync(join(config.dataDir, extra))) cpSync(join(config.dataDir, extra), join(dest, extra), { recursive: true });
+    for (const owner of listIfPresent(repos) ?? [])
+      for (const repo of listIfPresent(join(repos, owner)) ?? []) copyRepoConsistently(join(repos, owner, repo), join(dest, "repos", owner, repo));
+    for (const extra of ["avatars", "releases"]) copyTree(join(config.dataDir, extra), join(dest, extra));
+    if (existsSync(join(config.dataDir, "ssh_host_ed25519_key"))) cpSync(join(config.dataDir, "ssh_host_ed25519_key"), join(dest, "ssh_host_ed25519_key"));
     if (existsSync(join(config.dataDir, "auth-secret"))) cpSync(join(config.dataDir, "auth-secret"), join(dest, "auth-secret"));
     else console.warn("No auth-secret file (BETTER_AUTH_SECRET is set in the environment); keep that value with this backup.");
     console.log(`Backed up to ${dest}`);
