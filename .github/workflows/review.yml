@@ -66,6 +66,9 @@ jobs:
       pull-requests: read
     strategy:
       fail-fast: false
+      # One after the other, so the security review sees what the bugs review posted and its voters can drop the same
+      # problem reworded. Two parallel reviews posted the same bug twice.
+      max-parallel: 1
       matrix:
         lens: [bugs, security]
     steps:
@@ -90,7 +93,9 @@ jobs:
         with:
           client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
           private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
-          permission-contents: read
+          # resolveReviewThread is refused without contents: write, even with pull-requests: write. The agents never see
+          # this token; only review.ts uses it.
+          permission-contents: write
           permission-pull-requests: write
       - run: bun .github/review/review.ts --pr "$PR" --lens "$LENS"
         env:

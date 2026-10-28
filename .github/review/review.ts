@@ -74,14 +74,16 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   if (prev && prev.reviewedSha === head && prev.state !== "errored" && !dryRun) return log(`already reviewed ${short(head)}`);
   const round = !prev ? 1 : prev.reviewedSha === head ? prev.round : prev.round + 1;
 
-  const botThreads = threads
+  const allBotThreads = threads
     .filter((t) => isReviewBot({ login: t.comment.login, type: t.comment.byBot ? "Bot" : "User" }, BOT_LOGIN))
     .flatMap((t) => {
       const posted = postedFinding(t.comment.body, t.comment.path);
-      return posted && lenses.includes(posted.marker.lens) ? [{ thread: t, posted }] : [];
+      return posted ? [{ thread: t, posted }] : [];
     });
-  // Findings the App resolved as fixed may come back if the fix regresses, so only the others count as already reported.
-  const prior: Posted[] = botThreads.filter((t) => !resolvedAsFixed(t.thread, BOT_LOGIN)).map((t) => t.posted);
+  const botThreads = allBotThreads.filter((t) => lenses.includes(t.posted.marker.lens));
+  // Every lens's findings count as already reported, so the same problem isn't posted twice under different lenses. Findings
+  // the App resolved as fixed may come back if the fix regresses, so those don't count.
+  const prior: Posted[] = allBotThreads.filter((t) => !resolvedAsFixed(t.thread, BOT_LOGIN)).map((t) => t.posted);
   const errors: string[] = [];
   // The path hook can't see what a glob matches, so a symlink anywhere in the checkout stops the agents (review.yml deletes them first).
   const symlink = findSymlink(PR_DIR);
@@ -90,9 +92,10 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   const spend = <T extends { costUsd: number }>(r: T) => ((costUsd += r.costUsd), r);
 
   // Threads whose finding is fixed at this head get a short reply and are resolved. Only files changed since the finding
-  // was posted are re-checked, and every voter has to agree it's fixed, the same bar as posting it.
+  // was posted are re-checked, and every voter has to agree it's fixed, the same bar as posting it. Threads a person
+  // resolved are re-checked too: authors often fix and resolve in one go, and the reply is what tells the gate it was a fix.
   const resolved: { file: string; title: string; reason: string }[] = [];
-  const open = symlink ? [] : botThreads.filter((t) => !t.thread.isResolved && t.posted.marker.sha !== head);
+  const open = symlink ? [] : botThreads.filter((t) => !resolvedAsFixed(t.thread, BOT_LOGIN) && t.posted.marker.sha !== head);
   const changedSince = new Map<string, Promise<Set<string> | null>>();
   const touched = async (sha: string, file: string) => {
     if (!changedSince.has(sha)) changedSince.set(sha, read.compare(sha, head).then(changedPaths, () => null));
@@ -112,7 +115,7 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
       resolved.push({ file: posted.file, title: posted.title, reason });
       if (!write) return;
       await write.reply(prNumber, thread.comment.databaseId, guard(`Fixed as of ${short(head)}: ${sanitize(reason, 1000)}\n\n${fixedMarker(head)}`));
-      await write.resolveThread(thread.id);
+      if (!thread.isResolved) await write.resolveThread(thread.id);
     }),
   );
 
@@ -183,8 +186,8 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
         (resolved.length ? ` ${plural(resolved.length, "earlier finding")} resolved as fixed.` : ""),
       state === "errored" ? "Part of the review failed, so this commit needs a human review. The workflow log has the details." : "",
       state === "not-applicable" ? "Nothing to review in this commit." : "",
-      round > ROUND_CAP ? `This pull request is past ${ROUND_CAP} review rounds, so only important findings are posted now. If findings keep coming, consider a different approach.` : "",
-      "Answer each finding: fix it, or resolve the thread with a reason.",
+      round > ROUND_CAP ? `This pull request is past ${ROUND_CAP} review rounds, so only important findings are posted now.${posted.length ? " If findings keep coming, consider a different approach." : ""}` : "",
+      posted.length ? "Answer each finding: fix it, or resolve the thread with a reason." : "",
       REPORT_ONLY ? "Report-only: this review doesn't approve or block merging yet." : "",
       summaryMarker({ lens: group, round, reviewedSha: head, state, ...(eligibility ? { eligibility } : {}) }),
     ].filter(Boolean).join("\n\n"),
