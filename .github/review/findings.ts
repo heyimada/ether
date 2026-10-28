@@ -183,8 +183,7 @@ export function suggestionFits(c: Pick<Candidate, "file" | "line" | "suggestion"
 // from closing the block early; mentions and HTML comments inside a code block don't render.
 function suggestionBlock(code: string): string {
   const fence = "`".repeat(Math.max(3, ...[...code.matchAll(/`+/g)].map((m) => m[0].length + 1)));
-  const body = code.replace(/\n$/, "");
-  return `${fence}suggestion\n${body ? `${body}\n` : ""}${fence}`;
+  return `${fence}suggestion\n${code ? `${code.replace(/\n$/, "")}\n` : ""}${fence}`;
 }
 
 export function findingBody(f: Finding, sha: string): string {

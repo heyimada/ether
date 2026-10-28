@@ -201,4 +201,5 @@ test("a suggestion is posted verbatim in a fence its own backticks can't close",
   expect(postedFinding(body, f.file)?.marker.fp).toBe(f.fingerprint);
   expect(findingBody(finding({ suggestion: { endLine: 10, code: "" } }), "s1")).toContain("```suggestion\n```");
   expect(findingBody(finding({ suggestion: { endLine: 10, code: "x\n" } }), "s1")).toContain("```suggestion\nx\n```");
+  expect(findingBody(finding({ suggestion: { endLine: 10, code: "\n" } }), "s1")).toContain("```suggestion\n\n```");
 });
