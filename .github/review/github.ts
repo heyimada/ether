@@ -137,9 +137,9 @@ export function github(token: string) {
     resolveThread: (threadId: string) =>
       graphql(`mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id } } }`, { id: threadId }),
     checkRuns: (sha: string) => paginate<CheckRun>(`${repo}/commits/${sha}/check-runs`, (p) => p.check_runs),
-    createCheckRun: (run: { name: string; head_sha: string; status: "completed"; conclusion: string; output: { title: string; summary: string } }) =>
+    createCheckRun: (run: { name: string; head_sha: string; status: "completed"; conclusion: string; details_url?: string; output: { title: string; summary: string } }) =>
       rest<CheckRun>("POST", `${repo}/check-runs`, run),
-    updateCheckRun: (id: number, run: { status: "completed"; conclusion: string; output: { title: string; summary: string } }) =>
+    updateCheckRun: (id: number, run: { status: "completed"; conclusion: string; details_url?: string; output: { title: string; summary: string } }) =>
       rest<CheckRun>("PATCH", `${repo}/check-runs/${id}`, run),
   };
 }

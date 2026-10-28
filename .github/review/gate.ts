@@ -121,8 +121,11 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
   // Neutral while report-only, so a check nobody requires yet never shows as a failure.
   const conclusion = REPORT_ONLY ? "neutral" : decision.wouldApprove ? "success" : "action_required";
   const existing = runs.find((r) => r.name === GATE_CHECK && r.app && sameBot(r.app.slug, BOT_LOGIN));
-  if (existing) await write.updateCheckRun(existing.id, { status: "completed", conclusion, output });
-  else await write.createCheckRun({ name: GATE_CHECK, head_sha: head, status: "completed", conclusion, output });
+  // Without it, "Details" links to the App's homepage instead of the run that made the decision.
+  const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId } = process.env;
+  const details_url = server && repo && runId ? `${server}/${repo}/actions/runs/${runId}` : undefined;
+  if (existing) await write.updateCheckRun(existing.id, { status: "completed", conclusion, details_url, output });
+  else await write.createCheckRun({ name: GATE_CHECK, head_sha: head, status: "completed", conclusion, details_url, output });
   console.error(`#${number} at ${head.slice(0, 7)}: ${title}\n${summary}`);
 }
 

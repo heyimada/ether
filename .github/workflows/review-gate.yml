@@ -46,7 +46,7 @@ jobs:
       - id: app
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ vars.REVIEW_APP_ID }}
+          client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
           private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
           permission-checks: write
           permission-pull-requests: read
