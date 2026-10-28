@@ -51,6 +51,10 @@ Open http://localhost:5173 and sign in. Your development data lives in `./data` 
 
 ## Making changes
 
+### Routes
+
+`src/web/routeTree.gen.ts` is generated from `src/web/routes/`, but it is committed because the typecheck and the app need it. When you add, rename, or remove a route, run `bun run build` or `bun run dev:web` and commit the updated file. CI fails if it is stale.
+
 ### Database schema
 
 Edit `src/server/db/schema.ts`, then generate a migration:
@@ -79,7 +83,7 @@ cargo build
 ## Tests
 
 ```sh
-bun run typecheck                 # needs src/web/routeTree.gen.ts, which `bun run build` or `dev:web` generates
+bun run typecheck
 bun run test                      # unit tests next to the code (src/**/*.test.ts)
 bunx playwright install chromium  # once
 bun run test:e2e                  # builds, boots a throwaway server, drives git and Chromium
