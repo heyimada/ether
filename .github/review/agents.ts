@@ -1,6 +1,6 @@
 import { query, type HookCallback } from "@anthropic-ai/claude-agent-sdk";
 import { readdirSync, realpathSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CONCURRENCY, LENS_GROUPS, MAX_TURNS, MODEL, type Lens, type LensGroup } from "./config";
 import { SEVERITIES, type Candidate, type Finding, type Vote } from "./findings";
 
@@ -84,6 +84,9 @@ export function denyReason(root: string, tool: string, input: Record<string, unk
   const base = str("path") ?? root;
   if (!inside(root, base)) return "path is outside the pull request checkout";
   if (["Read", "Edit", "Write"].includes(tool) && !inside(root, str("file_path") ?? "")) return "file is outside the pull request checkout";
+  // .git/config can name commands (fsmonitor, hooks, filters) that the git calls after the agent would run.
+  if (["Edit", "Write"].includes(tool) && relative(root, realpathLoose(resolve(root, str("file_path")!))).split(sep).some((s) => s.toLowerCase() === ".git"))
+    return "git metadata is off limits";
   if (tool === "Glob" && !patternInside(root, resolve(root, base), str("pattern") ?? "")) return "pattern reaches outside the pull request checkout";
   if (tool === "Grep" && str("glob") && !patternInside(root, resolve(root, base), str("glob")!)) return "glob reaches outside the pull request checkout";
   return null;

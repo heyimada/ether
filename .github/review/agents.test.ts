@@ -87,6 +87,10 @@ test("the /fix agent edits inside the checkout and nowhere else, and never runs 
   expect(fix("Edit", { file_path: "/home/runner/work/_actions/x/dist/index.js", old_string: "a", new_string: "b" })).not.toBeNull();
   expect(fix("Write", { file_path: "../escape.ts", content: "" })).not.toBeNull();
   expect(fix("Bash", { command: "bun install" })).not.toBeNull();
+  expect(fix("Write", { file_path: ".git/config", content: "[core]\n\tfsmonitor = sh -c evil" })).not.toBeNull();
+  expect(fix("Edit", { file_path: join(root, "src/.GIT/hooks/pre-commit"), old_string: "a", new_string: "b" })).not.toBeNull();
+  expect(fix("Write", { file_path: "src/.gitignore", content: "" })).toBeNull();
+  expect(denyReason(root, "Read", { file_path: ".git/config" })).toBeNull();
   expect(denyReason(root, "WebFetch", { url: "https://example.com" })).not.toBeNull();
   expect(denyReason(root, "StructuredOutput", { anything: 1 })).toBeNull();
 });

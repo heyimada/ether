@@ -22,6 +22,7 @@ const RESULT = "fix.json";
 // GitHub refuses a commit by the App that touches workflows, and an agent shouldn't edit the review either.
 const OFF_LIMITS = ".github/";
 const MAX_PATCH_BYTES = 512 * 1024;
+const GIT_HARDENED = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "--no-pager"];
 
 export interface OpenFinding {
   fingerprint: string;
@@ -113,11 +114,12 @@ async function edit(sha: string) {
     result = out;
     log(`done: $${costUsd.toFixed(2)}`);
   }
-  // The patch is made here, but commit checks it again: anything that ran in this job could have written it.
-  const git = (...args: string[]) => Bun.spawnSync(["git", "-C", PR_DIR, ...args]);
+  // The patch is made here, but commit checks it again: anything that ran in this job could have written it. The agent
+  // can't write .git/, and git runs with nothing in the checkout's config allowed to start a program.
+  const git = (...args: string[]) => Bun.spawnSync(["git", "-C", PR_DIR, ...GIT_HARDENED, ...args]);
   git("add", "-A");
   // Against the commit that was checked out, so nothing is lost if HEAD moved.
-  const diff = git("diff", "--cached", "--binary", sha);
+  const diff = git("diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", sha);
   if (!diff.success) throw new Error(`git diff failed: ${diff.stderr.toString()}`);
   await Bun.write(PATCH, diff.stdout);
   await Bun.write(RESULT, JSON.stringify(result));
