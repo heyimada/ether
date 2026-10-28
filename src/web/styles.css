@@ -795,7 +795,7 @@
       radial-gradient(ellipse 70% 50% at 100% 100%, color-mix(in srgb, var(--merged) 9%, transparent), transparent 70%),
       var(--surface);
   }
-  @media (max-width: 900px) {
+  @media (width < 900px) {
     .auth-hero {
       background: radial-gradient(ellipse 90% 80% at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%);
     }
