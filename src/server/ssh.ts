@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Writable } from "node:stream";
 import { Server, utils, type Connection } from "ssh2";
 import { allows, findRepo, repoAccess, type Role, type Viewer } from "./access";
 import { config } from "./config";
@@ -11,6 +10,7 @@ import { recordPushEvents } from "./events";
 import { db } from "./db/client";
 import { deployKey, sshKey, user } from "./db/schema";
 import { NAME_RE, ensureWiki, fixHead, listRefs, newAuthorEmails, repoExists, wikiPath } from "./git";
+import { channelPump } from "./ssh-relay";
 
 // One persistent host key per data directory, so clients see a stable identity.
 function hostKey(): Buffer {
@@ -111,7 +111,7 @@ function onClient(client: Connection) {
       session.on("pty", (ok) => ok?.());
       session.on("shell", (ok) => {
         const stream = ok();
-        const who = principal?.kind === "user" ? principal.viewer.username : `deploy key "${principal?.title}"`;
+        const who = principal?.kind === "user" ? principal.viewer.username : `deploy key "${keyTitle(principal?.title, "untitled")}"`;
         stream.write(`Hi ${who}! You've authenticated, but Ether does not provide shell access.\r\n`);
         stream.exit(1);
         stream.end();
@@ -137,7 +137,7 @@ function onClient(client: Connection) {
           stderr: "pipe",
           env: { ...process.env, GIT_PROTOCOL: gitProtocol, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" },
         });
-        stream.on("close", () => proc.kill());
+        const relay = channelPump([stream, client], () => proc.kill());
         // Both directions wait for the other side, so a slow peer can't make either end buffer a whole pack in memory.
         // Not an async iterator: finishing one destroys the channel, which the response still needs.
         stream.on("data", (chunk: Buffer) => {
@@ -149,22 +149,16 @@ function onClient(client: Connection) {
           }
         });
         stream.on("end", () => proc.stdin.end());
-        const drained = (to: Writable) =>
-          new Promise<void>((resolve) => {
-            const done = () => (to.off("drain", done), stream.off("close", done), resolve());
-            to.on("drain", done);
-            stream.on("close", done);
-          });
-        const pump = async (from: ReadableStream<Uint8Array>, to: Writable) => {
-          for await (const chunk of from) if (!stream.destroyed && !to.write(chunk)) await drained(to);
-        };
-        await Promise.all([pump(proc.stdout, stream), pump(proc.stderr, stream.stderr)]);
+        await Promise.all([relay.pump(proc.stdout, stream), relay.pump(proc.stderr, stream.stderr)]);
         const code = await proc.exited;
+        relay.release();
         if (service === "git-receive-pack" && code === 0) {
           await fixHead(path).catch(() => {});
           const after = await listRefs(path);
           // Author emails are only learned from a person's own pushes; a deploy key has no person behind it.
           if (principal.kind === "user") recordPush(principal.viewer.id, await newAuthorEmails(path, before.map((r) => r.sha), after.map((r) => r.sha)).catch(() => []));
+          // A deploy key's pushes count as whoever added it. Once that account is deleted they fall back to the
+          // repository's owner, which for an organization's repository is the organization itself.
           const actorId = principal.kind === "user" ? principal.viewer.id : (principal.addedBy ?? access.repo.ownerId);
           if (!isWiki) {
             await recordPushEvents(access.repo.id, actorId, path, before, after).catch(() => {});
@@ -186,6 +180,13 @@ export function startSsh(): Server | null {
   server.on("error", (e: Error) => console.error(`Git over SSH unavailable: ${e.message}`));
   server.listen(config.sshPort, config.host);
   return server;
+}
+
+// A key's title as stored and shown, also at the SSH prompt: without control or invisible formatting
+// characters, so it can't carry terminal escape sequences to whoever uses the key.
+export function keyTitle(title: unknown, fallback: string): string {
+  const clean = typeof title === "string" ? title.replace(/[\p{Cc}\p{Cf}]/gu, "").trim().slice(0, 100) : "";
+  return clean || fallback;
 }
 
 // Parses an OpenSSH public key line for storage, or explains why it isn't one.

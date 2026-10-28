@@ -3,7 +3,7 @@ import { Elysia } from "elysia";
 import { HttpError, requireUser } from "../access";
 import { db } from "../db/client";
 import { sshKey } from "../db/schema";
-import { keyInUse, parsePublicKey } from "../ssh";
+import { keyInUse, keyTitle, parsePublicKey } from "../ssh";
 
 export const sshKeyRoutes = new Elysia()
   .get("/me/ssh-keys", async ({ request }) => {
@@ -28,7 +28,7 @@ export const sshKeyRoutes = new Elysia()
       throw new HttpError(400, (e as Error).message);
     }
     if (keyInUse(parsed.blob)) throw new HttpError(409, "That key is already in use, by an account or as a deploy key");
-    const name = typeof title === "string" && title.trim() ? title.trim().slice(0, 100) : parsed.keyType;
+    const name = keyTitle(title, parsed.keyType);
     db.insert(sshKey).values({ userId: viewer.id, title: name, ...parsed }).run();
     return { ok: true, fingerprint: parsed.fingerprint };
   })

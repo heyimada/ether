@@ -32,7 +32,12 @@ function sshIdentity() {
     const r = spawnSync("git", args, { cwd, env: { ...env, ...extra }, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     return { code: r.status ?? -1, err: r.stderr };
   };
-  return { publicKey: keys.public, git };
+  // Plain ssh with the same key, for what Ether says outside git.
+  const ssh = (args: string[]) => {
+    const r = spawnSync("ssh", ["-i", keyFile, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "BatchMode=yes", "-o", "LogLevel=ERROR", ...args], { encoding: "utf8" });
+    return { code: r.status ?? -1, out: r.stdout + r.stderr };
+  };
+  return { publicKey: keys.public, git, ssh };
 }
 
 const sshUrl = (owner: string, repo: string) => `ssh://git@127.0.0.1:${process.env.ETHER_SSH_PORT}/${owner}/${repo}.git`;
@@ -233,6 +238,15 @@ test("deploy keys reach one repository with their own role, managed by its owner
   expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "mine", key: mine.publicKey }, headers: headers() })).status()).toBe(409);
   expect((await writer.ctx.get(`/api/repos/${owner.username}/${repo}/deploy-keys`)).status()).toBe(403);
   expect((await writer.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "w", key: sshIdentity().publicKey }, headers: headers() })).status()).toBe(403);
+
+  // Titles lose control characters, so a key can't send escape sequences to whoever uses it.
+  const shady = sshIdentity();
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "\u001b[31mevil\u0007\u202e", key: shady.publicKey }, headers: headers() })).ok()).toBe(true);
+  const stored = await (await owner.ctx.get(`/api/repos/${owner.username}/${repo}/deploy-keys`)).json();
+  expect(stored.keys.map((k: { title: string }) => k.title)).toContain("[31mevil");
+  const hello = shady.ssh(["-T", `git@127.0.0.1`, "-p", String(process.env.ETHER_SSH_PORT)]);
+  expect(hello.out).toContain('Hi deploy key "[31mevil"!');
+  expect(hello.out).not.toContain("\u001b");
 
   // Removing a deploy key cuts its access.
   await page.reload();

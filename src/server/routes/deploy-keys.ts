@@ -3,7 +3,7 @@ import { Elysia } from "elysia";
 import { HttpError, requireRepo, requireUser } from "../access";
 import { db } from "../db/client";
 import { deployKey } from "../db/schema";
-import { keyInUse, parsePublicKey } from "../ssh";
+import { keyInUse, keyTitle, parsePublicKey } from "../ssh";
 
 // Like collaborators, only owners see and manage a repository's deploy keys.
 export const deployKeyRoutes = new Elysia()
@@ -40,7 +40,7 @@ export const deployKeyRoutes = new Elysia()
       throw new HttpError(400, (e as Error).message);
     }
     if (keyInUse(parsed.blob)) throw new HttpError(409, "That key is already in use, by an account or as a deploy key");
-    const name = typeof title === "string" && title.trim() ? title.trim().slice(0, 100) : parsed.keyType;
+    const name = keyTitle(title, parsed.keyType);
     db.insert(deployKey)
       .values({ repoId: a.repo.id, title: name, ...parsed, readOnly: write !== true, createdBy: viewer.id })
       .run();
