@@ -1,0 +1,17 @@
+name: Review trigger
+
+# Does nothing itself. Its completion starts review-gate.yml through workflow_run, which runs from main with the
+# secrets this event doesn't get for pull requests from forks.
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions: {}
+
+jobs:
+  trigger:
+    name: Trigger
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: echo "A review changed; the merge gate runs next."
