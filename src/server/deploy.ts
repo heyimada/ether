@@ -79,7 +79,7 @@ export function listDeployments(repoId: number, environmentId?: number, limit = 
 export function environmentsOverview(repoId: number) {
   const envs = db.select().from(environment).where(eq(environment.repoId, repoId)).orderBy(asc(environment.name)).all();
   return envs.map((env) => {
-    const recent = listDeployments(repoId, env.id, 20);
+    const recent = listDeployments(repoId, env.id, 1);
     const reviewers = db
       .select({ username: user.username })
       .from(environmentReviewer)
@@ -88,13 +88,23 @@ export function environmentsOverview(repoId: number) {
       .orderBy(asc(user.username))
       .all()
       .map((r) => r.username!);
+    // What runs there now is the deployment that finished last, not the one queued last: an older run held
+    // for a review can finish after a newer one.
+    const active =
+      db
+        .select(deploymentColumns)
+        .from(deployment)
+        .leftJoin(user, eq(user.id, deployment.actorId))
+        .where(and(eq(deployment.environmentId, env.id), eq(deployment.status, "success")))
+        .orderBy(desc(deployment.finishedAt), desc(deployment.id))
+        .get() ?? null;
     return {
       name: env.name,
       branches: JSON.parse(env.branches) as string[],
       waitMinutes: env.waitMinutes,
       reviewers,
       latest: recent[0] ?? null,
-      active: recent.find((d) => d.status === "success") ?? null,
+      active,
     };
   });
 }

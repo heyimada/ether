@@ -37,7 +37,8 @@ async function settled(ctx: APIRequestContext, api: string, sha: string, want = 
     }
     await new Promise((r) => setTimeout(r, 200));
   }
-  throw new Error(`run for ${sha} didn't settle`);
+  const { runs } = await (await ctx.get(`${api}/ci/runs`)).json();
+  throw new Error(`run for ${sha} didn't settle: ${JSON.stringify(runs.map((r: { sha: string; status: string; subject: string; jobs: unknown }) => ({ sha: r.sha.slice(0, 7), subject: r.subject, status: r.status, jobs: r.jobs })))}`);
 }
 
 test("deploy jobs go to environments, wait for a reviewer where required, and show on the repository and pull requests", async ({ page }, info) => {
@@ -166,6 +167,50 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     expect((await writer.ctx.get(`${api}/environments/production/secrets`)).status()).toBe(403);
     expect((await owner.ctx.put(`${api}/environments/production/secrets/DEPLOY_TOKEN`, { data: { value: "s3cret" }, headers: headers() })).ok()).toBe(true);
     expect(JSON.stringify(await (await owner.ctx.get(`${api}/environments/production/secrets`)).json())).not.toContain("s3cret");
+
+    const pushMain = async (content: string) => {
+      writeFileSync(join(src, "app.txt"), `${content}\n`);
+      gitOk(src, ["commit", "-qam", content]);
+      gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
+      const sha = gitOk(src, ["rev-parse", "HEAD"]).trim();
+      const settledRun = await settled(owner.ctx, api, sha);
+      return { sha, ...settledRun };
+    };
+    const activeSha = async () => (await (await reader.ctx.get(`${api}/environments`)).json()).environments.find((e: { name: string }) => e.name === "production").active.sha;
+    const approve = (jobId: number) => reviewer.ctx.post(`${api}/ci/jobs/${jobId}/review`, { data: { approve: true }, headers: headers() });
+
+    // Staging's wait timer from the editor above would hold every run below for 5 minutes.
+    expect((await owner.ctx.put(`${api}/environments/staging`, { data: { waitMinutes: 0 }, headers: headers() })).ok()).toBe(true);
+
+    // Production runs what finished deploying last: an older run approved after a newer one wins.
+    const v5 = await pushMain("v5");
+    const v6 = await pushMain("v6");
+    expect((await approve(v6.jobs.production.id)).ok()).toBe(true);
+    await settled(owner.ctx, api, v6.sha, ["success"]);
+    expect((await approve(v5.jobs.production.id)).ok()).toBe(true);
+    await settled(owner.ctx, api, v5.sha, ["success"]);
+    expect(await activeSha()).toBe(v5.sha);
+
+    // Dropping the reviewers lets a deployment that waits for one go ahead.
+    const v7 = await pushMain("v7");
+    expect(v7.run.status).toBe("waiting");
+    expect((await owner.ctx.put(`${api}/environments/production`, { data: { reviewers: [] }, headers: headers() })).ok()).toBe(true);
+    expect((await settled(owner.ctx, api, v7.sha, ["success", "failure"])).run.status).toBe("success");
+    expect(await activeSha()).toBe(v7.sha);
+
+    // Deleting an environment fails what waits for it instead of leaving it waiting for good.
+    await owner.ctx.put(`${api}/environments/production`, { data: { reviewers: [reviewer.username] }, headers: headers() });
+    const v8 = await pushMain("v8");
+    expect(v8.run.status).toBe("waiting");
+    expect((await owner.ctx.delete(`${api}/environments/production`, { headers: headers() })).ok()).toBe(true);
+    const gone = await settled(owner.ctx, api, v8.sha, ["success", "failure"]);
+    expect(gone.run.status).toBe("failure");
+    expect(gone.jobs.production.log).toContain("the environment production was deleted");
+
+    // A refused request doesn't create the environment it names.
+    expect((await owner.ctx.put(`${api}/environments/newenv`, { data: { reviewers: ["nobody-here"] }, headers: headers() })).status()).toBe(400);
+    const names = (await (await owner.ctx.get(`${api}/environments`)).json()).environments.map((e: { name: string }) => e.name);
+    expect(names).not.toContain("newenv");
   } finally {
     await admin.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
   }

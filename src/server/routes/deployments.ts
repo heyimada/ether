@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { allows, findUser, HttpError, isOrg, readerOrVisitor, repoAccess, requireRepo, requireUser, type RepoAccess } from "../access";
 import { patternProblem } from "../branch-rules";
-import { reviewDeployment, ReviewError } from "../ci";
+import { abandonEnvironment, reconsiderEnvironment, reviewDeployment, ReviewError } from "../ci";
 import { deleteEnvironmentSecret, listEnvironmentSecrets, MAX_SECRET, SECRET_NAME_RE, setEnvironmentSecret } from "../ci-secrets";
 import { ENVIRONMENT_RE } from "../ci-workflow";
 import { db } from "../db/client";
@@ -29,9 +29,10 @@ export const deploymentRoutes = new Elysia()
     const a = requireRepo(await requireUser(request), params.owner, params.repo, "owner");
     if (!ENVIRONMENT_RE.test(params.name)) throw new HttpError(400, "Environment names are letters, digits, '.', '_' or '-', up to 64 characters");
     const b = (body ?? {}) as { branches?: unknown; reviewers?: unknown; waitMinutes?: unknown };
-    const env = ensureEnvironment(a.repo.id, params.name);
+    // Everything is checked before the environment is created, so a refused request leaves nothing behind.
+    const existing = findEnvironment(a.repo.id, params.name);
 
-    let branches = JSON.parse(env.branches) as string[];
+    let branches = existing ? (JSON.parse(existing.branches) as string[]) : [];
     if (b.branches !== undefined) {
       if (!Array.isArray(b.branches) || b.branches.length > 20 || b.branches.some((p) => typeof p !== "string")) throw new HttpError(400, "branches must be a list of up to 20 branch patterns");
       branches = [...new Set((b.branches as string[]).map((p) => p.trim()).filter(Boolean))];
@@ -41,7 +42,7 @@ export const deploymentRoutes = new Elysia()
       }
     }
 
-    let reviewers = reviewerIds(env.id);
+    let reviewers = existing ? reviewerIds(existing.id) : [];
     if (b.reviewers !== undefined) {
       if (!Array.isArray(b.reviewers) || b.reviewers.some((u) => typeof u !== "string")) throw new HttpError(400, "reviewers must be a list of usernames");
       const names = [...new Set(b.reviewers as string[])];
@@ -56,20 +57,22 @@ export const deploymentRoutes = new Elysia()
       });
     }
 
-    let waitMinutes = env.waitMinutes;
+    let waitMinutes = existing?.waitMinutes ?? 0;
     if (b.waitMinutes !== undefined) {
       if (!Number.isInteger(b.waitMinutes) || (b.waitMinutes as number) < 0 || (b.waitMinutes as number) > MAX_WAIT_MINUTES)
         throw new HttpError(400, `waitMinutes must be a whole number from 0 to ${MAX_WAIT_MINUTES}`);
       waitMinutes = b.waitMinutes as number;
     }
 
-    setEnvironmentRules(env, { branches, reviewers, waitMinutes });
+    setEnvironmentRules(existing ?? ensureEnvironment(a.repo.id, params.name), { branches, reviewers, waitMinutes });
+    reconsiderEnvironment(a.repo.id, params.name);
     return { ok: true };
   })
   .delete("/repos/:owner/:repo/environments/:name", async ({ request, params }) => {
     const a = requireRepo(await requireUser(request), params.owner, params.repo, "owner");
     const env = environmentOf(a, params.name);
     // Its deployment history and secrets go with it; jobs that name it again start a fresh one.
+    await abandonEnvironment(a.repo.id, env.name);
     db.delete(environment).where(eq(environment.id, env.id)).run();
     return { ok: true };
   })
