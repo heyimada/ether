@@ -9,8 +9,8 @@ import { authPlugins } from "./auth-plugins";
 import { config } from "./config";
 import { db, schema } from "./db/client";
 
-// Generated once per data directory unless provided by the environment.
-function authSecret(): string {
+// Generated once per data directory unless provided by the environment. CI secrets are sealed under a key derived from it.
+export function authSecret(): string {
   if (process.env.BETTER_AUTH_SECRET) return process.env.BETTER_AUTH_SECRET;
   const file = join(config.dataDir, "auth-secret");
   if (!existsSync(file)) writeFileSync(file, randomBytes(32).toString("base64"), { mode: 0o600 });

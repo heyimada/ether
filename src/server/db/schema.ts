@@ -491,8 +491,10 @@ export const ciJob = sqliteTable("ci_job", {
     .notNull()
     .references(() => ciRun.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  // JSON: [{ name, run, shell, timeoutMinutes }]
+  // JSON: [{ name, run, shell, timeoutMinutes, env }]; env values are strings or { secret: NAME }, never secret values.
   steps: text("steps").notNull(),
+  // The container image the job runs in when CI is isolated; null means the server's default.
+  image: text("image"),
   status: text("status", { enum: ["queued", "running", "success", "failure", "cancelled", "error"] }).notNull(),
   log: text("log").notNull().default(""),
   startedAt: integer("started_at", { mode: "timestamp_ms" }),
@@ -518,4 +520,22 @@ export const event = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("event_repo_idx").on(t.repoId, t.createdAt), index("event_actor_idx").on(t.actorId, t.createdAt)],
+);
+
+// Values CI jobs get as environment variables, set by repository owners and never shown again.
+// value is sealed with AES-256-GCM under a key derived from the auth secret (see secret-box.ts),
+// bound to the repository and name so a row can't be moved to another repository or name.
+export const ciSecret = sqliteTable(
+  "ci_secret",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    value: text("value").notNull(),
+    updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("ci_secret_repo_name_idx").on(t.repoId, t.name)],
 );
