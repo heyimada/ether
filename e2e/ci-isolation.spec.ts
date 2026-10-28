@@ -24,6 +24,7 @@ const jobLogs = async (ctx: APIRequestContext, api: string, runId: number) =>
 
 const DEPLOY_KEY = "-----BEGIN TEST KEY-----\nQUFBQUJCQkJDQ0NDREREREVFRUU=\n-----END TEST KEY-----";
 const TOKEN = "tok-9f8e7d6c5b4a";
+const ENV_TOKEN = "env-tok-1a2b3c4d5e";
 
 test("owners manage CI secrets that can't be read back; writers and readers can't see them", async ({ page }) => {
   const admin = await loginAdmin();
@@ -68,6 +69,9 @@ async function pushIsolationWorkflow(isolation: "container" | "host") {
   for (const [name, value] of [["DEPLOY_KEY", DEPLOY_KEY], ["TOKEN", TOKEN]])
     expect((await owner.ctx.put(`${api}/ci/secrets/${name}`, { data: { value }, headers: headers() })).ok()).toBe(true);
   expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() })).ok()).toBe(true);
+  // A deploy job's environment secret replaces the repository secret of the same name.
+  expect((await owner.ctx.put(`${api}/environments/prod-test`, { data: {}, headers: headers() })).ok()).toBe(true);
+  expect((await owner.ctx.put(`${api}/environments/prod-test/secrets/TOKEN`, { data: { value: ENV_TOKEN }, headers: headers() })).ok()).toBe(true);
 
   const hostDb = join(process.env.ETHER_DATA!, "ether.db");
   const src = workdir();
@@ -106,6 +110,13 @@ async function pushIsolationWorkflow(isolation: "container" | "host") {
     steps:
       - name: Not root, but the checkout is writable and variables arrive
         run: test "$(id -u)" != 0 && touch README.md written-by-step && test "$TOKEN" = "${TOKEN}" && echo "non-root ok"
+  envdeploy:
+    image: alpine:3.20
+    environment: prod-test
+    env:
+      TOKEN: \${{ secrets.TOKEN }}
+    steps:
+      - run: test "$TOKEN" = "${ENV_TOKEN}" && test "$CI_ENVIRONMENT" = prod-test && echo "env secret ok"
   missing:
     image: alpine:3.20
     steps:
@@ -148,6 +159,9 @@ test("in a container, a job gets its checkout and secrets (masked in the log) bu
     expect(jobs.build.log).not.toContain(TOKEN);
     expect(jobs.build.log).not.toContain("QUFBQUJCQkJDQ0NDREREREVFRUU=");
     expect(jobs.nonroot.status, jobs.nonroot.log).toBe("success");
+    expect(jobs.envdeploy.status, jobs.envdeploy.log).toBe("success");
+    expect(jobs.envdeploy.log).toContain("env secret ok");
+    expect(jobs.envdeploy.log).not.toContain(ENV_TOKEN);
     expect(jobs.nonroot.log).toContain("non-root ok");
     expect(jobs.missing.status).toBe("failure");
     expect(jobs.missing.log).toContain("The secret NOT_SET isn't set");

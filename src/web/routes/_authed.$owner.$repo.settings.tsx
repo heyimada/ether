@@ -3,6 +3,7 @@ import { useState } from "react";
 import { BranchProtection, type BranchRule } from "../components/branch-protection";
 import { CiSecrets, type CiSecret } from "../components/ci-secrets";
 import { DeployKeys, type DeployKey } from "../components/deploy-keys";
+import { Environments, type EnvironmentInfo } from "../components/environments";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { api, del, patch, put, repoApi } from "../lib/api";
 
@@ -14,12 +15,13 @@ export const Route = createFileRoute("/_authed/$owner/$repo/settings")({
   },
   loader: async ({ context: { info } }) => {
     const base = repoApi(info.repo.owner, info.repo.name);
-    const [collabs, users, deploy, protection, secrets] = await Promise.all([
+    const [collabs, users, deploy, protection, secrets, envs] = await Promise.all([
       api<{ collaborators: Collaborator[] }>(`${base}/collaborators`),
       api<{ users: { username: string; isOrg: boolean }[] }>("/api/users"),
       api<{ keys: DeployKey[] }>(`${base}/deploy-keys`),
       api<{ rules: BranchRule[] }>(`${base}/branch-protection`),
       api<{ secrets: CiSecret[] }>(`${base}/ci/secrets`),
+      api<{ environments: EnvironmentInfo[] }>(`${base}/environments`),
     ]);
     return {
       collaborators: collabs.collaborators,
@@ -27,6 +29,7 @@ export const Route = createFileRoute("/_authed/$owner/$repo/settings")({
       deployKeys: deploy.keys,
       branchRules: protection.rules,
       secrets: secrets.secrets,
+      environments: envs.environments,
     };
   },
   component: RepoSettings,
@@ -35,7 +38,7 @@ export const Route = createFileRoute("/_authed/$owner/$repo/settings")({
 function RepoSettings() {
   const router = useRouter();
   const { info } = Route.useRouteContext();
-  const { collaborators, users, deployKeys, branchRules, secrets } = Route.useLoaderData();
+  const { collaborators, users, deployKeys, branchRules, secrets, environments } = Route.useLoaderData();
   const base = repoApi(info.repo.owner, info.repo.name);
   const [description, setDescription] = useState(info.repo.description);
   const [defaultBranch, setDefaultBranch] = useState(info.repo.defaultBranch);
@@ -44,7 +47,7 @@ function RepoSettings() {
   const [confirm, setConfirm] = useState("");
   const [confirmVisibility, setConfirmVisibility] = useState(false);
   const [requireApproval, setRequireApproval] = useState(info.repo.requireApproval);
-  const { instance } = Route.useRouteContext();
+  const { instance, me } = Route.useRouteContext();
   const [ci, setCi] = useState({ enabled: info.repo.ciEnabled, required: info.repo.requireChecks });
   const ciToggle = useAction(async (change: { ciEnabled?: boolean; requireChecks?: boolean }) => {
     setCi({ enabled: change.ciEnabled ?? ci.enabled, required: change.requireChecks ?? ci.required });
@@ -120,6 +123,14 @@ function RepoSettings() {
       </section>
 
       <CiSecrets base={base} secrets={secrets} isolation={instance.ciIsolation} />
+
+      <Environments
+        base={base}
+        environments={environments}
+        // People who can review deployments need write access; the server checks it again.
+        candidates={[...(me ? [me.username] : []), ...(users.includes(info.repo.owner) ? [info.repo.owner] : []), ...collaborators.filter((c) => c.role === "write").map((c) => c.username)]}
+        isolation={instance.ciIsolation}
+      />
 
       <section className="card body stack-sm">
         <h2 style={{ margin: 0 }}>Pull requests</h2>

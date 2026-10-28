@@ -11,6 +11,7 @@ type PullData = ReviewData & {
   pull: Issue;
   requireChecks: boolean;
   checks: { id: number; status: CiStatus } | null;
+  deployments: { environment: string; url: string | null; runId: number }[];
   comments: Comment[];
   role: "owner" | "write" | "read";
   mergeable: boolean;
@@ -145,6 +146,22 @@ function MergeBox({ data }: { data: PullData }) {
           {needsChecks && " · merging requires passing checks"}
         </p>
       )}
+      {data.deployments.map((d) => (
+        <p key={d.environment} className="review-note">
+          <CiBadge status="success" />{" "}
+          <Link to="/$owner/$repo/ci/$id" params={{ owner: info.repo.owner, repo: info.repo.name, id: String(d.runId) }}>
+            Deployed to {d.environment}
+          </Link>
+          {d.url && (
+            <>
+              {" · "}
+              <a href={d.url} target="_blank" rel="noreferrer noopener">
+                {d.url}
+              </a>
+            </>
+          )}
+        </p>
+      ))}
       {needsApproval && (
         <p className="review-note">
           <strong>Merging requires an approving review</strong> because this repository protects its pull requests.

@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { readableRepos, readerOrVisitor, requireUser } from "../access";
-import { latestRun } from "../ci";
+import { checkStatus, latestRun } from "../ci";
 import { db } from "../db/client";
 import { issue, issueAssignee, orgMember, organization, reviewRequest, star, user } from "../db/schema";
 import { listEvents } from "../events";
@@ -51,7 +51,7 @@ export const dashboardRoutes = new Elysia()
         const r = byId.get(p.repoId)!;
         const head = p.headRef ? await git.resolveCommit(r.path, `refs/heads/${p.headRef}`) : null;
         const run = head ? latestRun(r.id, head) : null;
-        return { ...at(p.repoId), number: p.number, title: p.title, updatedAt: p.updatedAt, reviewDecision: reviewSummary(p.id).reviewDecision, checks: run?.status ?? null };
+        return { ...at(p.repoId), number: p.number, title: p.title, updatedAt: p.updatedAt, reviewDecision: reviewSummary(p.id).reviewDecision, checks: run ? checkStatus(run) : null };
       }),
     );
 

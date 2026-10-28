@@ -19,11 +19,13 @@ function Runs() {
   const params = { owner: info.repo.owner, repo: info.repo.name };
   // Keep the list live while anything is still running.
   const active = runs.some((r) => !ciDone(r.status));
+  // Runs that only wait for a deployment review can stay that way for hours, so check those less often.
+  const busy = runs.some((r) => r.status === "queued" || r.status === "running");
   useEffect(() => {
     if (!active) return;
-    const t = setInterval(() => router.invalidate(), 2000);
+    const t = setInterval(() => router.invalidate(), busy ? 2000 : 10_000);
     return () => clearInterval(t);
-  }, [active, router]);
+  }, [active, busy, router]);
 
   return (
     <div className="stack-md" style={{ maxWidth: 900 }}>

@@ -35,7 +35,21 @@ function parseEnv(raw: unknown, where: string): Record<string, EnvValue> {
 }
 
 // Validates the workflow and normalises it into jobs of steps; throws a readable message.
-export function parseWorkflow(text: string): { name: string; image: string | null; steps: Step[] }[] {
+export const ENVIRONMENT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+// `environment: production` or `environment: { name: production, url: https://… }`, as on GitHub.
+function parseEnvironment(raw: unknown, job: string): { name: string; url: string | null } | null {
+  if (raw === undefined || raw === null) return null;
+  const { name, url } = (typeof raw === "string" ? { name: raw } : raw) as { name?: unknown; url?: unknown };
+  if (typeof name !== "string" || !ENVIRONMENT_RE.test(name)) throw new Error(`Job "${job}": environment must be a name such as production (letters, digits, '.', '_' or '-')`);
+  if (url === undefined || url === null) return { name, url: null };
+  if (typeof url !== "string" || url.length > 500 || !/^https?:\/\/\S+$/.test(url)) throw new Error(`Job "${job}": environment url must be an http(s) address`);
+  return { name, url };
+}
+
+export type ParsedJob = { name: string; image: string | null; environment: { name: string; url: string | null } | null; steps: Step[] };
+
+export function parseWorkflow(text: string): ParsedJob[] {
   let doc: unknown;
   try {
     doc = parseYaml(text);
@@ -46,13 +60,14 @@ export function parseWorkflow(text: string): { name: string; image: string | nul
   if (!jobs || typeof jobs !== "object" || Array.isArray(jobs)) throw new Error(`${WORKFLOW} needs a "jobs" map`);
   const out = Object.entries(jobs as Record<string, unknown>).map(([name, job]) => {
     if (!NAME_RE.test(name)) throw new Error(`Job name "${name}" must be letters, digits, spaces, '.', '_' or '-'`);
-    const { steps, image, env } = (job ?? {}) as { steps?: unknown; image?: unknown; env?: unknown };
+    const { steps, image, env, environment } = (job ?? {}) as { steps?: unknown; image?: unknown; env?: unknown; environment?: unknown };
     if (!Array.isArray(steps) || steps.length === 0) throw new Error(`Job "${name}" needs a list of steps`);
     if (image !== undefined && (typeof image !== "string" || !IMAGE_RE.test(image))) throw new Error(`Job "${name}": image must be a container image name such as alpine:3.20`);
     const jobEnv = parseEnv(env, `Job "${name}"`);
     return {
       name,
       image: (image as string | undefined) ?? null,
+      environment: parseEnvironment(environment, name),
       steps: steps.map((s, i): Step => {
         const step = s as { name?: unknown; run?: unknown; shell?: unknown; "timeout-minutes"?: unknown; env?: unknown };
         if (typeof step?.run !== "string" || !step.run.trim()) throw new Error(`Step ${i + 1} of "${name}" needs a "run" command`);
