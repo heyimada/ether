@@ -27,8 +27,9 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
-      # The build generates src/web/routeTree.gen.ts, which the typecheck needs.
       - run: bun run build
+      # The build regenerates the committed route tree; fail if it was stale.
+      - run: git diff --exit-code src/web/routeTree.gen.ts
       - run: bun run typecheck
       - run: bun run test
 
