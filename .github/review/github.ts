@@ -17,6 +17,7 @@ export interface Pull {
   head: { sha: string; repo: { full_name: string } | null };
   base: { sha: string; repo: { full_name: string } };
   node_id: string;
+  changed_files: number;
   auto_merge: { enabled_by: { login: string; type: string } | null } | null;
 }
 export interface PullFile {

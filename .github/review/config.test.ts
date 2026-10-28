@@ -50,3 +50,7 @@ test("every SENSITIVE path is covered by CODEOWNERS", async () => {
     expect(covered(p)).toBe(true);
   }
 });
+
+test("agent files are sensitive in any case and any folder", () => {
+  for (const p of ["Claude.md", "src/web/CLAUDE.local.md", "GEMINI.md", ".mcp.json", ".cursor/rules/x.mdc", "cli/.cursorrules"]) expect(isSensitive(p)).toBe(true);
+});

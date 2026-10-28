@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { fixedMarker } from "./findings";
-import { ciState, decide, type GateInput } from "./gate";
+import { changesRequested, ciState, decide, touchedPaths, type GateInput } from "./gate";
 import { isReviewBot, resolvedAsFixed, type CheckRun, type Thread } from "./github";
 
 const HEAD = "a".repeat(40);
@@ -15,6 +15,7 @@ const input = (over: Partial<GateInput> = {}): GateInput => ({
   reviews: { bugs: done("bugs"), security: done("security") },
   openFindings: 0,
   dismissedFindings: 0,
+  changesRequestedBy: [],
   ci: "success",
   ...over,
 });
@@ -107,4 +108,18 @@ test("only a resolved thread with the App's marked Fixed reply counts as fixed",
   expect(resolvedAsFixed(thread([{ body: "Fixed as of abc1234: trust me.", byBot: true, login: "ether-review" }]), "ether-review[bot]")).toBe(false);
   expect(resolvedAsFixed(thread([{ body: fixed, byBot: true, login: "ether-review" }], false), "ether-review[bot]")).toBe(false);
   expect(resolvedAsFixed(thread([{ body: fixed, byBot: true, login: "ether-review" }, { body: "Not fixed, resolving anyway.", byBot: false, login: "JustKatze" }]), "ether-review[bot]")).toBe(false);
+});
+
+test("a person's request for changes always beats the App", () => {
+  expect(blockedBy({ changesRequestedBy: ["JustKatze"] })).toContain("needs human approval: JustKatze requested changes");
+  const human = (login: string, state: string) => ({ user: { login, type: "User" }, state });
+  expect(changesRequested([human("JustKatze", "CHANGES_REQUESTED"), human("heyimada", "APPROVED")])).toEqual(["JustKatze"]);
+  expect(changesRequested([human("JustKatze", "CHANGES_REQUESTED"), human("JustKatze", "COMMENTED")])).toEqual(["JustKatze"]);
+  expect(changesRequested([human("JustKatze", "CHANGES_REQUESTED"), human("JustKatze", "APPROVED")])).toEqual([]);
+  expect(changesRequested([{ user: { login: "ether-review[bot]", type: "Bot" }, state: "CHANGES_REQUESTED" }])).toEqual([]);
+});
+
+test("touched paths include old names of moved files and refuse a truncated list", () => {
+  expect(touchedPaths([{ filename: "docs/access.md", previous_filename: "src/server/access.ts" }], 1)).toEqual(["docs/access.md", "src/server/access.ts"]);
+  expect(touchedPaths([{ filename: "README.md" }], 3001)).toBeNull();
 });

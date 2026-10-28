@@ -1,5 +1,6 @@
 # Changes to these paths need an approval from a maintainer other than the author, even when the review App would
-# otherwise approve. Keep in sync with SENSITIVE in .github/review/config.ts.
+# otherwise approve. Keep in sync with SENSITIVE in .github/review/config.ts. CODEOWNERS matching is case-sensitive,
+# so the agent files are listed in their usual spelling; config.ts also catches other spellings.
 /.github/ @heyimada @JustKatze
 CLAUDE.md @heyimada @JustKatze
 AGENTS.md @heyimada @JustKatze
@@ -21,3 +22,8 @@ AGENTS.md @heyimada @JustKatze
 /bun.lock @heyimada @JustKatze
 /cli/Cargo.toml @heyimada @JustKatze
 /cli/Cargo.lock @heyimada @JustKatze
+GEMINI.md @heyimada @JustKatze
+CLAUDE.local.md @heyimada @JustKatze
+.cursorrules @heyimada @JustKatze
+/.cursor/ @heyimada @JustKatze
+/.mcp.json @heyimada @JustKatze

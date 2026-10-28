@@ -28,15 +28,21 @@ export type Lens = (typeof LENS_GROUPS)[LensGroup][number];
 // here: a change that weakens an assertion looks harmless and isn't, so the eligibility check has to rate it.
 export const LOW_RISK = ["**/*.md", "LICENSE", "design/**"];
 
-// Always need a human, whatever the eligibility check says. Keep in sync with .github/CODEOWNERS. Agent instruction files
-// are here because they steer every agent that works on the repo, like a system prompt.
+// Always need a human, whatever the eligibility check says. Keep in sync with .github/CODEOWNERS. Agent instruction and
+// config files are here because they steer every agent that works on the repo, like a system prompt.
 export const SENSITIVE = [
   ".github/**",
-  "CLAUDE.md",
-  "AGENTS.md",
-  "**/CLAUDE.md",
-  "**/AGENTS.md",
+  "claude.md",
+  "agents.md",
+  "gemini.md",
+  "**/claude.md",
+  "**/claude.local.md",
+  "**/agents.md",
+  "**/gemini.md",
   ".claude/**",
+  ".mcp.json",
+  ".cursor/**",
+  "**/.cursorrules",
   "src/server/ci-container.ts",
   "src/server/ci-secrets.ts",
   "src/server/secret-box.ts",
@@ -68,7 +74,9 @@ export const BOT_LOGIN = process.env.REVIEW_BOT_LOGIN || "ether-review[bot]";
 export const PR_DIR = process.env.REVIEW_PR_DIR ?? "pr";
 
 const matches = (globs: string[], path: string) => globs.some((g) => new Bun.Glob(g).match(path));
-export const isSensitive = (path: string) => matches(SENSITIVE, path);
+// Case-insensitive, so CLAUDE.md, Claude.md and claude.md all count.
+const SENSITIVE_LOWER = SENSITIVE.map((g) => g.toLowerCase());
+export const isSensitive = (path: string) => matches(SENSITIVE_LOWER, path.toLowerCase());
 export const isLowRisk = (path: string) => matches(LOW_RISK, path);
 
 export type EligibilityVerdict = "low" | "not-low" | "errored" | "missing";
