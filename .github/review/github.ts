@@ -54,6 +54,9 @@ export interface CheckRun {
 }
 export interface ReviewComment {
   path: string;
+  // A comment spanning several lines starts at start_line and ends at line.
+  start_line?: number;
+  start_side?: "RIGHT";
   line: number;
   side: "RIGHT";
   body: string;
