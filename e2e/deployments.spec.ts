@@ -137,6 +137,9 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     expect(run.status).toBe("waiting");
     expect((await (await owner.ctx.get(`${api}/pulls/${pull.number}`)).json()).checks.status).toBe("success");
     expect((await owner.ctx.post(`${api}/ci/runs/${run.id}/cancel`, { headers: headers() })).ok()).toBe(true);
+    // Dropping the waiting deployment by cancelling the run leaves the passed checks alone.
+    ({ run } = await settled(owner.ctx, api, v2b, ["cancelled"]));
+    expect((await (await owner.ctx.get(`${api}/pulls/${pull.number}`)).json()).checks.status).toBe("success");
     await owner.ctx.put(`${api}/environments/staging`, { data: { reviewers: [] }, headers: headers() });
 
     // A reviewer can turn a deployment down, which fails the run; a waiting run can also be cancelled.

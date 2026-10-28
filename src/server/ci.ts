@@ -437,10 +437,12 @@ export const latestRun = (repoId: number, sha: string) =>
   db.select().from(ciRun).where(and(eq(ciRun.repoId, repoId), eq(ciRun.sha, sha))).orderBy(desc(ciRun.id)).get() ?? null;
 
 // A run's result as a pull request's checks: its jobs without the deploy jobs. A deployment waiting for a
-// review, skipped or failed says nothing about whether the change is good to merge.
+// review, skipped, failed or cancelled says nothing about whether the change is good to merge.
 export function checkStatus(run: typeof ciRun.$inferSelect): typeof ciRun.$inferSelect.status {
-  if (run.status === "cancelled" || run.status === "error") return run.status;
-  const jobs = db.select({ status: ciJob.status, environment: ciJob.environment }).from(ciJob).where(eq(ciJob.runId, run.id)).all().filter((j) => !j.environment);
+  const all = db.select({ status: ciJob.status, environment: ciJob.environment }).from(ciJob).where(eq(ciJob.runId, run.id)).all();
+  const jobs = all.filter((j) => !j.environment);
+  // A cancelled or cut-off run passes only if every plain job had already passed; one that never got jobs doesn't.
+  if (run.status === "cancelled" || run.status === "error") return all.length && jobs.every((j) => j.status === "success" || j.status === "skipped") ? "success" : run.status;
   if (jobs.some((j) => j.status === "failure" || j.status === "error")) return "failure";
   if (jobs.some((j) => j.status === "queued" || j.status === "running")) return run.status === "queued" ? "queued" : "running";
   return "success";
