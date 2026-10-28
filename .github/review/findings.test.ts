@@ -159,4 +159,6 @@ test("a finding is re-checked when its own file or a file it names changed", () 
   expect(findingTouched(new Set(["e2e/complete.spec.ts"]), "playwright.config.ts", body)).toBe(true);
   expect(findingTouched(new Set(["src/server/ci.ts"]), "playwright.config.ts", body)).toBe(false);
   expect(findingTouched(null, "playwright.config.ts", body)).toBe(true);
+  expect(findingTouched(new Set(["src/server/ci.ts"]), "a.ts", "the loop in xci.ts and ci.tsx")).toBe(false);
+  expect(findingTouched(new Set(["src/server/ci.ts"]), "a.ts", "the queue in ci.ts.")).toBe(true);
 });

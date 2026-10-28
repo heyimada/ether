@@ -84,8 +84,11 @@ export function changedPaths(cmp: { status: string; files?: { filename: string; 
 export function findingTouched(changed: Set<string> | null, file: string, body: string): boolean {
   if (!changed) return true;
   if (changed.has(file)) return true;
-  return [...changed].some((p) => body.includes(p) || body.includes(p.split("/").at(-1)!));
+  return [...changed].some((p) => mentions(body, p) || mentions(body, p.split("/").at(-1)!));
 }
+
+// name as a whole word, so "ci.ts" doesn't match inside "xci.ts" or "ci.tsx".
+const mentions = (body: string, name: string) => new RegExp(`(^|[^\\w.-])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-]|\\.\\w)`).test(body);
 
 export function parseFindingMarker(body: string): FindingMarker | null {
   const m = parse(FINDING_TAG, body) as Partial<FindingMarker> | null;
