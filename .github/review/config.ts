@@ -82,15 +82,23 @@ const SENSITIVE_LOWER = SENSITIVE.map((g) => g.toLowerCase());
 export const isSensitive = (path: string) => matches(SENSITIVE_LOWER, path.toLowerCase());
 export const isLowRisk = (path: string) => matches(LOW_RISK, path);
 
+// GitHub sends no patch for a binary file, a rename without changes, or a text diff too large to show. Only the last
+// hides code from every agent, so such a change never rests on the model's verdict.
+const BINARY = ["**/*.{png,jpg,jpeg,gif,webp,avif,ico,woff,woff2,ttf,otf,pdf,zip,gz}"];
+export const hidesDiff = (f: { filename: string; status: string; patch?: string; changes?: number }) =>
+  !f.patch && !(f.status === "renamed" && f.changes === 0) && !matches(BINARY, f.filename.toLowerCase());
+
 export type EligibilityVerdict = "low" | "not-low" | "errored" | "missing";
 
-// The path rules win over the model: a sensitive path is never eligible, and the model can only escalate an allowlisted change.
-export function eligibility(paths: string[], verdict: EligibilityVerdict): { eligible: boolean; reason: string } {
+// The path rules win over the model: a sensitive path is never eligible, and the model can only escalate an allowlisted
+// change. Code outside the allowlist needs the model's "low", and a diff no agent saw (hidden) can't get one.
+export function eligibility(paths: string[], verdict: EligibilityVerdict, hidden: string[]): { eligible: boolean; reason: string } {
   const sensitive = paths.filter(isSensitive);
   if (sensitive.length) return { eligible: false, reason: `touches sensitive paths: ${sensitive.slice(0, 5).join(", ")}${sensitive.length > 5 ? ", …" : ""}` };
   if (paths.length === 0) return { eligible: false, reason: "no changed files" };
   if (verdict === "not-low") return { eligible: false, reason: "the eligibility check rated the change above low risk" };
   if (paths.every(isLowRisk)) return { eligible: true, reason: "only low-risk paths" };
+  if (hidden.length) return { eligible: false, reason: `GitHub shows no diff for ${hidden.slice(0, 5).join(", ")}${hidden.length > 5 ? ", …" : ""}, so no review saw it` };
   if (verdict === "low") return { eligible: true, reason: "the eligibility check rated the change low risk" };
   return { eligible: false, reason: verdict === "errored" ? "the eligibility check errored" : "no eligibility check for this commit" };
 }

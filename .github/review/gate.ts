@@ -7,7 +7,7 @@
 // Locally, --dry-run reads with `gh auth token` and prints the decision without posting anything.
 
 import { parseArgs } from "node:util";
-import { BOT_LOGIN, eligibility, GATE_CHECK, LENS_GROUPS, NO_AUTOMERGE_LABEL, REPORT_ONLY, REQUIRED_CHECKS, type EligibilityVerdict, type LensGroup } from "./config";
+import { BOT_LOGIN, eligibility, GATE_CHECK, hidesDiff, LENS_GROUPS, NO_AUTOMERGE_LABEL, REPORT_ONLY, REQUIRED_CHECKS, type EligibilityVerdict, type LensGroup } from "./config";
 import { parseSummaryMarker, postedFinding, type SummaryMarker } from "./findings";
 import { github, isBot, isReviewBot, readToken, resolvedAsFixed, sameBot, type CheckRun, type Permission } from "./github";
 
@@ -125,7 +125,7 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
     fork: pull.head.repo?.full_name !== pull.base.repo.full_name,
     draft: pull.draft,
     noAutomerge: pull.labels.some((l) => l.name === NO_AUTOMERGE_LABEL),
-    eligibility: ((paths) => (paths ? eligibility(paths, verdict) : { eligible: false, reason: `GitHub listed ${files.length} of ${pull.changed_files} changed files` }))(touchedPaths(files, pull.changed_files)),
+    eligibility: ((paths) => (paths ? eligibility(paths, verdict, files.filter(hidesDiff).map((f) => f.filename)) : { eligible: false, reason: `GitHub listed ${files.length} of ${pull.changed_files} changed files` }))(touchedPaths(files, pull.changed_files)),
     reviews,
     openFindings,
     dismissedFindings,

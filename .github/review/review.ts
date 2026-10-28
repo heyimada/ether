@@ -11,7 +11,7 @@
 
 import { parseArgs } from "node:util";
 import { classifyEligibility, findSymlink, isFixed, runFinder, runVoter, type Context } from "./agents";
-import { BOT_LOGIN, DEPTH, isSensitive, LENS_GROUPS, PR_DIR, REPORT_ONLY, ROUND_CAP, type EligibilityVerdict, type LensGroup } from "./config";
+import { BOT_LOGIN, DEPTH, hidesDiff, isSensitive, LENS_GROUPS, PR_DIR, REPORT_ONLY, ROUND_CAP, type EligibilityVerdict, type LensGroup } from "./config";
 import {
   bySeverity,
   commentableLines,
@@ -136,11 +136,12 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
     cwd: PR_DIR,
   };
 
-  // The gate reads this verdict from the bugs summary; a change on a sensitive path is never eligible, so don't ask.
+  // The gate reads this verdict from the bugs summary. A change on a sensitive path is never eligible, and neither is one
+  // with a text file GitHub sent no diff for, since no agent saw that code; don't ask the model about either.
   const eligibilityRun: Promise<EligibilityVerdict | undefined> =
     group !== "bugs" ? Promise.resolve(undefined)
     : symlink ? Promise.resolve("errored")
-    : files.some((f) => isSensitive(f.filename)) ? Promise.resolve("missing")
+    : files.some((f) => isSensitive(f.filename) || hidesDiff(f)) ? Promise.resolve("missing")
     : classifyEligibility({ ...ctx, diff: renderDiff(files), sinceSha: null }).then((r) => {
         spend(r);
         if (!r.ok) return errors.push(`eligibility: ${r.error}`), "errored";
