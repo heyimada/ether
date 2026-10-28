@@ -5,6 +5,7 @@ import { onPush } from "../ci";
 import { recordPush } from "../contrib";
 import { recordPushEvents } from "../events";
 import { NAME_RE, ensureWiki, listRefs, newAuthorEmails, repoExists, wikiPath } from "../git";
+import { receivePackGuard } from "../protection";
 import { advertiseRefs, basicCredentials, challenge, runService, type Service } from "../smart-http";
 
 const SERVICES = new Set<Service>(["git-upload-pack", "git-receive-pack"]);
@@ -58,5 +59,5 @@ export const gitRoutes = new Elysia()
       if (access.path.endsWith(".wiki.git")) return;
       await recordPushEvents(access.repo.id, access.viewer.id, access.path, before, after);
       await onPush(access.repo.id, access.path, before, after, access.viewer.id);
-    });
+    }, access.path.endsWith(".wiki.git") ? undefined : receivePackGuard(access.repo.id));
   });

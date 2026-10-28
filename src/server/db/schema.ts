@@ -445,6 +445,25 @@ export const deployKey = sqliteTable(
   (t) => [index("deploy_key_repo_idx").on(t.repoId)],
 );
 
+// Rules for branches matching a pattern, enforced on every push (HTTPS and SSH) by a pre-receive hook.
+// Merges of pull requests happen on the server and are the way into a branch that requires them.
+export const branchProtection = sqliteTable(
+  "branch_protection",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    // A branch name, or a glob where * stays within one path segment and ** spans several.
+    pattern: text("pattern").notNull(),
+    requirePullRequest: integer("require_pull_request", { mode: "boolean" }).notNull().default(false),
+    allowForcePush: integer("allow_force_push", { mode: "boolean" }).notNull().default(false),
+    allowDeletion: integer("allow_deletion", { mode: "boolean" }).notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("branch_protection_repo_pattern_idx").on(t.repoId, t.pattern)],
+);
+
 export const ciRun = sqliteTable(
   "ci_run",
   {

@@ -1,46 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, createReadStream, mkdtempSync, openSync, readFileSync, writeFileSync, writeSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { closeSync, createReadStream, openSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { join } from "node:path";
-import ssh2 from "ssh2";
-import { baseURL, createRepo, createUser, loginAdmin, uiLogin, unique, workdir } from "./helpers";
+import { baseURL, createRepo, createUser, loginAdmin, sshIdentity, sshUrl, uiLogin, unique, workdir } from "./helpers";
 
 const headers = () => ({ Origin: baseURL() });
-
-// A throwaway key pair on disk, and a git that uses only it over Ether's SSH port.
-function sshIdentity() {
-  const dir = mkdtempSync(join(tmpdir(), "ether-ssh-"));
-  const keys = ssh2.utils.generateKeyPairSync("ed25519");
-  const keyFile = join(dir, "id_ed25519");
-  writeFileSync(keyFile, keys.private, { mode: 0o600 });
-  const empty = join(dir, "empty.gitconfig");
-  writeFileSync(empty, "");
-  const env = {
-    ...process.env,
-    GIT_CONFIG_GLOBAL: empty,
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_AUTHOR_NAME: "SSH",
-    GIT_AUTHOR_EMAIL: "ssh@ether.test",
-    GIT_COMMITTER_NAME: "SSH",
-    GIT_COMMITTER_EMAIL: "ssh@ether.test",
-    GIT_SSH_COMMAND: `ssh -i "${keyFile.replace(/\\/g, "/")}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o LogLevel=ERROR`,
-  };
-  const git = (cwd: string, args: string[], extra: Record<string, string> = {}) => {
-    const r = spawnSync("git", args, { cwd, env: { ...env, ...extra }, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-    return { code: r.status ?? -1, err: r.stderr };
-  };
-  // Plain ssh with the same key, for what Ether says outside git.
-  const ssh = (args: string[]) => {
-    const r = spawnSync("ssh", ["-i", keyFile, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "BatchMode=yes", "-o", "LogLevel=ERROR", ...args], { encoding: "utf8" });
-    return { code: r.status ?? -1, out: r.stdout + r.stderr };
-  };
-  return { publicKey: keys.public, git, ssh };
-}
-
-const sshUrl = (owner: string, repo: string) => `ssh://git@127.0.0.1:${process.env.ETHER_SSH_PORT}/${owner}/${repo}.git`;
 
 test("people add SSH keys in Settings and use git over SSH with their repository permissions", async ({ page }, info) => {
   const admin = await loginAdmin();

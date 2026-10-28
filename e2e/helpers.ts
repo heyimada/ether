@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import ssh2 from "ssh2";
 import { ADMIN } from "./global-setup";
 
 export { ADMIN };
@@ -83,3 +84,36 @@ export async function uiLogin(page: Page, username: string, password: string) {
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.getByRole("link", { name: "New repository" }).waitFor();
 }
+
+// A throwaway key pair on disk, and a git that uses only it over Ether's SSH port.
+export function sshIdentity() {
+  const dir = mkdtempSync(join(tmpdir(), "ether-ssh-"));
+  const keys = ssh2.utils.generateKeyPairSync("ed25519");
+  const keyFile = join(dir, "id_ed25519");
+  writeFileSync(keyFile, keys.private, { mode: 0o600 });
+  const empty = join(dir, "empty.gitconfig");
+  writeFileSync(empty, "");
+  const env = {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: empty,
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_AUTHOR_NAME: "SSH",
+    GIT_AUTHOR_EMAIL: "ssh@ether.test",
+    GIT_COMMITTER_NAME: "SSH",
+    GIT_COMMITTER_EMAIL: "ssh@ether.test",
+    GIT_SSH_COMMAND: `ssh -i "${keyFile.replace(/\\/g, "/")}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o LogLevel=ERROR`,
+  };
+  const git = (cwd: string, args: string[], extra: Record<string, string> = {}) => {
+    const r = spawnSync("git", args, { cwd, env: { ...env, ...extra }, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    return { code: r.status ?? -1, err: r.stderr };
+  };
+  // Plain ssh with the same key, for what Ether says outside git.
+  const ssh = (args: string[]) => {
+    const r = spawnSync("ssh", ["-i", keyFile, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "BatchMode=yes", "-o", "LogLevel=ERROR", ...args], { encoding: "utf8" });
+    return { code: r.status ?? -1, out: r.stdout + r.stderr };
+  };
+  return { publicKey: keys.public, git, ssh };
+}
+
+export const sshUrl = (owner: string, repo: string) => `ssh://git@127.0.0.1:${process.env.ETHER_SSH_PORT}/${owner}/${repo}.git`;

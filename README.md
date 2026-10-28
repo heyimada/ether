@@ -11,6 +11,7 @@ A self-hosted alternative to GitHub Enterprise: code hosting, review and collabo
 - **Organizations** that own repositories, with owners, members and a base permission (read or write) for every org repository.
 - **Code browser**: files with their last commit, branches and tags (including names with `/`), history, diffs, and a branch/tag picker.
 - **Issues and pull requests**, sharing one number sequence per repository. Merges happen on the server with a compare-and-swap on the base branch.
+- **Protected branches**: rules per branch name or pattern (`main`, `release/*`, `hotfix/**`) that block direct pushes, force pushes and deletion over HTTPS and SSH, for everyone including owners. Merging a pull request stays possible.
 - **Profiles** like GitHub's: avatar (animated GIFs kept), bio, pronouns, company, location, links, status, followers, pinned repositories, a profile README from `<you>/<you>`, a contribution graph and recent activity, all limited to what the viewer can see.
 - **Invite-only accounts**, per-repository collaborators (`read` / `write`), search or jump (`Ctrl`+`K` style), light/dark theme and a free accent colour per user.
 

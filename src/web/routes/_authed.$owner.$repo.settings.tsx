@@ -1,5 +1,6 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
+import { BranchProtection, type BranchRule } from "../components/branch-protection";
 import { DeployKeys, type DeployKey } from "../components/deploy-keys";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { api, del, patch, put, repoApi } from "../lib/api";
@@ -12,12 +13,13 @@ export const Route = createFileRoute("/_authed/$owner/$repo/settings")({
   },
   loader: async ({ context: { info } }) => {
     const base = repoApi(info.repo.owner, info.repo.name);
-    const [collabs, users, deploy] = await Promise.all([
+    const [collabs, users, deploy, protection] = await Promise.all([
       api<{ collaborators: Collaborator[] }>(`${base}/collaborators`),
       api<{ users: { username: string; isOrg: boolean }[] }>("/api/users"),
       api<{ keys: DeployKey[] }>(`${base}/deploy-keys`),
+      api<{ rules: BranchRule[] }>(`${base}/branch-protection`),
     ]);
-    return { collaborators: collabs.collaborators, users: users.users.filter((u) => !u.isOrg).map((u) => u.username), deployKeys: deploy.keys };
+    return { collaborators: collabs.collaborators, users: users.users.filter((u) => !u.isOrg).map((u) => u.username), deployKeys: deploy.keys, branchRules: protection.rules };
   },
   component: RepoSettings,
 });
@@ -25,7 +27,7 @@ export const Route = createFileRoute("/_authed/$owner/$repo/settings")({
 function RepoSettings() {
   const router = useRouter();
   const { info } = Route.useRouteContext();
-  const { collaborators, users, deployKeys } = Route.useLoaderData();
+  const { collaborators, users, deployKeys, branchRules } = Route.useLoaderData();
   const base = repoApi(info.repo.owner, info.repo.name);
   const [description, setDescription] = useState(info.repo.description);
   const [defaultBranch, setDefaultBranch] = useState(info.repo.defaultBranch);
@@ -120,6 +122,8 @@ function RepoSettings() {
           Someone with write access other than the author has to approve, and nobody may have outstanding requested changes.
         </span>
       </section>
+
+      <BranchProtection base={base} rules={branchRules} defaultBranch={info.repo.defaultBranch} />
 
       <section className="card body stack-sm">
         <h2 style={{ margin: 0 }}>Visibility</h2>
