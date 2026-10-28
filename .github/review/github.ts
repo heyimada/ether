@@ -1,5 +1,5 @@
 import { REPO } from "./config";
-import { isFixedReply } from "./findings";
+import { isFixedReply, postedFinding } from "./findings";
 
 // Only the GitHub calls review.ts and gate.ts make. Reads use the workflow's GITHUB_TOKEN; writes use the
 // review App's installation token, so its comments and check run are attributed to the App.
@@ -164,3 +164,14 @@ export function resolvedAsFixed(t: Thread, botLogin: string): boolean {
   return t.isResolved && !!last && last.byBot && sameBot(last.login, botLogin) && isFixedReply(last.body);
 }
 export const isReviewBot = (user: { login: string; type: string } | null, botLogin: string) => user?.type === "Bot" && sameBot(user.login, botLogin);
+
+// file:line of findings the other lens group posted for this commit, so the same problem isn't posted twice.
+export function otherLensLines(threads: Thread[], ownLenses: readonly string[], head: string, botLogin: string): Set<string> {
+  const out = new Set<string>();
+  for (const t of threads) {
+    if (!t.comment.byBot || !sameBot(t.comment.login, botLogin) || t.comment.line === null) continue;
+    const posted = postedFinding(t.comment.body, t.comment.path);
+    if (posted && posted.marker.sha === head && !ownLenses.includes(posted.marker.lens)) out.add(`${t.comment.path}:${t.comment.line}`);
+  }
+  return out;
+}

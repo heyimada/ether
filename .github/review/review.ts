@@ -30,7 +30,7 @@ import {
   fixedMarker,
   changedPaths,
 } from "./findings";
-import { github, isReviewBot, readToken, resolvedAsFixed, type GitHub, type PullFile, type ReviewComment } from "./github";
+import { github, isReviewBot, otherLensLines, readToken, resolvedAsFixed, type GitHub, type PullFile, type ReviewComment } from "./github";
 
 const DIFF_BUDGET = 150_000;
 const ELIGIBILITY_DIFF_BUDGET = 60_000;
@@ -90,9 +90,10 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   const spend = <T extends { costUsd: number }>(r: T) => ((costUsd += r.costUsd), r);
 
   // Threads whose finding is fixed at this head get a short reply and are resolved. Only files changed since the finding
-  // was posted are re-checked, and every voter has to agree it's fixed, the same bar as posting it.
+  // was posted are re-checked, and every voter has to agree it's fixed, the same bar as posting it. Threads a person
+  // resolved are re-checked too: authors often fix and resolve in one go, and the reply is what tells the gate it was a fix.
   const resolved: { file: string; title: string; reason: string }[] = [];
-  const open = symlink ? [] : botThreads.filter((t) => !t.thread.isResolved && t.posted.marker.sha !== head);
+  const open = symlink ? [] : botThreads.filter((t) => !resolvedAsFixed(t.thread, BOT_LOGIN) && t.posted.marker.sha !== head);
   const changedSince = new Map<string, Promise<Set<string> | null>>();
   const touched = async (sha: string, file: string) => {
     if (!changedSince.has(sha)) changedSince.set(sha, read.compare(sha, head).then(changedPaths, () => null));
@@ -112,7 +113,7 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
       resolved.push({ file: posted.file, title: posted.title, reason });
       if (!write) return;
       await write.reply(prNumber, thread.comment.databaseId, guard(`Fixed as of ${short(head)}: ${sanitize(reason, 1000)}\n\n${fixedMarker(head)}`));
-      await write.resolveThread(thread.id);
+      if (!thread.isResolved) await write.resolveThread(thread.id);
     }),
   );
 
@@ -173,6 +174,13 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   const eligibility = await eligibilityRun;
   const state: ReviewState = errors.length ? "errored" : reviewable.length ? "done" : "not-applicable";
 
+  // The other lens group runs in parallel and may already have posted the same problem at the same line for this commit.
+  if (posted.length && write) {
+    const taken = otherLensLines(await read.threads(prNumber), lenses, head, BOT_LOGIN);
+    const before = posted.length;
+    posted = posted.filter((f) => !taken.has(`${f.file}:${f.line}`));
+    if (posted.length < before) log(`${before - posted.length} finding(s) already posted by the other review at the same line`);
+  }
   const inline: ReviewComment[] = posted.map((f) => ({ path: f.file, line: f.line, side: "RIGHT", body: guard(findingBody(f, head)) }));
   const reviewBody = guard(`Automated ${group} review, round ${round} at ${short(head)}${sinceSha ? ` (changes since ${short(sinceSha)})` : ""}.`);
   const counts = (["important", "preexisting", "nit"] as const).map((s) => [s, posted.filter((f) => f.severity === s).length] as const).filter(([, n]) => n);

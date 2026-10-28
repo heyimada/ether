@@ -17,9 +17,10 @@ on:
 permissions: {}
 
 concurrency:
-  # Keyed on the head commit for both events, so the newest event for a commit cancels older runs that read staler state.
+  # Keyed on the head commit for both events. A running gate finishes and only the newest waiting run is kept: the gate
+  # is idempotent, and cancelling a running one shows up as a failed check on the pull request.
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   BUN_VERSION: 1.4.0
