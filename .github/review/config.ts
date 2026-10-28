@@ -83,8 +83,9 @@ export const isSensitive = (path: string) => matches(SENSITIVE_LOWER, path.toLow
 export const isLowRisk = (path: string) => matches(LOW_RISK, path);
 
 // GitHub sends no patch for a binary file, a rename without changes, or a text diff too large to show. Only the last
-// hides code from every agent, so such a change never rests on the model's verdict.
-const BINARY = ["**/*.{png,jpg,jpeg,gif,webp,avif,ico,woff,woff2,ttf,otf,pdf,zip,gz}"];
+// hides code from every agent, so such a change never rests on the model's verdict. Archives aren't listed here: their
+// contents are hidden even when small.
+const BINARY = ["**/*.{png,jpg,jpeg,gif,webp,avif,ico,woff,woff2,ttf,otf,pdf}"];
 export const hidesDiff = (f: { filename: string; status: string; patch?: string; changes?: number }) =>
   !f.patch && !(f.status === "renamed" && f.changes === 0) && !matches(BINARY, f.filename.toLowerCase());
 

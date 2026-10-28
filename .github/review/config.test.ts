@@ -32,6 +32,7 @@ test("only a text file GitHub sent no diff for hides code from the review", () =
   expect(hidesDiff({ filename: "src/web/big.tsx", status: "removed" })).toBe(true);
   expect(hidesDiff({ filename: "src/web/big.tsx", status: "modified", patch: "@@ -1 +1 @@" })).toBe(false);
   expect(hidesDiff({ filename: "public/Logo.PNG", status: "added" })).toBe(false);
+  expect(hidesDiff({ filename: "e2e/fixtures/repo.zip", status: "added" })).toBe(true);
   expect(hidesDiff({ filename: "src/web/a.tsx", status: "renamed", changes: 0 })).toBe(false);
   expect(hidesDiff({ filename: "src/web/a.tsx", status: "renamed", changes: 3 })).toBe(true);
 });
