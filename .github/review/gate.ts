@@ -108,14 +108,16 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
   const head = pull.head.sha;
 
   const bot = isBot(pull.user);
-  const [permission, files, comments, threads, runs, prReviews] = await Promise.all([
+  // Reviews before threads: the App posts a review and its finding threads in one call, so every change request read
+  // here already has its threads, and staleChangeRequests can't dismiss one whose finding is still open.
+  const prReviews = await read.reviews(number);
+  const [permission, files, comments, threads, runs] = await Promise.all([
     // Through the App token, the path verified to work; a failed lookup fails the job instead of reading as "none".
     bot ? Promise.resolve<Permission>("none") : (dryRun ? read : github(appToken!)).permission(pull.user.login),
     read.pullFiles(number),
     read.issueComments(number),
     read.threads(number),
     read.checkRuns(head),
-    read.reviews(number),
   ]);
 
   const summaries = comments.filter((c) => isReviewBot(c.user, BOT_LOGIN)).map((c) => parseSummaryMarker(c.body)).filter((m) => m !== null);
