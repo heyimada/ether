@@ -111,7 +111,10 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
       const failed = votes.find((v) => !v.ok);
       if (failed && !failed.ok) return void errors.push(`isFixed ${posted.file}: ${failed.error}`);
       const fixed = votes.flatMap((v) => (v.ok && v.value.fixed ? [v.value] : []));
-      if (fixed.length < votes.length) return;
+      if (fixed.length < votes.length) {
+        for (const v of votes) if (v.ok && !v.value.fixed) log(`still open: ${posted.file}: ${posted.title}: ${v.value.reason.slice(0, 300)}`);
+        return;
+      }
       const reason = fixed[0].reason;
       resolved.push({ file: posted.file, title: posted.title, reason });
       if (!write) return;
