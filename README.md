@@ -4,6 +4,7 @@ A self-hosted alternative to GitHub Enterprise: code hosting, review and collabo
 
 - **Git over HTTPS** (smart HTTP, streamed in both directions), authenticated with personal access tokens.
 - **Git over SSH** with keys people add in **Settings**, protocol v2 and streamed with backpressure. Settings shows the server's host key fingerprint to check on the first connection.
+- **Deploy keys**: SSH keys for one repository, read-only unless the owner allows writes, for servers and CI without an account. Pushes made with one are attributed to whoever added it.
 - **Public and private repositories.** Public means readable and cloneable by every account on the server; pushing always needs a role.
 - **Organizations** that own repositories, with owners, members and a base permission (read or write) for every org repository.
 - **Code browser**: files with their last commit, branches and tags (including names with `/`), history, diffs, and a branch/tag picker.

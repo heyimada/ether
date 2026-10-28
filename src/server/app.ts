@@ -16,6 +16,7 @@ import { releaseRoutes } from "./routes/releases";
 import { repoRoutes } from "./routes/repos";
 import { reviewRoutes } from "./routes/reviews";
 import { sshKeyRoutes } from "./routes/ssh-keys";
+import { deployKeyRoutes } from "./routes/deploy-keys";
 import { wikiRoutes } from "./routes/wiki";
 
 const api = new Elysia({ prefix: "/api" })
@@ -46,6 +47,7 @@ const api = new Elysia({ prefix: "/api" })
   .use(reviewRoutes)
   .use(wikiRoutes)
   .use(sshKeyRoutes)
+  .use(deployKeyRoutes)
   .use(ciRoutes)
   .use(dashboardRoutes)
   .all("/*", () => Response.json({ error: "Not found" }, { status: 404 }));

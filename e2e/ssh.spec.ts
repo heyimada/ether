@@ -166,3 +166,77 @@ test("a large incompressible push and clone stream through SSH intact", async ()
   for await (const chunk of createReadStream(join(dst, "out", "blob.bin"))) actual.update(chunk);
   expect(actual.digest("hex")).toBe(hash.digest("hex"));
 });
+
+test("deploy keys reach one repository with their own role, managed by its owners", async ({ page }, info) => {
+  const admin = await loginAdmin();
+  const owner = await createUser(admin);
+  const writer = await createUser(admin);
+  const repo = await createRepo(owner.ctx, unique("deploy"));
+  const other = await createRepo(owner.ctx, unique("other"));
+  await owner.ctx.put(`/api/repos/${owner.username}/${repo}/collaborators/${writer.username}`, { data: { role: "write" }, headers: headers() });
+
+  // Seed the repository with a personal key.
+  const mine = sshIdentity();
+  await owner.ctx.post("/api/me/ssh-keys", { data: { title: "me", key: mine.publicKey }, headers: headers() });
+  const seed = workdir();
+  mine.git(seed, ["init", "-q", "-b", "main", "w"]);
+  writeFileSync(join(seed, "w", "a.txt"), "a\n");
+  mine.git(join(seed, "w"), ["add", "-A"]);
+  mine.git(join(seed, "w"), ["commit", "-q", "-m", "a"]);
+  expect(mine.git(join(seed, "w"), ["push", "-q", sshUrl(owner.username, repo), "main"]).code).toBe(0);
+
+  // The owner adds a read-only deploy key in the repository's Settings.
+  const reader = sshIdentity();
+  await uiLogin(page, owner.username, owner.password);
+  await page.goto(`${baseURL()}/${owner.username}/${repo}/settings`);
+  await page.getByLabel("Deploy key title").fill("Build server");
+  await page.getByLabel("Deploy public key").fill(reader.publicKey);
+  await page.getByRole("button", { name: "Add deploy key" }).click();
+  const list = page.getByRole("list", { name: "Deploy keys" });
+  await expect(list).toContainText("Build server");
+  await expect(list).toContainText("SHA256:");
+  await expect(list.getByText("read", { exact: true })).toBeVisible();
+  await info.attach("deploy-keys", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+
+  // It clones this repository, can't push to it, and sees no other repository.
+  const work = workdir();
+  const cloned = reader.git(work, ["clone", "-q", sshUrl(owner.username, repo), "w"]);
+  expect(cloned.code, cloned.err).toBe(0);
+  writeFileSync(join(work, "w", "b.txt"), "b\n");
+  reader.git(join(work, "w"), ["add", "-A"]);
+  reader.git(join(work, "w"), ["commit", "-q", "-m", "b"]);
+  const refused = reader.git(join(work, "w"), ["push", "-q", "origin", "HEAD:main"]);
+  expect(refused.code).not.toBe(0);
+  expect(refused.err).toContain("you need write access");
+  expect(reader.git(workdir(), ["clone", "-q", sshUrl(owner.username, other), "o"]).code).not.toBe(0);
+
+  // A key with write access pushes.
+  const pusher = sshIdentity();
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "Release bot", key: pusher.publicKey, write: true }, headers: headers() })).ok()).toBe(true);
+  const pwork = workdir();
+  expect(pusher.git(pwork, ["clone", "-q", sshUrl(owner.username, repo), "w"]).code).toBe(0);
+  writeFileSync(join(pwork, "w", "c.txt"), "c\n");
+  pusher.git(join(pwork, "w"), ["add", "-A"]);
+  pusher.git(join(pwork, "w"), ["commit", "-q", "-m", "c"]);
+  const pushed = pusher.git(join(pwork, "w"), ["push", "-q", "origin", "HEAD:main"]);
+  expect(pushed.code, pushed.err).toBe(0);
+  const tree = await (await owner.ctx.get(`/api/repos/${owner.username}/${repo}/tree?ref=main`)).json();
+  expect(tree.entries.map((e: { name: string }) => e.name)).toContain("c.txt");
+  // The feed shows the push as made by whoever added the key.
+  const { events } = await (await owner.ctx.get("/api/feed")).json();
+  const push = events.find((e: { repo: string; kind: string; payload: { shown: { subject: string }[] } }) => e.repo === repo && e.kind === "push" && e.payload.shown.some((c) => c.subject === "c"));
+  expect(push?.actor).toBe(owner.username);
+
+  // Keys are unique across accounts and repositories, and only owners manage deploy keys.
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${other}/deploy-keys`, { data: { title: "again", key: reader.publicKey }, headers: headers() })).status()).toBe(409);
+  expect((await writer.ctx.post("/api/me/ssh-keys", { data: { title: "stolen", key: reader.publicKey }, headers: headers() })).status()).toBe(409);
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "mine", key: mine.publicKey }, headers: headers() })).status()).toBe(409);
+  expect((await writer.ctx.get(`/api/repos/${owner.username}/${repo}/deploy-keys`)).status()).toBe(403);
+  expect((await writer.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "w", key: sshIdentity().publicKey }, headers: headers() })).status()).toBe(403);
+
+  // Removing a deploy key cuts its access.
+  await page.reload();
+  await page.getByRole("list", { name: "Deploy keys" }).getByRole("button", { name: "Remove Build server" }).click();
+  await expect(page.getByRole("list", { name: "Deploy keys" })).not.toContainText("Build server");
+  expect(reader.git(workdir(), ["clone", "-q", sshUrl(owner.username, repo), "again"]).code).not.toBe(0);
+});
