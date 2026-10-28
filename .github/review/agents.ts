@@ -1,5 +1,5 @@
 import { query, type HookCallback } from "@anthropic-ai/claude-agent-sdk";
-import { realpathSync } from "node:fs";
+import { readdirSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { CONCURRENCY, LENS_GROUPS, MAX_TURNS, MODEL, type Lens, type LensGroup } from "./config";
 import { SEVERITIES, type Candidate, type Finding, type Vote } from "./findings";
@@ -12,7 +12,7 @@ export type AgentResult<T> = { ok: true; value: T; costUsd: number } | { ok: fal
 const TOOLS = ["Read", "Grep", "Glob"];
 // The SDK delivers outputFormat results through this tool call, so the hook has to let it through.
 const OUTPUT_TOOL = "StructuredOutput";
-const GLOB_CHARS = /[*?[\]{}]/;
+const GLOB_CHARS = /[*?[\]]/;
 
 export function limiter(max: number) {
   let active = 0;
@@ -46,12 +46,29 @@ function inside(root: string, p: string): boolean {
   return real === root || real.startsWith(root + sep);
 }
 
+// Patterns stay relative to an already checked base and never climb. Braces are refused outright because they expand
+// before the segments can be checked ({..,x} or {/etc,y}). Symlinks a pattern could match are ruled out by
+// findSymlink before any agent runs.
 function patternInside(root: string, base: string, pattern: string): boolean {
-  const parts = pattern.split(/[\\/]/);
+  const normalized = pattern.replaceAll("\\", "/");
+  if (/[{}]/.test(normalized) || isAbsolute(normalized) || normalized.startsWith("~")) return false;
+  const parts = normalized.split("/");
   if (parts.includes("..")) return false;
   const firstGlob = parts.findIndex((s) => GLOB_CHARS.test(s));
-  const fixed = (firstGlob === -1 ? parts : parts.slice(0, firstGlob)).join("/");
-  return inside(root, isAbsolute(pattern) ? fixed || "/" : resolve(base, fixed));
+  return inside(root, resolve(base, (firstGlob === -1 ? parts : parts.slice(0, firstGlob)).join("/")));
+}
+
+// The first symlink under dir, without following any. The agents must not run over a checkout that has one.
+export function findSymlink(dir: string): string | null {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isSymbolicLink()) return path;
+    if (entry.isDirectory()) {
+      const found = findSymlink(path);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 // Returns why a tool call must be denied, or null if it stays inside root. root must already be a realpath.

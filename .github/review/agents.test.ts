@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { denyReason, limiter } from "./agents";
+import { denyReason, findSymlink, limiter } from "./agents";
 
 // realpath matters: on macOS the temp dir is /var/folders/..., which is a symlink to /private/var/....
 const tmp = realpathSync(mkdtempSync(join(tmpdir(), "review-sandbox-")));
@@ -42,12 +42,36 @@ test("Grep and Glob are confined by their path, pattern and glob", () => {
   expect(denyReason(root, "Grep", { pattern: "x", path: tmp })).not.toBeNull();
   expect(denyReason(root, "Grep", { pattern: "x", glob: "../**" })).not.toBeNull();
   expect(denyReason(root, "Glob", { pattern: "src/**/*.ts" })).toBeNull();
-  expect(denyReason(root, "Glob", { pattern: `${root}/**/*.ts` })).toBeNull();
   expect(denyReason(root, "Glob", { pattern: "**/../../*" })).not.toBeNull();
   expect(denyReason(root, "Glob", { pattern: "/etc/*" })).not.toBeNull();
   expect(denyReason(root, "Glob", { pattern: "/**/secret.txt" })).not.toBeNull();
   expect(denyReason(root, "Glob", { pattern: "*.txt", path: "/" })).not.toBeNull();
   expect(denyReason(root, "Glob", { pattern: "up/*" })).not.toBeNull();
+});
+
+test("patterns are relative, never climb and never use braces, which expand before segments are checked", () => {
+  const glob = (pattern: string) => denyReason(root, "Glob", { pattern });
+  const grep = (g: string) => denyReason(root, "Grep", { pattern: "x", glob: g });
+  for (const p of ["{..,x}/secret.txt", "x/{/etc,y}/*", "{a,..}/**", "src/{a,b}.ts", "{/etc}"]) {
+    expect(glob(p)).not.toBeNull();
+    expect(grep(p)).not.toBeNull();
+  }
+  expect(glob("..\\secret.txt")).not.toBeNull();
+  expect(glob("src\\..\\..\\*")).not.toBeNull();
+  expect(grep("**\\..\\..\\*")).not.toBeNull();
+  expect(glob(`${root}/**/*.ts`)).not.toBeNull();
+  expect(glob("~/.ssh/*")).not.toBeNull();
+  expect(grep("/etc/*")).not.toBeNull();
+});
+
+test("a symlink anywhere in the checkout is found without following it", () => {
+  const clean = join(tmp, "clean");
+  mkdirSync(join(clean, "a/b/c"), { recursive: true });
+  writeFileSync(join(clean, "a/b/c/file.ts"), "");
+  expect(findSymlink(clean)).toBeNull();
+  symlinkSync("/etc", join(clean, "a/b/c/planted"));
+  expect(findSymlink(clean)).toBe(join(clean, "a/b/c/planted"));
+  expect(findSymlink(root)).not.toBeNull();
 });
 
 test("tools other than the read-only three are denied; the structured output tool is allowed", () => {
