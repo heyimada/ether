@@ -120,7 +120,7 @@ async function edit(sha: string) {
   git("add", "-A");
   // fix.yml deleted the checkout's symlinks so the agent couldn't follow them. Those deletions aren't the agent's.
   const symlinks = trackedSymlinks(git("ls-tree", "-r", "-z", sha).stdout.toString());
-  if (symlinks.length) Bun.spawnSync(["git", "-C", PR_DIR, ...GIT_HARDENED, "reset", "-q", sha, "--pathspec-from-file=-", "--pathspec-file-nul"], { stdin: Buffer.from(symlinks.join("\0")) });
+  if (symlinks.length) Bun.spawnSync(["git", "-C", PR_DIR, ...GIT_HARDENED, "--literal-pathspecs", "reset", "-q", sha, "--pathspec-from-file=-", "--pathspec-file-nul"], { stdin: Buffer.from(symlinks.join("\0")) });
   // Against the commit that was checked out, so nothing is lost if HEAD moved.
   const diff = git("diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", sha);
   if (!diff.success) throw new Error(`git diff failed: ${diff.stderr.toString()}`);
