@@ -1,6 +1,6 @@
 import { query, type HookCallback } from "@anthropic-ai/claude-agent-sdk";
 import { readdirSync, realpathSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CONCURRENCY, LENS_GROUPS, MAX_TURNS, MODEL, type Lens, type LensGroup } from "./config";
 import { MAX_SUGGESTION_LINES, SEVERITIES, type Candidate, type Finding, type Vote } from "./findings";
 
@@ -9,7 +9,10 @@ import { MAX_SUGGESTION_LINES, SEVERITIES, type Candidate, type Finding, type Vo
 
 export type AgentResult<T> = { ok: true; value: T; costUsd: number } | { ok: false; error: string; costUsd: number };
 
-const TOOLS = ["Read", "Grep", "Glob"];
+export const TOOLS = ["Read", "Grep", "Glob"];
+// The /fix agent also edits, inside the same checkout. Never Bash: running the pull request's code in a job on main
+// would let it write main's Actions cache.
+export const EDIT_TOOLS = [...TOOLS, "Edit", "Write"];
 // The SDK delivers outputFormat results through this tool call, so the hook has to let it through.
 const OUTPUT_TOOL = "StructuredOutput";
 const GLOB_CHARS = /[*?[\]]/;
@@ -74,29 +77,42 @@ export function findSymlink(dir: string): string | null {
 }
 
 // Returns why a tool call must be denied, or null if it stays inside root. root must already be a realpath.
-export function denyReason(root: string, tool: string, input: Record<string, unknown>): string | null {
+export function denyReason(root: string, tool: string, input: Record<string, unknown>, tools = TOOLS): string | null {
   if (tool === OUTPUT_TOOL) return null;
-  if (!TOOLS.includes(tool)) return `${tool} is not available in this review`;
+  if (!tools.includes(tool)) return `${tool} is not available in this review`;
   const str = (k: string) => (typeof input[k] === "string" && input[k] ? (input[k] as string) : null);
   const base = str("path") ?? root;
   if (!inside(root, base)) return "path is outside the pull request checkout";
-  if (tool === "Read" && !inside(root, str("file_path") ?? "")) return "file is outside the pull request checkout";
+  if (["Read", "Edit", "Write"].includes(tool) && !inside(root, str("file_path") ?? "")) return "file is outside the pull request checkout";
+  // .git/config can name commands (fsmonitor, hooks, filters) that the git calls after the agent would run.
+  if (["Edit", "Write"].includes(tool) && relative(root, realpathLoose(resolve(root, str("file_path")!))).split(sep).some((s) => s.toLowerCase() === ".git"))
+    return "git metadata is off limits";
   if (tool === "Glob" && !patternInside(root, resolve(root, base), str("pattern") ?? "")) return "pattern reaches outside the pull request checkout";
   if (tool === "Grep" && str("glob") && !patternInside(root, resolve(root, base), str("glob")!)) return "glob reaches outside the pull request checkout";
   return null;
 }
 
-async function run<T>(prompt: string, schema: Record<string, unknown>, maxTurns: number, cwd: string): Promise<AgentResult<T>> {
-  const root = realpathSync(cwd);
-  const sandbox: HookCallback = async (input) => {
-    if (input.hook_event_name !== "PreToolUse") return {};
-    const reason = denyReason(root, input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>);
-    return reason ? { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } } : {};
-  };
+// Nothing from the job's environment but what Claude needs to log in.
+export function agentEnv(): Record<string, string> {
   const env: Record<string, string> = { HOME: process.env.HOME ?? "", PATH: process.env.PATH ?? "", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" };
   // Locally the login lives in the macOS keychain, which is looked up by USER; in CI the token comes from the secret.
   if (process.env.USER) env.USER = process.env.USER;
   if (process.env.CLAUDE_CODE_OAUTH_TOKEN) env.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  return env;
+}
+
+// Denies every tool call that leaves root, which must already be a realpath.
+export function sandbox(root: string, tools = TOOLS): HookCallback {
+  return async (input) => {
+    if (input.hook_event_name !== "PreToolUse") return {};
+    const reason = denyReason(root, input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>, tools);
+    return reason ? { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } } : {};
+  };
+}
+
+async function run<T>(prompt: string, schema: Record<string, unknown>, maxTurns: number, cwd: string): Promise<AgentResult<T>> {
+  const root = realpathSync(cwd);
+  const env = agentEnv();
 
   return limit(async () => {
     let costUsd = 0;
@@ -111,7 +127,7 @@ async function run<T>(prompt: string, schema: Record<string, unknown>, maxTurns:
           persistSession: false,
           env,
           cwd: root,
-          hooks: { PreToolUse: [{ hooks: [sandbox] }] },
+          hooks: { PreToolUse: [{ hooks: [sandbox(root)] }] },
           outputFormat: { type: "json_schema", schema },
           maxTurns,
         },

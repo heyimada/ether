@@ -14,10 +14,11 @@ export interface Pull {
   state: string;
   user: { login: string; type: string };
   labels: { name: string }[];
-  head: { sha: string; repo: { full_name: string } | null };
-  base: { sha: string; repo: { full_name: string } };
+  head: { sha: string; ref: string; repo: { full_name: string } | null };
+  base: { sha: string; ref: string; repo: { full_name: string; default_branch: string } };
   node_id: string;
   changed_files: number;
+  commits: number;
   auto_merge: { enabled_by: { login: string; type: string } | null } | null;
 }
 export interface PullFile {
@@ -26,6 +27,11 @@ export interface PullFile {
   status: string;
   patch?: string;
   changes?: number;
+}
+export interface PullCommit {
+  sha: string;
+  author: { login: string; type: string } | null;
+  commit: { message: string };
 }
 export interface IssueComment {
   id: number;
@@ -106,6 +112,9 @@ export function github(token: string) {
     pull: (n: number) => rest<Pull>("GET", `${repo}/pulls/${n}`),
     openPulls: () => paginate<Pull>(`${repo}/pulls?state=open`),
     pullFiles: (n: number) => paginate<PullFile>(`${repo}/pulls/${n}/files`),
+    // author is the GitHub account the commit is attributed to, null when its email matches none. GitHub lists at most
+    // 250 commits.
+    pullCommits: (n: number) => paginate<PullCommit>(`${repo}/pulls/${n}/commits`),
     // Three-dot compare: the changes on head since it diverged from base. status is "ahead" when base is an ancestor.
     compare: (base: string, head: string) => rest<{ status: string; files?: PullFile[] }>("GET", `${repo}/compare/${base}...${head}`),
     permission: async (login: string) =>
@@ -148,6 +157,19 @@ export function github(token: string) {
       } while (after);
       return out;
     },
+    // One commit on top of expectedHead, attributed to whoever owns the token. GitHub refuses it if the branch moved.
+    commitOnBranch: async (
+      branch: string,
+      expectedHead: string,
+      message: { headline: string; body: string },
+      fileChanges: { additions: { path: string; contents: string }[]; deletions: { path: string }[] },
+    ) =>
+      (
+        await graphql<{ createCommitOnBranch: { commit: { oid: string } } }>(
+          `mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }`,
+          { input: { branch: { repositoryNameWithOwner: REPO, branchName: branch }, expectedHeadOid: expectedHead, message, fileChanges } },
+        )
+      ).createCommitOnBranch.commit.oid,
     resolveThread: (threadId: string) =>
       graphql(`mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id } } }`, { id: threadId }),
     checkRuns: (sha: string) => paginate<CheckRun>(`${repo}/commits/${sha}/check-runs`, (p) => p.check_runs),

@@ -7,9 +7,9 @@
 // Locally, --dry-run reads with `gh auth token` and prints the decision without posting anything.
 
 import { parseArgs } from "node:util";
-import { BOT_LOGIN, eligibility, GATE_CHECK, hidesDiff, LENS_GROUPS, NO_AUTOMERGE_LABEL, REPORT_ONLY, REQUIRED_CHECKS, type EligibilityVerdict, type LensGroup } from "./config";
+import { BOT_LOGIN, eligibility, FIX_TRAILER, GATE_CHECK, hidesDiff, LENS_GROUPS, NO_AUTOMERGE_LABEL, REPORT_ONLY, REQUIRED_CHECKS, type EligibilityVerdict, type LensGroup } from "./config";
 import { parseSummaryMarker, postedFinding, type SummaryMarker } from "./findings";
-import { github, isBot, isReviewBot, readToken, resolvedAsFixed, sameBot, type CheckRun, type Permission } from "./github";
+import { github, isBot, isReviewBot, readToken, resolvedAsFixed, sameBot, type CheckRun, type Permission, type PullCommit } from "./github";
 
 export type CiState = "success" | "pending" | "failure";
 
@@ -27,6 +27,8 @@ export interface GateInput {
   dismissedFindings: number;
   // People whose latest review asks for changes. Their objection always wins over the App.
   changesRequestedBy: string[];
+  // Commits the App wrote for /fix. Nobody has read those, so a person has to approve. null when they can't be counted.
+  appCommits: number | null;
   ci: CiState;
 }
 export interface Decision {
@@ -50,6 +52,8 @@ export function decide(i: GateInput): Decision {
     if (!r || r.reviewedSha !== i.headSha) pending.push(`the ${lens} review hasn't finished for ${i.headSha.slice(0, 7)}`);
     else if (r.state === "errored") human.push(`the ${lens} review errored`);
   }
+  if (i.appCommits === null) human.push("GitHub didn't list every commit, so commits written by /fix can't be ruled out");
+  else if (i.appCommits) human.push(`${i.appCommits} commit${i.appCommits === 1 ? " was" : "s were"} written by /fix`);
   if (i.changesRequestedBy.length) human.push(`${i.changesRequestedBy.join(", ")} requested changes`);
   if (i.dismissedFindings) human.push(`${i.dismissedFindings} finding${i.dismissedFindings === 1 ? " was" : "s were"} resolved without the review confirming a fix`);
   if (!i.eligibility.eligible) human.push(`not eligible for auto-merge: ${i.eligibility.reason}`);
@@ -77,6 +81,14 @@ export function changesRequested(reviews: { user: { login: string; type: string 
 export function staleChangeRequests(reviews: { id: number; user: { login: string; type: string } | null; state: string }[], openFindings: number, botLogin: string): number[] {
   if (openFindings) return [];
   return reviews.filter((r) => isReviewBot(r.user, botLogin) && r.state === "CHANGES_REQUESTED").map((r) => r.id);
+}
+
+// Commits /fix made: by the App, or carrying its trailer, in case GitHub attributes the App's commit some other way.
+// Squashing one into a person's own commit hides it from this count.
+// null when GitHub's list is shorter than the pull request, so a /fix commit could be among the missing ones.
+export function appCommits(commits: PullCommit[], total: number, botLogin: string): number | null {
+  if (commits.length < total) return null;
+  return commits.filter((c) => isReviewBot(c.author, botLogin) || c.commit.message.split("\n").includes(FIX_TRAILER)).length;
 }
 
 // Every path a change touches, with the old name of a moved file, so moving a sensitive file out counts as touching it.
@@ -111,13 +123,14 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
   // Reviews before threads: the App posts a review and its finding threads in one call, so every change request read
   // here already has its threads, and staleChangeRequests can't dismiss one whose finding is still open.
   const prReviews = await read.reviews(number);
-  const [permission, files, comments, threads, runs] = await Promise.all([
+  const [permission, files, comments, threads, runs, commits] = await Promise.all([
     // Through the App token, the path verified to work; a failed lookup fails the job instead of reading as "none".
     bot ? Promise.resolve<Permission>("none") : (dryRun ? read : github(appToken!)).permission(pull.user.login),
     read.pullFiles(number),
     read.issueComments(number),
     read.threads(number),
     read.checkRuns(head),
+    read.pullCommits(number),
   ]);
 
   const summaries = comments.filter((c) => isReviewBot(c.user, BOT_LOGIN)).map((c) => parseSummaryMarker(c.body)).filter((m) => m !== null);
@@ -138,6 +151,7 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
     openFindings,
     dismissedFindings,
     changesRequestedBy: changesRequested(prReviews),
+    appCommits: appCommits(commits, pull.commits, BOT_LOGIN),
     ci: ciState(runs),
   };
   const decision = decide(input);

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { fixedMarker } from "./findings";
-import { changesRequested, ciState, decide, staleChangeRequests, touchedPaths, type GateInput } from "./gate";
+import { appCommits, changesRequested, ciState, decide, staleChangeRequests, touchedPaths, type GateInput } from "./gate";
+import { FIX_TRAILER } from "./config";
 import { isReviewBot, resolvedAsFixed, type CheckRun, type Thread } from "./github";
 
 const HEAD = "a".repeat(40);
@@ -16,6 +17,7 @@ const input = (over: Partial<GateInput> = {}): GateInput => ({
   openFindings: 0,
   dismissedFindings: 0,
   changesRequestedBy: [],
+  appCommits: 0,
   ci: "success",
   ...over,
 });
@@ -145,4 +147,22 @@ test("the status says whether a person is needed, the author has to act, or it's
   expect(decide(input({ openFindings: 1, ci: "pending" })).status).toBe("blocked");
   expect(decide(input({ fork: true, ci: "pending" })).status).toBe("human");
   expect(decide(input({ reviews: { bugs: done("bugs", { state: "errored" }), security: done("security") } })).status).toBe("human");
+});
+
+test("commits written by /fix need a human", () => {
+  expect(blockedBy({ appCommits: 1 })).toContain("needs human approval: 1 commit was written by /fix");
+  expect(blockedBy({ appCommits: 2 })).toContain("2 commits were written by /fix");
+});
+
+test("a /fix commit counts by the App as author or by its trailer", () => {
+  const c = (author: { login: string; type: string } | null, message = "Fix a thing") => ({ sha: "s", author, commit: { message } });
+  const bot = "ether-review[bot]";
+  expect(appCommits([c({ login: "ether-review[bot]", type: "Bot" }), c({ login: "JustKatze", type: "User" })], 2, bot)).toBe(1);
+  expect(appCommits([c(null, `Fix review findings\n\nsummary\n\n${FIX_TRAILER}`)], 1, bot)).toBe(1);
+  expect(appCommits([c({ login: "ether-review", type: "User" }), c(null, `mentions ${FIX_TRAILER} inline`)], 2, bot)).toBe(0);
+});
+
+test("a commit list GitHub cut short needs a human", () => {
+  expect(appCommits([], 300, "ether-review[bot]")).toBeNull();
+  expect(blockedBy({ appCommits: null })).toContain("commits written by /fix can't be ruled out");
 });
