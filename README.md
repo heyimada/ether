@@ -105,3 +105,4 @@ Bug reports, ideas and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING
 ## License
 
 [MIT](LICENSE)
+
