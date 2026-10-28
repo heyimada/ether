@@ -29,6 +29,7 @@ import {
   type ReviewState,
   fixedMarker,
   changedPaths,
+  findingTouched,
 } from "./findings";
 import { github, isReviewBot, readToken, resolvedAsFixed, type GitHub, type PullFile, type ReviewComment } from "./github";
 
@@ -59,7 +60,8 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
     if (containsSecret(text, secrets)) throw new Error("refusing to post: outgoing text contains a token");
     return text;
   };
-  const log = (msg: string) => console.error(`[${group}] ${msg}`);
+  // One line per message: model text in it could otherwise start a line with "::" and run a workflow command.
+  const log = (msg: string) => console.error(`[${group}] ${msg.replace(/[\r\n]+/g, " ")}`);
 
   const pull = await read.pull(prNumber);
   const head = pull.head.sha;
@@ -91,26 +93,29 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   let costUsd = 0;
   const spend = <T extends { costUsd: number }>(r: T) => ((costUsd += r.costUsd), r);
 
-  // Threads whose finding is fixed at this head get a short reply and are resolved. Only files changed since the finding
-  // was posted are re-checked, and every voter has to agree it's fixed, the same bar as posting it. Threads a person
-  // resolved are re-checked too: authors often fix and resolve in one go, and the reply is what tells the gate it was a fix.
+  // Threads whose finding is fixed at this head get a short reply and are resolved. A thread is re-checked only when its
+  // file, or a file the finding names, changed since it was posted, and every voter has to agree it's fixed, the same
+  // bar as posting it. Threads a person resolved are re-checked too: authors often fix and resolve in one go, and the
+  // reply is what tells the gate it was a fix.
   const resolved: { file: string; title: string; reason: string }[] = [];
   const open = symlink ? [] : botThreads.filter((t) => !resolvedAsFixed(t.thread, BOT_LOGIN) && t.posted.marker.sha !== head);
   const changedSince = new Map<string, Promise<Set<string> | null>>();
-  const touched = async (sha: string, file: string) => {
+  const touched = async (sha: string, file: string, body: string) => {
     if (!changedSince.has(sha)) changedSince.set(sha, read.compare(sha, head).then(changedPaths, () => null));
-    // Unknown after a force push or when the list may be truncated, so check it.
-    return (await changedSince.get(sha)!)?.has(file) ?? true;
+    return findingTouched(await changedSince.get(sha)!, file, body);
   };
   await Promise.all(
     open.map(async ({ thread, posted }) => {
-      if (!(await touched(posted.marker.sha, posted.file))) return;
+      if (!(await touched(posted.marker.sha, posted.file, thread.comment.body))) return;
       const finding = { file: posted.file, line: thread.comment.line, title: posted.title, failure: thread.comment.body };
       const votes = await Promise.all(Array.from({ length: DEPTH.voters }, () => isFixed(finding, PR_DIR).then(spend)));
       const failed = votes.find((v) => !v.ok);
       if (failed && !failed.ok) return void errors.push(`isFixed ${posted.file}: ${failed.error}`);
       const fixed = votes.flatMap((v) => (v.ok && v.value.fixed ? [v.value] : []));
-      if (fixed.length < votes.length) return;
+      if (fixed.length < votes.length) {
+        for (const v of votes) if (v.ok && !v.value.fixed) log(`still open: ${posted.file}: ${posted.title}: ${v.value.reason.slice(0, 300)}`);
+        return;
+      }
       const reason = fixed[0].reason;
       resolved.push({ file: posted.file, title: posted.title, reason });
       if (!write) return;
@@ -223,7 +228,7 @@ if (import.meta.main) {
   try {
     await review(pr, lens, values["dry-run"]!);
   } catch (e) {
-    console.error(`[${lens}] failed: ${(e as Error).message}`);
+    console.error(`[${lens}] failed: ${(e as Error).message.replace(/[\r\n]+/g, " ")}`);
     process.exit(1);
   }
 }

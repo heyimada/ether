@@ -79,6 +79,17 @@ export function changedPaths(cmp: { status: string; files?: { filename: string; 
   return new Set(cmp.files.flatMap((f) => (f.previous_filename ? [f.filename, f.previous_filename] : [f.filename])));
 }
 
+// Whether a finding needs a re-check after these changes. A finding sits on one line, but its fix often lands in another
+// file it names (a helper, the caller): a change to either counts. null changes means unknown, so check.
+export function findingTouched(changed: Set<string> | null, file: string, body: string): boolean {
+  if (!changed) return true;
+  if (changed.has(file)) return true;
+  return [...changed].some((p) => mentions(body, p) || mentions(body, p.split("/").at(-1)!));
+}
+
+// name as a whole word, so "ci.ts" doesn't match inside "xci.ts" or "ci.tsx".
+const mentions = (body: string, name: string) => new RegExp(`(^|[^\\w.-])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-]|\\.\\w)`).test(body);
+
 export function parseFindingMarker(body: string): FindingMarker | null {
   const m = parse(FINDING_TAG, body) as Partial<FindingMarker> | null;
   if (!m || typeof m.fp !== "string" || typeof m.sha !== "string" || typeof m.lens !== "string" || !SEVERITIES.includes(m.severity as Severity)) return null;

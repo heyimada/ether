@@ -151,7 +151,9 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
   const details_url = server && repo && runId ? `${server}/${repo}/actions/runs/${runId}` : undefined;
   if (existing) await write.updateCheckRun(existing.id, { status: "completed", conclusion, details_url, output });
   else await write.createCheckRun({ name: GATE_CHECK, head_sha: head, status: "completed", conclusion, details_url, output });
-  console.error(`#${number} at ${head.slice(0, 7)}: ${title}\n${summary}`);
+  // File names come from the pull request and git allows newlines in them; a line starting with "::" would run a
+  // workflow command in a job that holds the App's token.
+  console.error(`#${number} at ${head.slice(0, 7)}: ${title}: ${decision.reasons.join("; ").replace(/[\r\n]+/g, " ")}`);
   if (REPORT_ONLY) return;
 
   // The App's approval stands in for the human one only when decide() says so, and covers just this head commit:
@@ -189,7 +191,7 @@ if (import.meta.main) {
   try {
     await gate(Number.isInteger(pr) && pr > 0 ? { pr } : { sha }, values["dry-run"]!);
   } catch (e) {
-    console.error(`gate failed: ${(e as Error).message}`);
+    console.error(`gate failed: ${(e as Error).message.replace(/[\r\n]+/g, " ")}`);
     process.exit(1);
   }
 }

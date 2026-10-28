@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   bySeverity,
+  findingTouched,
   changedPaths,
   COMPARE_FILE_LIMIT,
   commentableLines,
@@ -149,4 +150,15 @@ test("changed paths include old names of renamed files and give up on force push
   expect(changedPaths({ status: "ahead" })).toBeNull();
   expect(changedPaths({ status: "ahead", files: Array.from({ length: COMPARE_FILE_LIMIT }, (_, i) => ({ filename: `f${i}` })) })).toBeNull();
   expect(changedPaths({ status: "ahead", files: Array.from({ length: COMPARE_FILE_LIMIT - 1 }, (_, i) => ({ filename: `f${i}` })) })?.size).toBe(COMPARE_FILE_LIMIT - 1);
+});
+
+test("a finding is re-checked when its own file or a file it names changed", () => {
+  const body = "With 4 workers, `e2e/helpers.ts` builds the same name in two workers; see complete.spec.ts.";
+  expect(findingTouched(new Set(["playwright.config.ts"]), "playwright.config.ts", body)).toBe(true);
+  expect(findingTouched(new Set(["e2e/helpers.ts"]), "playwright.config.ts", body)).toBe(true);
+  expect(findingTouched(new Set(["e2e/complete.spec.ts"]), "playwright.config.ts", body)).toBe(true);
+  expect(findingTouched(new Set(["src/server/ci.ts"]), "playwright.config.ts", body)).toBe(false);
+  expect(findingTouched(null, "playwright.config.ts", body)).toBe(true);
+  expect(findingTouched(new Set(["src/server/ci.ts"]), "a.ts", "the loop in xci.ts and ci.tsx")).toBe(false);
+  expect(findingTouched(new Set(["src/server/ci.ts"]), "a.ts", "the queue in ci.ts.")).toBe(true);
 });
