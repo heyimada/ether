@@ -44,13 +44,20 @@ test("agent instructions and CI secrets are sensitive; tests alone are no longer
 
 test("every SENSITIVE path is covered by CODEOWNERS", async () => {
   const owners = (await Bun.file(".github/CODEOWNERS").text()).split("\n").filter((l) => l && !l.startsWith("#")).map((l) => l.split(/\s+/)[0]);
-  const covered = (p: string) => owners.some((o) => (o.endsWith("/") ? `/${p}`.startsWith(o) : o.startsWith("/") ? `/${p}` === o : p === o || p.endsWith(`/${o}`)));
-  for (const p of [".github/workflows/ci.yml", "CLAUDE.md", "docs/AGENTS.md", ".claude/x", "src/server/access.ts", "src/server/db/schema.ts", "drizzle/0001.sql", "package.json", "bun.lock", "cli/Cargo.toml", "cli/Cargo.lock", "src/server/secret-box.ts"]) {
+  const covered = (p: string) =>
+    owners.some((o) =>
+      o.startsWith("**/") ? (o.endsWith("/") ? `/${p}`.includes(o.slice(2)) : `/${p}`.endsWith(o.slice(2)))
+      : o.endsWith("/") ? `/${p}`.startsWith(o)
+      : o.startsWith("/") ? `/${p}` === o
+      : p === o || p.endsWith(`/${o}`),
+    );
+  for (const p of [".github/workflows/ci.yml", "CLAUDE.md", "docs/AGENTS.md", ".claude/x", "src/server/access.ts", "src/server/db/schema.ts", "drizzle/0001.sql", "package.json", "bun.lock", "cli/Cargo.toml", "cli/Cargo.lock", "src/server/secret-box.ts", "docs/.claude/commands/x.md", "src/web/.cursor/rules.mdc", "e2e/.mcp.json"]) {
     expect(isSensitive(p)).toBe(true);
     expect(covered(p)).toBe(true);
   }
 });
 
 test("agent files are sensitive in any case and any folder", () => {
-  for (const p of ["Claude.md", "src/web/CLAUDE.local.md", "GEMINI.md", ".mcp.json", ".cursor/rules/x.mdc", "cli/.cursorrules"]) expect(isSensitive(p)).toBe(true);
+  for (const p of ["Claude.md", "src/web/CLAUDE.local.md", "GEMINI.md", ".mcp.json", ".cursor/rules/x.mdc", "cli/.cursorrules", "docs/.claude/commands/x.md", "src/.mcp.json"]) expect(isSensitive(p)).toBe(true);
+  expect(eligibility(["docs/.claude/commands/x.md"], "low").eligible).toBe(false);
 });

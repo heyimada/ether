@@ -4,7 +4,7 @@
 /.github/ @heyimada @JustKatze
 CLAUDE.md @heyimada @JustKatze
 AGENTS.md @heyimada @JustKatze
-/.claude/ @heyimada @JustKatze
+**/.claude/ @heyimada @JustKatze
 /src/server/access.ts @heyimada @JustKatze
 /src/server/auth.ts @heyimada @JustKatze
 /src/server/auth-plugins.ts @heyimada @JustKatze
@@ -25,5 +25,5 @@ AGENTS.md @heyimada @JustKatze
 GEMINI.md @heyimada @JustKatze
 CLAUDE.local.md @heyimada @JustKatze
 .cursorrules @heyimada @JustKatze
-/.cursor/ @heyimada @JustKatze
-/.mcp.json @heyimada @JustKatze
+**/.cursor/ @heyimada @JustKatze
+**/.mcp.json @heyimada @JustKatze
