@@ -36,7 +36,8 @@ import { github, isReviewBot, readToken, resolvedAsFixed, type GitHub, type Pull
 // The whole diff, never cut: a file left out would hide its removed lines, which the head checkout can't show. A diff
 // too large for the model fails the agent, and a failed review or eligibility check sends the change to a human.
 function renderDiff(files: PullFile[]): string {
-  return files.map((f) => `--- ${f.filename} (${f.status})\n${f.patch ?? "(no textual diff)"}\n`).join("");
+  // A rename shows its old name: x.test.ts renamed to x.test.ts.off is a deleted test.
+  return files.map((f) => `--- ${f.filename} (${f.previous_filename ? `renamed from ${f.previous_filename}` : f.status})\n${f.patch ?? "(no textual diff)"}\n`).join("");
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
