@@ -56,7 +56,7 @@ start_once() {
     echo "ADMIN_USER=$ADMIN_USER"
     echo "ADMIN_PASSWORD=$ADMIN_PASSWORD"
     echo "SOURCE_REV=$(git rev-parse --short HEAD)"
-    echo "SOURCE_FINGERPRINT=$(git status --porcelain --untracked-files=no | shasum | cut -c1-12)"
+    echo "SOURCE_FINGERPRINT=$({ git diff HEAD; git ls-files --others --exclude-standard -z | xargs -0 shasum 2>/dev/null; } | shasum | cut -c1-12)"
   } >"$RUN_DIR/state.env"
   ln -sfn "$RUN_ID" "$ROOT/e2e-report/verify/latest"
 

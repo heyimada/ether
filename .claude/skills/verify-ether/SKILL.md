@@ -42,7 +42,7 @@ The server runs from source without `--watch`: after editing `src/server/` or `s
 .claude/skills/verify-ether/scripts/doctor.sh "$RUN_DIR"
 ```
 
-Read-only. Checks the PID is alive and is `bun src/server/main.ts`, both ports are owned by that PID (`lsof`), `/api/health` is ok, admin sign-in returns 200, and the data dir is a verify dir. Warns when `HEAD` or tracked files changed since launch (the instance is stale). Exit 0 means drive it; anything else means clean up and relaunch. Run it first whenever something looks off.
+Read-only. Checks the PID is alive and is `bun src/server/main.ts`, both ports are owned by that PID (`lsof`), `/api/health` is ok, admin sign-in returns 200, and the data dir is a verify dir. Warns when `HEAD` moved or source contents changed since launch (a hash of `git diff HEAD` plus untracked, non-ignored files), meaning the instance is stale. Exit 0 means drive it; anything else means clean up and relaunch. Run it first whenever something looks off.
 
 ## Drive
 

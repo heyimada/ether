@@ -109,17 +109,32 @@ export async function createUser(run: RunState, admin: APIRequestContext, userna
 export const cloneUrl = (run: RunState, owner: string, repo: string) => `${run.ETHER_URL}/${owner}/${repo}.git`;
 export const workdir = () => mkdtempSync(join(tmpdir(), "ether-verify-wd-"));
 
+// A private (0700) directory per process, so no other local user can plant config in it.
+let emptyConfig: string | undefined;
+function emptyGitConfig() {
+  if (!emptyConfig) {
+    emptyConfig = join(mkdtempSync(join(tmpdir(), "ether-verify-git-")), "empty.gitconfig");
+    writeFileSync(emptyConfig, "", { mode: 0o600 });
+  }
+  return emptyConfig;
+}
+
 // git with no global/system config and no credential helper: a token can never reach the
-// macOS Keychain or Git Credential Manager. Auth goes in an explicit header instead.
+// macOS Keychain or Git Credential Manager. Auth goes in an explicit header, passed through
+// the environment so it never shows up in `ps`.
 export function git(cwd: string, args: string[], auth?: { username: string; token: string }, log?: (l: string) => void) {
-  const empty = join(tmpdir(), "ether-verify-empty.gitconfig");
-  writeFileSync(empty, "");
   const pre = ["-c", "credential.helper=", "-c", "user.name=Verify", "-c", "user.email=verify@ether.test", "-c", "init.defaultBranch=main"];
-  if (auth) pre.push("-c", `http.extraHeader=Authorization: Basic ${Buffer.from(`${auth.username}:${auth.token}`).toString("base64")}`);
+  const header: Record<string, string> = auth
+    ? {
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "http.extraHeader",
+        GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`${auth.username}:${auth.token}`).toString("base64")}`,
+      }
+    : { GIT_CONFIG_COUNT: "0" };
   const r = spawnSync("git", [...pre, ...args], {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: empty, GCM_INTERACTIVE: "never" },
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: emptyGitConfig(), GCM_INTERACTIVE: "never", ...header },
   });
   log?.(`$ git ${args.join(" ")}  -> exit ${r.status}\n${r.stdout}${r.stderr}`);
   return { code: r.status ?? -1, stdout: r.stdout, stderr: r.stderr };

@@ -34,6 +34,6 @@ if [[ "$code" == 200 ]]; then ok "admin sign-in"; else bad "admin sign-in return
 
 cd "$ROOT"
 [[ "$(git rev-parse --short HEAD)" == "$SOURCE_REV" ]] || warn "HEAD moved since launch ($SOURCE_REV -> $(git rev-parse --short HEAD)); relaunch to verify current code"
-[[ "$(git status --porcelain --untracked-files=no | shasum | cut -c1-12)" == "$SOURCE_FINGERPRINT" ]] || warn "tracked files changed since launch; the server and served build are stale, relaunch"
+[[ "$({ git diff HEAD; git ls-files --others --exclude-standard -z | xargs -0 shasum 2>/dev/null; } | shasum | cut -c1-12)" == "$SOURCE_FINGERPRINT" ]] || warn "source files changed since launch; the server and served build are stale, relaunch"
 
 exit $fail
