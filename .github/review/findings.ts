@@ -69,6 +69,16 @@ export const summaryMarker = (m: SummaryMarker) => serialize(SUMMARY_TAG, m);
 export const fixedMarker = (sha: string) => serialize(FIXED_TAG, { sha });
 export const isFixedReply = (body: string) => typeof (parse(FIXED_TAG, body) as { sha?: unknown } | null)?.sha === "string";
 
+// GitHub's compare lists at most this many files, so a list that long may be missing some.
+export const COMPARE_FILE_LIMIT = 300;
+
+// Every path a compare touched, old names of renamed files included, or null when the list can't be trusted: the old
+// commit isn't an ancestor (force push) or the list may be truncated.
+export function changedPaths(cmp: { status: string; files?: { filename: string; previous_filename?: string }[] }): Set<string> | null {
+  if (cmp.status !== "ahead" || !cmp.files || cmp.files.length >= COMPARE_FILE_LIMIT) return null;
+  return new Set(cmp.files.flatMap((f) => (f.previous_filename ? [f.filename, f.previous_filename] : [f.filename])));
+}
+
 export function parseFindingMarker(body: string): FindingMarker | null {
   const m = parse(FINDING_TAG, body) as Partial<FindingMarker> | null;
   if (!m || typeof m.fp !== "string" || typeof m.sha !== "string" || typeof m.lens !== "string" || !SEVERITIES.includes(m.severity as Severity)) return null;

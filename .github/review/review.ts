@@ -28,6 +28,7 @@ import {
   type Posted,
   type ReviewState,
   fixedMarker,
+  changedPaths,
 } from "./findings";
 import { github, isReviewBot, readToken, resolvedAsFixed, type GitHub, type PullFile, type ReviewComment } from "./github";
 
@@ -94,8 +95,8 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   const open = symlink ? [] : botThreads.filter((t) => !t.thread.isResolved && t.posted.marker.sha !== head);
   const changedSince = new Map<string, Promise<Set<string> | null>>();
   const touched = async (sha: string, file: string) => {
-    if (!changedSince.has(sha)) changedSince.set(sha, read.compare(sha, head).then((c) => (c.status === "ahead" && c.files ? new Set(c.files.map((f) => f.filename)) : null), () => null));
-    // Unknown after a force push, so check it.
+    if (!changedSince.has(sha)) changedSince.set(sha, read.compare(sha, head).then(changedPaths, () => null));
+    // Unknown after a force push or when the list may be truncated, so check it.
     return (await changedSince.get(sha)!)?.has(file) ?? true;
   };
   await Promise.all(
@@ -121,8 +122,8 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   // An errored round didn't review everything, so it can't be the baseline: fall back to the full diff.
   if (round >= ROUND_CAP && prev && prev.state !== "errored" && prev.reviewedSha !== head) {
     const cmp = await read.compare(prev.reviewedSha, head).catch(() => null);
-    // After a force push the old SHA is no longer an ancestor, so fall back to the full diff.
-    if (cmp?.status === "ahead" && cmp.files) (scope = cmp.files), (sinceSha = prev.reviewedSha);
+    // After a force push the old SHA is no longer an ancestor, and a long list may be truncated: fall back to the full diff.
+    if (cmp?.files && changedPaths(cmp)) (scope = cmp.files), (sinceSha = prev.reviewedSha);
   }
   const reviewable = scope.filter((f) => f.patch && f.status !== "removed");
   const ctx: Context = {

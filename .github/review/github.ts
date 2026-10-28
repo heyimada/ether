@@ -19,6 +19,7 @@ export interface Pull {
 }
 export interface PullFile {
   filename: string;
+  previous_filename?: string;
   status: string;
   patch?: string;
 }

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import {
   bySeverity,
+  changedPaths,
+  COMPARE_FILE_LIMIT,
   commentableLines,
   containsSecret,
   dedupe,
@@ -138,4 +140,13 @@ test("model text can't open or close a comment or mention anyone", () => {
   expect(body).not.toContain("@heyimada");
   expect(sanitize("a\nb @x")).toBe("a\nb @​x");
   expect(sanitize("x".repeat(10), 4)).toBe("xxxx…");
+});
+
+test("changed paths include old names of renamed files and give up on force pushes and truncated lists", () => {
+  const files = [{ filename: "src/b.ts", previous_filename: "src/a.ts" }, { filename: "src/c.ts" }];
+  expect(changedPaths({ status: "ahead", files })).toEqual(new Set(["src/b.ts", "src/a.ts", "src/c.ts"]));
+  expect(changedPaths({ status: "diverged", files })).toBeNull();
+  expect(changedPaths({ status: "ahead" })).toBeNull();
+  expect(changedPaths({ status: "ahead", files: Array.from({ length: COMPARE_FILE_LIMIT }, (_, i) => ({ filename: `f${i}` })) })).toBeNull();
+  expect(changedPaths({ status: "ahead", files: Array.from({ length: COMPARE_FILE_LIMIT - 1 }, (_, i) => ({ filename: `f${i}` })) })?.size).toBe(COMPARE_FILE_LIMIT - 1);
 });
