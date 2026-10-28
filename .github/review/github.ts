@@ -102,7 +102,6 @@ export function github(token: string) {
     issueComments: (n: number) => paginate<IssueComment>(`${repo}/issues/${n}/comments`),
     createIssueComment: (n: number, body: string) => rest<IssueComment>("POST", `${repo}/issues/${n}/comments`, { body }),
     updateIssueComment: (id: number, body: string) => rest<IssueComment>("PATCH", `${repo}/issues/comments/${id}`, { body }),
-    reviews: (n: number) => paginate<Review>(`${repo}/pulls/${n}/reviews`),
     createReview: (n: number, review: { commit_id: string; body: string; comments: ReviewComment[] }) =>
       rest<Review>("POST", `${repo}/pulls/${n}/reviews`, { ...review, event: "COMMENT" }),
     reply: (n: number, commentId: number, body: string) => rest("POST", `${repo}/pulls/${n}/comments/${commentId}/replies`, { body }),
@@ -151,3 +150,5 @@ export function readToken(dryRun: boolean): string {
 export const isBot =(user: { login: string; type: string } | null) => !user || user.type === "Bot" || user.login.endsWith("[bot]");
 // REST shows App logins as "name[bot]", GraphQL as "name".
 export const sameBot = (login: string, botLogin: string) => login.replace(/\[bot\]$/, "") === botLogin.replace(/\[bot\]$/, "");
+// Markers are only trusted from the App itself, so nobody else can plant "already reported" or "reviewed" state.
+export const isReviewBot = (user: { login: string; type: string } | null, botLogin: string) => user?.type === "Bot" && sameBot(user.login, botLogin);

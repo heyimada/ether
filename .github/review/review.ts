@@ -18,8 +18,9 @@ import {
   containsSecret,
   dedupe,
   findingBody,
+  onDiffLine,
   parseSummaryMarker,
-  postedFindings,
+  postedFinding,
   sanitize,
   summaryMarker,
   tally,
@@ -27,7 +28,7 @@ import {
   type Posted,
   type ReviewState,
 } from "./findings";
-import { github, readToken, sameBot, type GitHub, type PullFile, type ReviewComment } from "./github";
+import { github, isReviewBot, readToken, type GitHub, type PullFile, type ReviewComment } from "./github";
 
 const DIFF_BUDGET = 150_000;
 const ELIGIBILITY_DIFF_BUDGET = 60_000;
@@ -63,19 +64,21 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   const checkedOut = Bun.spawnSync(["git", "-C", PR_DIR, "rev-parse", "HEAD"]).stdout.toString().trim();
   if (checkedOut !== head) throw new Error(`${PR_DIR}/ is at ${checkedOut || "nothing"}, but the pull request head is ${head}`);
 
-  const [comments, threads, reviews, files] = await Promise.all([read.issueComments(prNumber), read.threads(prNumber), read.reviews(prNumber), read.pullFiles(prNumber)]);
+  const [comments, threads, files] = await Promise.all([read.issueComments(prNumber), read.threads(prNumber), read.pullFiles(prNumber)]);
+  const lines = new Map(files.map((f) => [f.filename, commentableLines(f.patch)]));
   const lenses: readonly string[] = LENS_GROUPS[group];
-  const summaryComment = comments.find((c) => c.user && sameBot(c.user.login, BOT_LOGIN) && parseSummaryMarker(c.body)?.lens === group);
+  const summaryComment = comments.find((c) => isReviewBot(c.user, BOT_LOGIN) && parseSummaryMarker(c.body)?.lens === group);
   const prev = summaryComment ? parseSummaryMarker(summaryComment.body) : null;
   if (prev && prev.reviewedSha === head && prev.state !== "errored" && !dryRun) return log(`already reviewed ${short(head)}`);
   const round = !prev ? 1 : prev.reviewedSha === head ? prev.round : prev.round + 1;
 
   const botThreads = threads
-    .filter((t) => t.comment.byBot && sameBot(t.comment.login, BOT_LOGIN))
-    .flatMap((t) => postedFindings(t.comment.body, t.comment.path).map((p) => ({ thread: t, posted: p })))
-    .filter((t) => lenses.includes(t.posted.marker.lens));
-  const inBodies = reviews.filter((r) => r.user && sameBot(r.user.login, BOT_LOGIN)).flatMap((r) => postedFindings(r.body));
-  const prior: Posted[] = [...botThreads.map((t) => t.posted), ...inBodies.filter((p) => lenses.includes(p.marker.lens))];
+    .filter((t) => isReviewBot({ login: t.comment.login, type: t.comment.byBot ? "Bot" : "User" }, BOT_LOGIN))
+    .flatMap((t) => {
+      const posted = postedFinding(t.comment.body, t.comment.path);
+      return posted && lenses.includes(posted.marker.lens) ? [{ thread: t, posted }] : [];
+    });
+  const prior: Posted[] = botThreads.map((t) => t.posted);
   const errors: string[] = [];
   // The path hook can't see what a glob matches, so a symlink anywhere in the checkout stops the agents (review.yml deletes them first).
   const symlink = findSymlink(PR_DIR);
@@ -134,14 +137,15 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
     const found = await Promise.all(Array.from({ length: DEPTH.finders }, () => runFinder(group, ctx).then(spend)));
     for (const r of found) if (!r.ok) errors.push(`finder: ${r.error}`);
     const all = found.flatMap((r) => (r.ok ? r.value : []));
+    const located = all.filter((c) => onDiffLine(c, lines));
     candidates = all.length;
-    const findings = dedupe(all, new Set(prior.map((p) => p.marker.fp)));
-    log(`${plural(all.length, "candidate")}, ${findings.length} after exact dedupe`);
+    const findings = dedupe(located, new Set(prior.map((p) => p.marker.fp)));
+    log(`${plural(all.length, "candidate")}, ${located.length} on a diff line, ${findings.length} after exact dedupe`);
 
     const patches = new Map(files.map((f) => [f.filename, f.patch ?? ""]));
     const voted = await Promise.all(
       findings.map(async (f, i) => {
-        const voterCtx = { ...ctx, diff: renderDiff([{ filename: f.file, status: "modified", patch: patches.get(f.file) || "(not changed by this pull request)" }], DIFF_BUDGET) };
+        const voterCtx = { ...ctx, diff: renderDiff([{ filename: f.file, status: "modified", patch: patches.get(f.file) }], DIFF_BUDGET) };
         const votes = await Promise.all(Array.from({ length: DEPTH.voters }, () => runVoter(f, findings.slice(0, i), voterCtx).then(spend)));
         for (const v of votes) if (!v.ok) errors.push(`voter ${f.fingerprint}: ${v.error}`);
         const result = tally(f, votes.flatMap((v) => (v.ok ? [v.value] : [])), DEPTH.votesToPost);
@@ -153,16 +157,8 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   const eligibility = await eligibilityRun;
   const state: ReviewState = errors.length ? "errored" : reviewable.length ? "done" : "not-applicable";
 
-  const lines = new Map(files.map((f) => [f.filename, commentableLines(f.patch)]));
-  const inline = posted.filter((f) => lines.get(f.file)?.has(f.line));
-  const outside = posted.filter((f) => !inline.includes(f));
-  const comments_: ReviewComment[] = inline.map((f) => ({ path: f.file, line: f.line, side: "RIGHT", body: guard(findingBody(f, head)) }));
-  const reviewBody = guard(
-    [
-      `Automated ${group} review, round ${round} at ${short(head)}${sinceSha ? ` (changes since ${short(sinceSha)})` : ""}.`,
-      outside.length ? `These findings are outside the diff, so they can't be inline comments:\n\n${outside.map((f) => findingBody(f, head, true)).join("\n\n---\n\n")}` : "",
-    ].filter(Boolean).join("\n\n"),
-  );
+  const inline: ReviewComment[] = posted.map((f) => ({ path: f.file, line: f.line, side: "RIGHT", body: guard(findingBody(f, head)) }));
+  const reviewBody = guard(`Automated ${group} review, round ${round} at ${short(head)}${sinceSha ? ` (changes since ${short(sinceSha)})` : ""}.`);
   const counts = (["important", "preexisting", "nit"] as const).map((s) => [s, posted.filter((f) => f.severity === s).length] as const).filter(([, n]) => n);
   const summary = guard(
     [
@@ -184,14 +180,14 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   if (!write) {
     console.log(
       JSON.stringify(
-        { pr: prNumber, lens: group, head, round, state, sinceSha, scopeFiles: reviewable.length, candidates, eligibility, resolved, findings: posted, inline: inline.length, inBody: outside.length, errors, costUsd: Number(costUsd.toFixed(4)) },
+        { pr: prNumber, lens: group, head, round, state, sinceSha, scopeFiles: reviewable.length, candidates, eligibility, resolved, findings: posted, errors, costUsd: Number(costUsd.toFixed(4)) },
         null,
         2,
       ),
     );
     return;
   }
-  if (posted.length) await write.createReview(prNumber, { commit_id: head, body: reviewBody, comments: comments_ });
+  if (posted.length) await write.createReview(prNumber, { commit_id: head, body: reviewBody, comments: inline });
   if (summaryComment) await write.updateIssueComment(summaryComment.id, summary);
   else await write.createIssueComment(prNumber, summary);
   if (state === "errored") console.log(`::warning::The ${group} review errored; see the log above.`);

@@ -8,8 +8,8 @@
 
 import { parseArgs } from "node:util";
 import { BOT_LOGIN, eligibility, GATE_CHECK, LENS_GROUPS, NO_AUTOMERGE_LABEL, REPORT_ONLY, REQUIRED_CHECKS, type EligibilityVerdict, type LensGroup } from "./config";
-import { parseSummaryMarker, postedFindings, type SummaryMarker } from "./findings";
-import { github, isBot, readToken, sameBot, type CheckRun, type Permission } from "./github";
+import { parseSummaryMarker, postedFinding, type SummaryMarker } from "./findings";
+import { github, isBot, isReviewBot, readToken, sameBot, type CheckRun, type Permission } from "./github";
 
 export type CiState = "success" | "pending" | "failure";
 
@@ -84,10 +84,10 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
     read.checkRuns(head),
   ]);
 
-  const summaries = comments.filter((c) => c.user && sameBot(c.user.login, BOT_LOGIN)).map((c) => parseSummaryMarker(c.body)).filter((m) => m !== null);
+  const summaries = comments.filter((c) => isReviewBot(c.user, BOT_LOGIN)).map((c) => parseSummaryMarker(c.body)).filter((m) => m !== null);
   const reviews = Object.fromEntries((Object.keys(LENS_GROUPS) as LensGroup[]).map((l) => [l, summaries.find((s) => s.lens === l) ?? null])) as Record<LensGroup, SummaryMarker | null>;
   const verdict: EligibilityVerdict = reviews.bugs?.reviewedSha === head ? (reviews.bugs.eligibility ?? "missing") : "missing";
-  const openFindings = threads.filter((t) => !t.isResolved && t.comment.byBot && sameBot(t.comment.login, BOT_LOGIN) && postedFindings(t.comment.body).length).length;
+  const openFindings = threads.filter((t) => !t.isResolved && t.comment.byBot && sameBot(t.comment.login, BOT_LOGIN) && postedFinding(t.comment.body, t.comment.path)).length;
 
   const input: GateInput = {
     headSha: head,

@@ -196,6 +196,7 @@ export async function runFinder(group: LensGroup, ctx: Context): Promise<AgentRe
     `Read the surrounding code and the callers before you report anything. Report a finding only when you can name concrete inputs or state and the wrong outcome they cause. When you find a bug class, check the rest of the change for every other instance and report each one at its own location.
 Do not report style, naming, refactoring or cleanup ideas, missing comments or logging, test coverage wishes, or anything the typecheck, unit tests, cargo clippy or the e2e suite would already catch (mark such items kind "style", "cleanup" or "diagnostic" if you list them at all).
 Severity: "important" for a bug this change introduces or touches that should be fixed before merging; "nit" for a real but minor bug; "preexisting" for a real bug in code this change doesn't modify.
+file must be a file in the diff and line a line the diff shows in the new version (an added or context line). For a bug in code outside the diff, use the closest diff line that leads to it; findings anywhere else are dropped.
 These findings were already posted on this pull request. Do not report them again, even reworded:\n${priorList(ctx)}
 Return an empty list if you find nothing real.`,
   ].join("\n\n");

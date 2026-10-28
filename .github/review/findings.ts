@@ -49,8 +49,9 @@ export const fingerprint = (c: Pick<Candidate, "file" | "title" | "lens">) =>
   createHash("sha256").update(`${c.file}\0${normalizeTitle(c.title)}\0${c.lens}`).digest("hex").slice(0, 16);
 
 const serialize = (tag: string, data: object) => `<!-- ${tag} ${JSON.stringify(data)} -->`;
+// Only the one marker the engine appends at the very end counts; a marker anywhere else came from quoted model text.
 function parse(tag: string, body: string): unknown {
-  const m = body.match(new RegExp(`<!-- ${tag} (\\{.*?\\}) -->`));
+  const m = body.match(new RegExp(`<!-- ${tag} (\\{[^\\n]*\\}) -->\\s*$`));
   if (!m) return null;
   try {
     return JSON.parse(m[1]);
@@ -66,10 +67,6 @@ export function parseFindingMarker(body: string): FindingMarker | null {
   const m = parse(FINDING_TAG, body) as Partial<FindingMarker> | null;
   if (!m || typeof m.fp !== "string" || typeof m.sha !== "string" || typeof m.lens !== "string" || !SEVERITIES.includes(m.severity as Severity)) return null;
   return m as FindingMarker;
-}
-// Review bodies can carry several findings that had no diff line to attach to.
-export function parseFindingMarkers(body: string): FindingMarker[] {
-  return [...body.matchAll(new RegExp(`<!-- ${FINDING_TAG} \\{.*?\\} -->`, "g"))].map((m) => parseFindingMarker(m[0])).filter((m) => m !== null);
 }
 export function parseSummaryMarker(body: string): SummaryMarker | null {
   const m = parse(SUMMARY_TAG, body) as Partial<SummaryMarker> | null;
@@ -127,10 +124,12 @@ export const sanitize = (text: string, max = 4000) =>
 
 const LABEL: Record<Severity, string> = { important: "Important", preexisting: "Pre-existing", nit: "Nit" };
 
-// Findings without a diff line to attach to go into the review body, so they carry their location.
-export function findingBody(f: Finding, sha: string, withLocation = false): string {
-  const where = withLocation ? `\`${f.file}:${f.line}\` ` : "";
-  return `${where}**${LABEL[f.severity]}** (${f.lens}): ${sanitize(f.title, 200)}\n\n${sanitize(f.failure)}\n\n${findingMarker({ fp: f.fingerprint, sha, lens: f.lens, severity: f.severity })}`;
+// The model names file and line, so both must point at a line the PR's diff shows; anything else is dropped.
+export const onDiffLine = (c: Pick<Candidate, "file" | "line">, lines: Map<string, Set<number>>) =>
+  Number.isInteger(c.line) && c.line > 0 && (lines.get(c.file)?.has(c.line) ?? false);
+
+export function findingBody(f: Finding, sha: string): string {
+  return `**${LABEL[f.severity]}** (${f.lens}): ${sanitize(f.title.replace(/\s+/g, " "), 200)}\n\n${sanitize(f.failure)}\n\n${findingMarker({ fp: f.fingerprint, sha, lens: f.lens, severity: f.severity })}`;
 }
 
 export interface Posted {
@@ -139,17 +138,9 @@ export interface Posted {
   file: string;
 }
 
-// The findings a bot comment or review body posted earlier, with the title and file each was rendered with.
-export function postedFindings(body: string, file: string | null = null): Posted[] {
-  const out: Posted[] = [];
-  let start = 0;
-  for (const m of body.matchAll(new RegExp(`<!-- ${FINDING_TAG} \\{.*?\\} -->`, "g"))) {
-    const marker = parseFindingMarker(m[0]);
-    const chunk = body.slice(start, m.index);
-    start = m.index + m[0].length;
-    if (!marker) continue;
-    const head = chunk.match(/(?:`([^`\n]+):\d+` )?\*\*[A-Za-z-]+\*\* \([a-z]+\): (.*)/);
-    out.push({ marker, title: head?.[2] ?? "", file: file ?? head?.[1] ?? "" });
-  }
-  return out;
+// The finding an earlier bot review comment on file carries, if any.
+export function postedFinding(body: string, file: string): Posted | null {
+  const marker = parseFindingMarker(body);
+  if (!marker) return null;
+  return { marker, title: body.match(/^\*\*[A-Za-z-]+\*\* \([a-z]+\): (.*)/)?.[1] ?? "", file };
 }

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ciState, decide, type GateInput } from "./gate";
-import type { CheckRun } from "./github";
+import { isReviewBot, type CheckRun } from "./github";
 
 const HEAD = "a".repeat(40);
 const done = (lens: "bugs" | "security", over = {}) => ({ lens, round: 1, reviewedSha: HEAD, state: "done" as const, ...over });
@@ -58,6 +58,14 @@ test("open findings, red or running CI, drafts and the no-automerge label block 
 
 test("every reason is reported, not just the first", () => {
   expect(decide(input({ fork: true, ci: "pending", openFindings: 1 })).reasons).toHaveLength(3);
+});
+
+test("markers are only trusted from the review App's bot account", () => {
+  expect(isReviewBot({ login: "ether-review[bot]", type: "Bot" }, "ether-review[bot]")).toBe(true);
+  expect(isReviewBot({ login: "ether-review", type: "Bot" }, "ether-review[bot]")).toBe(true);
+  expect(isReviewBot({ login: "ether-review", type: "User" }, "ether-review[bot]")).toBe(false);
+  expect(isReviewBot({ login: "other-app[bot]", type: "Bot" }, "ether-review[bot]")).toBe(false);
+  expect(isReviewBot(null, "ether-review[bot]")).toBe(false);
 });
 
 let id = 0;
