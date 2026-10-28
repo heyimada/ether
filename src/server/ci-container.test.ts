@@ -3,21 +3,28 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chownWorkspaceArgs, createArgs, envScript, execArgs, IMAGE_RE, shellCommand } from "./ci-container";
+import { chownWorkspaceArgs, createArgs, envScript, execArgs, IMAGE_RE, instanceLabel, shellCommand } from "./ci-container";
 
 test("containers are created locked down and idle, without mounting anything from the host", () => {
-  const args = createArgs("ether-ci-1-2", "oven/bun:1");
+  const args = createArgs("ether-ci-1-2", "oven/bun:1", "abc123");
   expect(args[0]).toBe("create");
   for (const flag of ["no-new-privileges", "NET_RAW", "--memory", "--cpus", "--pids-limit"]) expect(args).toContain(flag);
   for (const flag of ["-v", "--volume", "--mount", "--privileged", "--network=host", "--pid"]) expect(args).not.toContain(flag);
   expect(args.slice(-3)).toEqual(["oven/bun:1", "-f", "/dev/null"]);
+  expect(args).toContain("ether.ci.instance=abc123");
+});
+
+test("each data folder gets its own stable instance label", () => {
+  expect(instanceLabel("/srv/ether/prod")).toBe(instanceLabel("/srv/ether/prod"));
+  expect(instanceLabel("/srv/ether/prod")).not.toBe(instanceLabel("/srv/ether/staging"));
+  expect(instanceLabel("/x")).toMatch(/^[0-9a-f]{16}$/);
 });
 
 test("image names can't smuggle in flags or odd characters", () => {
   for (const ok of ["alpine", "alpine:3.20", "ghcr.io/org/img:1.2", "debian@sha256:abc123"]) expect(IMAGE_RE.test(ok)).toBe(true);
   for (const bad of ["--privileged", "-v/:/host", "Alpine", "a b", "img;rm", ""]) {
     expect(IMAGE_RE.test(bad)).toBe(false);
-    expect(() => createArgs("x", bad)).toThrow();
+    expect(() => createArgs("x", bad, "abc123")).toThrow();
   }
 });
 

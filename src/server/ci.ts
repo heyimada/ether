@@ -2,10 +2,11 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
-import { chownWorkspaceArgs, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, shellCommand } from "./ci-container";
+import { basename, join, resolve } from "node:path";
+import { chownWorkspaceArgs, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, instanceLabel, shellCommand } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
 import { parseWorkflow, WORKFLOW, type EnvValue, type Shell, type Step } from "./ci-workflow";
+import { config } from "./config";
 import { db } from "./db/client";
 import { ciJob, ciRun, instanceSetting, repo, user } from "./db/schema";
 import { record } from "./events";
@@ -68,6 +69,8 @@ async function cli(runtime: string, args: string[], append: (s: string) => void,
   clearTimeout(timer);
   return proc.exited;
 }
+
+const instance = () => instanceLabel(resolve(config.dataDir));
 
 const removeContainer = (runtime: string, name: string) => Bun.spawn([runtime, "rm", "--force", name], { stdout: "ignore", stderr: "ignore" }).exited;
 
@@ -159,7 +162,7 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
       append(`▶ Starting ${image} with ${basename(runtime)}\n`);
       save();
       // Creating pulls the image when it isn't there yet, which can take a while.
-      if ((await cli(runtime, createArgs(box.name, image), append, 15 * 60_000)) !== 0) return fail(`✖ Could not create a container from ${image}`);
+      if ((await cli(runtime, createArgs(box.name, image, instance()), append, 15 * 60_000)) !== 0) return fail(`✖ Could not create a container from ${image}`);
       if ((await cli(runtime, ["cp", `${dir}/.`, `${box.name}:/workspace`], append, 10 * 60_000)) !== 0) return fail("✖ Could not copy the checkout into the container");
       if ((await cli(runtime, ["start", box.name], append, 60_000)) !== 0) return fail("✖ Could not start the container");
       // `cp` leaves the checkout owned by root; an image that runs as another user needs it to be theirs.
@@ -279,10 +282,10 @@ export const latestRun = (repoId: number, sha: string) =>
 
 // Runs interrupted by a restart can't resume mid-step; queued ones simply continue.
 export function resumeQueue() {
-  // Containers of jobs a crash or restart interrupted.
+  // Containers of this server's jobs that a crash or restart interrupted; another Ether's on the same daemon stay.
   const runtime = containerRuntime();
   if (runtime) {
-    const list = Bun.spawnSync([runtime, "ps", "--all", "--quiet", "--filter", "label=ether.ci=1"]);
+    const list = Bun.spawnSync([runtime, "ps", "--all", "--quiet", "--filter", "label=ether.ci=1", "--filter", `label=ether.ci.instance=${instance()}`]);
     const ids = list.exitCode === 0 ? new TextDecoder().decode(list.stdout).split(/\s+/).filter(Boolean) : [];
     if (ids.length) Bun.spawnSync([runtime, "rm", "--force", ...ids]);
   }

@@ -9,6 +9,10 @@ const PIDS = process.env.ETHER_CI_PIDS || "1024";
 // Registry, path, tag and digest characters only; never a leading "-" that the CLI would read as a flag.
 export const IMAGE_RE = /^[a-z0-9][a-z0-9._/:@-]{0,254}$/;
 
+// Tells this server's containers apart from another Ether's on the same daemon (staging and production on
+// one host, two data folders): a hash of the data folder's path, which is the same across restarts.
+export const instanceLabel = (dataDir: string) => new Bun.CryptoHasher("sha256").update(dataDir).digest("hex").slice(0, 16);
+
 // The CLI to drive, or null when neither Docker nor Podman is installed. ETHER_CI_RUNTIME picks one explicitly.
 export function containerRuntime(): string | null {
   const wanted = process.env.ETHER_CI_RUNTIME;
@@ -19,7 +23,8 @@ export function containerRuntime(): string | null {
 // A container that idles until the job's steps are exec'd into it and is removed afterwards.
 // The default capability set stays (package managers need it), minus raw sockets; setuid binaries
 // can't gain privileges; memory, CPU and process count are capped.
-export function createArgs(name: string, image: string): string[] {
+// Labels every container with the server that made it (see instanceLabel), so a restart cleans up only its own.
+export function createArgs(name: string, image: string, instance: string): string[] {
   if (!IMAGE_RE.test(image)) throw new Error(`"${image}" is not a valid image name`);
   return [
     "create",
@@ -27,6 +32,8 @@ export function createArgs(name: string, image: string): string[] {
     name,
     "--label",
     "ether.ci=1",
+    "--label",
+    `ether.ci.instance=${instance}`,
     "--security-opt",
     "no-new-privileges",
     "--cap-drop",
