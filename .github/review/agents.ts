@@ -245,7 +245,14 @@ export async function isFixed(f: { file: string; line: number | null; title: str
 export async function classifyEligibility(ctx: Context): Promise<AgentResult<{ risk: "low" | "not-low"; reason: string }>> {
   const prompt = [
     intro(ctx),
-    `Rate the risk of merging this change without a human review. "low" means it cannot change how the running server, web app or CLI behaves for users in a way that matters: documentation, copy text, tests only, design files, or new behavior that is off unless a flag enables it. Anything that changes runtime behavior, data, permissions, git or SSH handling, dependencies or the build is "not-low". When unsure, answer "not-low".`,
+    `Rate the risk of merging this change without a human review. Features and bug fixes can be "low". Judge from the diff and the code it touches, not from what the title or description claims.
+"low" needs all of these:
+- It is contained: one feature, fix or area, not a refactor spread across modules, and it doesn't change shared helpers or types that many callers depend on in a way those callers would notice.
+- Reverting the commit undoes it completely: the format and meaning of stored data (database, repositories on disk, config files) stay the same, so the old code still reads everything the new code wrote, and nothing is sent to other services.
+- Existing behavior others rely on keeps working: HTTP routes, the git and SSH protocols, the CLI's commands, flags and output, and the web app's URLs only gain things; nothing is removed or renamed.
+- Changed or new behavior is covered by tests in the diff that would fail without the change, or it is a visual or copy change you can verify by reading it.
+- No tests or assertions are deleted, skipped or loosened, including by renaming a test file so the runner no longer picks it up.
+"not-low" is anything else, and always: how requests are authenticated or authorized, permissions and branch protection, git or SSH handling (including push hooks and what a push may change), how user input reaches the shell, git, the filesystem or SQL, how untrusted content is rendered as HTML (sanitizing, dangerouslySetInnerHTML), security headers and CSP, secrets, rate limits or resource limits, error handling that could hide failures, and the build or CI. When unsure, answer "not-low".`,
   ].join("\n\n");
   return run(
     prompt,

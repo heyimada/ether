@@ -25,6 +25,7 @@ export interface PullFile {
   previous_filename?: string;
   status: string;
   patch?: string;
+  changes?: number;
 }
 export interface IssueComment {
   id: number;

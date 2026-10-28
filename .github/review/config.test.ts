@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { concurrency, eligibility, isLowRisk, isSensitive } from "./config";
+import { concurrency, eligibility, hidesDiff, isLowRisk, isSensitive } from "./config";
 
 test("workflow files, auth and the lockfile are sensitive; app code and docs are not", () => {
   for (const p of [".github/workflows/ci.yml", "src/server/access.ts", "src/server/db/schema.ts", "drizzle/0001_x.sql", "bun.lock", "cli/Cargo.toml"]) expect(isSensitive(p)).toBe(true);
@@ -12,23 +12,39 @@ test("docs and design are low risk at any depth; source code is not", () => {
 });
 
 test("a sensitive path is never eligible, even when the model rates it low", () => {
-  expect(eligibility(["README.md", ".github/workflows/ci.yml"], "low").eligible).toBe(false);
+  expect(eligibility(["README.md", ".github/workflows/ci.yml"], "low", []).eligible).toBe(false);
 });
 
 test("an allowlisted change is eligible unless the model escalates it", () => {
-  expect(eligibility(["README.md", "design/x.md"], "missing").eligible).toBe(true);
-  expect(eligibility(["README.md"], "not-low").eligible).toBe(false);
+  expect(eligibility(["README.md", "design/x.md"], "missing", []).eligible).toBe(true);
+  expect(eligibility(["README.md"], "not-low", []).eligible).toBe(false);
 });
 
 test("other code needs the model to rate it low", () => {
-  expect(eligibility(["src/web/app.tsx"], "low").eligible).toBe(true);
-  expect(eligibility(["src/web/app.tsx"], "not-low").eligible).toBe(false);
-  expect(eligibility(["src/web/app.tsx"], "errored").eligible).toBe(false);
-  expect(eligibility(["src/web/app.tsx"], "missing").eligible).toBe(false);
+  expect(eligibility(["src/web/app.tsx"], "low", []).eligible).toBe(true);
+  expect(eligibility(["src/web/app.tsx"], "not-low", []).eligible).toBe(false);
+  expect(eligibility(["src/web/app.tsx"], "errored", []).eligible).toBe(false);
+  expect(eligibility(["src/web/app.tsx"], "missing", []).eligible).toBe(false);
+});
+
+test("only a text file GitHub sent no diff for hides code from the review", () => {
+  expect(hidesDiff({ filename: "src/web/big.tsx", status: "modified" })).toBe(true);
+  expect(hidesDiff({ filename: "src/web/big.tsx", status: "removed" })).toBe(true);
+  expect(hidesDiff({ filename: "src/web/big.tsx", status: "modified", patch: "@@ -1 +1 @@" })).toBe(false);
+  expect(hidesDiff({ filename: "public/Logo.PNG", status: "added" })).toBe(false);
+  expect(hidesDiff({ filename: "e2e/fixtures/repo.zip", status: "added" })).toBe(true);
+  expect(hidesDiff({ filename: "src/web/a.tsx", status: "renamed", changes: 0 })).toBe(false);
+  expect(hidesDiff({ filename: "src/web/a.tsx", status: "renamed", changes: 3 })).toBe(true);
+});
+
+test("code with a hidden diff needs a human even when the model rates it low; docs don't", () => {
+  expect(eligibility(["src/web/big.tsx"], "low", ["src/web/big.tsx"]).eligible).toBe(false);
+  expect(eligibility(["src/web/big.tsx"], "missing", ["src/web/big.tsx"]).reason).toContain("no diff for src/web/big.tsx");
+  expect(eligibility(["README.md"], "missing", ["README.md"]).eligible).toBe(true);
 });
 
 test("an empty change is not eligible", () => {
-  expect(eligibility([], "low").eligible).toBe(false);
+  expect(eligibility([], "low", []).eligible).toBe(false);
 });
 
 test("concurrency falls back to 3 unless it's a positive integer", () => {
@@ -39,7 +55,7 @@ test("concurrency falls back to 3 unless it's a positive integer", () => {
 test("agent instructions and CI secrets are sensitive; tests alone are no longer low risk", () => {
   for (const p of ["CLAUDE.md", "docs/CLAUDE.md", "AGENTS.md", ".claude/settings.json", "src/server/secret-box.ts", "src/server/log-mask.ts"]) expect(isSensitive(p)).toBe(true);
   for (const p of ["src/server/x.test.ts", "e2e/git.spec.ts"]) expect(isLowRisk(p)).toBe(false);
-  expect(eligibility(["CLAUDE.md"], "low").eligible).toBe(false);
+  expect(eligibility(["CLAUDE.md"], "low", []).eligible).toBe(false);
 });
 
 test("every SENSITIVE path is covered by CODEOWNERS", async () => {
@@ -59,5 +75,5 @@ test("every SENSITIVE path is covered by CODEOWNERS", async () => {
 
 test("agent files are sensitive in any case and any folder", () => {
   for (const p of ["Claude.md", "src/web/CLAUDE.local.md", "GEMINI.md", ".mcp.json", ".cursor/rules/x.mdc", "cli/.cursorrules", "docs/.claude/commands/x.md", "src/.mcp.json"]) expect(isSensitive(p)).toBe(true);
-  expect(eligibility(["docs/.claude/commands/x.md"], "low").eligible).toBe(false);
+  expect(eligibility(["docs/.claude/commands/x.md"], "low", []).eligible).toBe(false);
 });
