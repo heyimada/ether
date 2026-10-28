@@ -39,7 +39,8 @@ jobs:
         run: |
           trusted=false
           if [ "$AUTHOR_TYPE" = User ] && [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
-            permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$AUTHOR/permission" --jq .permission || echo none)
+            # No fallback: if the lookup fails, the job fails visibly instead of quietly skipping every review.
+            permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$AUTHOR/permission" --jq .permission)
             case "$permission" in admin | maintain | write) trusted=true ;; esac
           fi
           echo "trusted=$trusted" >> "$GITHUB_OUTPUT"
