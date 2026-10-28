@@ -123,3 +123,13 @@ test("touched paths include old names of moved files and refuse a truncated list
   expect(touchedPaths([{ filename: "docs/access.md", previous_filename: "src/server/access.ts" }], 1)).toEqual(["docs/access.md", "src/server/access.ts"]);
   expect(touchedPaths([{ filename: "README.md" }], 3001)).toBeNull();
 });
+
+test("the status says whether a person is needed, the author has to act, or it's only waiting", () => {
+  expect(decide(input()).status).toBe("approved");
+  expect(decide(input({ ci: "pending" })).status).toBe("waiting");
+  expect(decide(input({ reviews: { bugs: null, security: done("security") } })).status).toBe("waiting");
+  expect(decide(input({ ci: "failure" })).status).toBe("blocked");
+  expect(decide(input({ openFindings: 1, ci: "pending" })).status).toBe("blocked");
+  expect(decide(input({ fork: true, ci: "pending" })).status).toBe("human");
+  expect(decide(input({ reviews: { bugs: done("bugs", { state: "errored" }), security: done("security") } })).status).toBe("human");
+});

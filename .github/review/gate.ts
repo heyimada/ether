@@ -31,6 +31,9 @@ export interface GateInput {
 }
 export interface Decision {
   wouldApprove: boolean;
+  // approved; waiting: only things still in progress stand in the way; blocked: the author has something to do; human:
+  // the App won't approve this, a person has to.
+  status: "approved" | "waiting" | "blocked" | "human";
   reasons: string[];
 }
 
@@ -41,9 +44,10 @@ export function decide(i: GateInput): Decision {
   if (i.author.bot) human.push(`${i.author.login} is a bot`);
   else if (!TRUSTED.includes(i.author.permission)) human.push(`${i.author.login} has ${i.author.permission} permission, not write`);
   if (i.fork) human.push("the pull request comes from a fork");
+  const pending: string[] = [];
   for (const lens of Object.keys(LENS_GROUPS) as LensGroup[]) {
     const r = i.reviews[lens];
-    if (!r || r.reviewedSha !== i.headSha) human.push(`the ${lens} review hasn't finished for ${i.headSha.slice(0, 7)}`);
+    if (!r || r.reviewedSha !== i.headSha) pending.push(`the ${lens} review hasn't finished for ${i.headSha.slice(0, 7)}`);
     else if (r.state === "errored") human.push(`the ${lens} review errored`);
   }
   if (i.changesRequestedBy.length) human.push(`${i.changesRequestedBy.join(", ")} requested changes`);
@@ -54,10 +58,12 @@ export function decide(i: GateInput): Decision {
   if (i.draft) blocked.push("the pull request is a draft");
   if (i.noAutomerge) blocked.push(`the ${NO_AUTOMERGE_LABEL} label is set`);
   if (i.openFindings) blocked.push(`${i.openFindings} review finding${i.openFindings === 1 ? " is" : "s are"} unresolved`);
-  if (i.ci !== "success") blocked.push(`CI is ${i.ci === "failure" ? "failing" : "still running"}`);
+  if (i.ci === "failure") blocked.push("CI is failing");
+  if (i.ci === "pending") pending.push("CI is still running");
 
-  if (human.length || blocked.length) return { wouldApprove: false, reasons: [...human.map((r) => `needs human approval: ${r}`), ...blocked] };
-  return { wouldApprove: true, reasons: [`${i.author.login} has ${i.author.permission} permission`, `eligible: ${i.eligibility.reason}`, "both reviews finished with no open findings", "CI passed"] };
+  const status = human.length ? "human" : blocked.length ? "blocked" : pending.length ? "waiting" : "approved";
+  if (status !== "approved") return { wouldApprove: false, status, reasons: [...human.map((r) => `needs human approval: ${r}`), ...blocked, ...pending] };
+  return { wouldApprove: true, status, reasons: [`${i.author.login} has ${i.author.permission} permission`, `eligible: ${i.eligibility.reason}`, "both reviews finished with no open findings", "CI passed"] };
 }
 
 // Each person's latest review that approves, requests changes or was dismissed; comments don't change the verdict.
@@ -127,7 +133,7 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
     ci: ciState(runs),
   };
   const decision = decide(input);
-  const title = decision.wouldApprove ? "Would approve" : "Needs human approval";
+  const title = { approved: REPORT_ONLY ? "Would approve" : "Approved", waiting: "Waiting for reviews or CI", blocked: "Blocked", human: "Needs human approval" }[decision.status];
   const summary = [
     REPORT_ONLY ? "Report-only: the review App doesn't approve or merge yet. This shows what it would do." : "",
     decision.reasons.map((r) => `- ${r}`).join("\n"),
