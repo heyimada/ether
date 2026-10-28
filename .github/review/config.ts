@@ -3,7 +3,7 @@
 export const MODEL = "claude-opus-5-5";
 
 // Report-only: the App posts findings and a neutral "Review gate" check, but never approves or enables auto-merge.
-export const REPORT_ONLY = true;
+export const REPORT_ONLY = false;
 
 // Quick depth: each lens group gets 2 independent finders, and each candidate finding 2 voters. Post only if both say real.
 export const DEPTH = { finders: 2, voters: 2, votesToPost: 2 };
@@ -24,12 +24,23 @@ export const LENS_GROUPS = {
 export type LensGroup = keyof typeof LENS_GROUPS;
 export type Lens = (typeof LENS_GROUPS)[LensGroup][number];
 
-// Changes that touch only these paths can be auto-merged unless the eligibility check escalates them.
-export const LOW_RISK = ["**/*.md", "LICENSE", "design/**", "src/**/*.test.ts", "e2e/**"];
+// Changes that touch only these paths can be auto-merged unless the eligibility check escalates them. Tests aren't
+// here: a change that weakens an assertion looks harmless and isn't, so the eligibility check has to rate it.
+export const LOW_RISK = ["**/*.md", "LICENSE", "design/**"];
 
-// Always need a human, whatever the eligibility check says. Same list as the CODEOWNERS planned for PR B.
+// Always need a human, whatever the eligibility check says. Keep in sync with .github/CODEOWNERS. Agent instruction files
+// are here because they steer every agent that works on the repo, like a system prompt.
 export const SENSITIVE = [
   ".github/**",
+  "CLAUDE.md",
+  "AGENTS.md",
+  "**/CLAUDE.md",
+  "**/AGENTS.md",
+  ".claude/**",
+  "src/server/ci-container.ts",
+  "src/server/ci-secrets.ts",
+  "src/server/secret-box.ts",
+  "src/server/log-mask.ts",
   "src/server/access.ts",
   "src/server/auth.ts",
   "src/server/auth-plugins.ts",

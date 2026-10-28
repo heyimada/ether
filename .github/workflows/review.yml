@@ -1,6 +1,6 @@
 name: Review
 
-# Bug and security review by the engine in .github/review/, posted by the review GitHub App. Report-only for now.
+# Bug and security review by the engine in .github/review/, posted by the review GitHub App.
 #
 # pull_request_target, so the engine and the secrets come from main and a pull request can't change its own reviewer.
 # The pull request's code is checked out into pr/ as data: it is never installed, built or run, and the review agents

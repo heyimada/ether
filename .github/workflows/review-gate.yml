@@ -1,8 +1,8 @@
 name: Merge gate
 
-# Posts the "Review gate" check run (as the review App) with what the App would decide for the pull request's head
-# commit. Report-only for now: it never approves or enables auto-merge. Runs gate.ts from main and never checks out
-# the pull request's code.
+# Posts the "Review gate" check run (as the review App) with its decision for the pull request's head commit. When the
+# change qualifies, the App approves that commit and enables auto-merge; otherwise a person has to approve. Runs gate.ts
+# from main and never checks out the pull request's code.
 #
 # Re-runs when the pull request changes, and through workflow_run when a review, CI or a human review finishes.
 # workflow_run always runs from main with secrets, also for forks, and carries no pull request for them, so gate.ts
@@ -51,7 +51,9 @@ jobs:
           client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
           private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
           permission-checks: write
-          permission-pull-requests: read
+          # Approving, enabling auto-merge and merging. Merges by the App start the push CI on main, unlike GITHUB_TOKEN's.
+          permission-pull-requests: write
+          permission-contents: write
       # gate.ts only uses Bun built-ins, so there is nothing to install.
       - run: |
           if [ -n "$PR" ]; then

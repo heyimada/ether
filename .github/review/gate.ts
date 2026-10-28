@@ -118,8 +118,8 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
 
   const write = github(appToken!);
   const output = { title, summary };
-  // Neutral while report-only, so a check nobody requires yet never shows as a failure.
-  const conclusion = REPORT_ONLY ? "neutral" : decision.wouldApprove ? "success" : "action_required";
+  // Never a failure: a pull request the App won't approve still merges with a person's approval.
+  const conclusion = !REPORT_ONLY && decision.wouldApprove ? "success" : "neutral";
   const existing = runs.find((r) => r.name === GATE_CHECK && r.app && sameBot(r.app.slug, BOT_LOGIN));
   // Without it, "Details" links to the App's homepage instead of the run that made the decision.
   const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId } = process.env;
@@ -127,6 +127,27 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
   if (existing) await write.updateCheckRun(existing.id, { status: "completed", conclusion, details_url, output });
   else await write.createCheckRun({ name: GATE_CHECK, head_sha: head, status: "completed", conclusion, details_url, output });
   console.error(`#${number} at ${head.slice(0, 7)}: ${title}\n${summary}`);
+  if (REPORT_ONLY) return;
+
+  // The App's approval stands in for the human one only when decide() says so, and covers just this head commit:
+  // branch protection dismisses it on the next push. When the decision flips on the same commit (a label, a dismissed
+  // finding), the approval and the auto-merge the App enabled are withdrawn.
+  const appApprovals = (await read.reviews(number)).filter((r) => isReviewBot(r.user, BOT_LOGIN) && r.state === "APPROVED");
+  const appEnabledAutoMerge = !!pull.auto_merge?.enabled_by && isReviewBot(pull.auto_merge.enabled_by, BOT_LOGIN);
+  if (!decision.wouldApprove) {
+    for (const r of appApprovals) await write.dismissReview(number, r.id, `The review gate no longer approves ${head.slice(0, 7)}. See the Review gate check.`);
+    if (appEnabledAutoMerge) await write.disableAutoMerge(pull.node_id);
+    return;
+  }
+  if (!appApprovals.some((r) => r.commit_id === head)) await write.approve(number, head, `Approved by the review gate at ${head.slice(0, 7)}:\n\n${decision.reasons.map((r) => `- ${r}`).join("\n")}`);
+  if (pull.auto_merge) return;
+  try {
+    await write.enableAutoMerge(pull.node_id, head);
+  } catch (e) {
+    // GitHub refuses auto-merge when the pull request can already merge; then merge it now, pinned to this commit.
+    if (!/clean status/i.test((e as Error).message)) throw e;
+    await write.merge(number, head);
+  }
 }
 
 if (import.meta.main) {

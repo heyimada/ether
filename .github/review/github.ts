@@ -16,6 +16,8 @@ export interface Pull {
   labels: { name: string }[];
   head: { sha: string; repo: { full_name: string } | null };
   base: { sha: string; repo: { full_name: string } };
+  node_id: string;
+  auto_merge: { enabled_by: { login: string; type: string } | null } | null;
 }
 export interface PullFile {
   filename: string;
@@ -108,6 +110,13 @@ export function github(token: string) {
     updateIssueComment: (id: number, body: string) => rest<IssueComment>("PATCH", `${repo}/issues/comments/${id}`, { body }),
     createReview: (n: number, review: { commit_id: string; body: string; comments: ReviewComment[] }) =>
       rest<Review>("POST", `${repo}/pulls/${n}/reviews`, { ...review, event: "COMMENT" }),
+    reviews: (n: number) => paginate<Review & { state: string }>(`${repo}/pulls/${n}/reviews`),
+    approve: (n: number, commitId: string, body: string) => rest<Review>("POST", `${repo}/pulls/${n}/reviews`, { commit_id: commitId, body, event: "APPROVE" }),
+    dismissReview: (n: number, id: number, message: string) => rest("PUT", `${repo}/pulls/${n}/reviews/${id}/dismissals`, { message, event: "DISMISS" }),
+    enableAutoMerge: (pullId: string, headSha: string) =>
+      graphql(`mutation($id: ID!, $oid: GitObjectID!) { enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: SQUASH, expectedHeadOid: $oid }) { clientMutationId } }`, { id: pullId, oid: headSha }),
+    disableAutoMerge: (pullId: string) => graphql(`mutation($id: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $id }) { clientMutationId } }`, { id: pullId }),
+    merge: (n: number, sha: string) => rest("PUT", `${repo}/pulls/${n}/merge`, { sha, merge_method: "squash" }),
     reply: (n: number, commentId: number, body: string) => rest("POST", `${repo}/pulls/${n}/comments/${commentId}/replies`, { body }),
     async threads(n: number): Promise<Thread[]> {
       const out: Thread[] = [];
