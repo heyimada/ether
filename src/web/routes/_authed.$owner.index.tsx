@@ -54,6 +54,11 @@ type ProfileData = {
 type Person = { username: string; displayName: string; avatarVersion: number | null };
 type Tab = "overview" | "repositories" | "stars" | "followers" | "following";
 
+// Search params are matched partially by default, so the link without a tab counted as active on every
+// tab: the router gave it the "active" class and data-status too, and the underline went to it first.
+// With explicitUndefined, `tab: undefined` only matches when there is no tab.
+const TAB_MATCH = { includeSearch: true, explicitUndefined: true };
+
 export const Route = createFileRoute("/_authed/$owner/")({
   validateSearch: (s: Record<string, unknown>): { tab?: Tab } => ({
     tab: s.tab === "repositories" || s.tab === "stars" || s.tab === "followers" || s.tab === "following" ? s.tab : undefined,
@@ -90,7 +95,7 @@ function Profile() {
               ["stars", "Stars", data.stars.length],
             ] as const
           ).map(([key, label, count]) => (
-            <Link key={key} to="/$owner" params={{ owner }} search={key === "overview" ? {} : { tab: key }} className={tab === key ? "active" : ""} activeOptions={{ includeSearch: true }}>
+            <Link key={key} to="/$owner" params={{ owner }} search={{ tab: key === "overview" ? undefined : key }} className={tab === key ? "active" : ""} activeOptions={TAB_MATCH}>
               {label}
               {count !== null && <span className="count">{count}</span>}
             </Link>
@@ -499,10 +504,10 @@ function OrgView({ data }: { data: ProfileData }) {
         )}
       </header>
       <TabBar label="Organization sections" activeSelector=".active">
-        <Link to="/$owner" params={{ owner }} search={{}} className={current === "repositories" ? "active" : ""} activeOptions={{ includeSearch: true }}>
+        <Link to="/$owner" params={{ owner }} search={{ tab: undefined }} className={current === "repositories" ? "active" : ""} activeOptions={TAB_MATCH}>
           Repositories<span className="count">{data.repos.length}</span>
         </Link>
-        <Link to="/$owner" params={{ owner }} search={{ tab: "followers" }} className={current === "followers" ? "active" : ""} activeOptions={{ includeSearch: true }}>
+        <Link to="/$owner" params={{ owner }} search={{ tab: "followers" }} className={current === "followers" ? "active" : ""} activeOptions={TAB_MATCH}>
           People<span className="count">{data.members.length}</span>
         </Link>
       </TabBar>
