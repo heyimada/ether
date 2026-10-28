@@ -6,8 +6,8 @@ test("workflow files, auth and the lockfile are sensitive; app code and docs are
   for (const p of ["src/server/routes/repos.ts", "README.md", "cli/src/main.rs", "src/web/app.tsx"]) expect(isSensitive(p)).toBe(false);
 });
 
-test("docs, design and tests are low risk at any depth; source code is not", () => {
-  for (const p of ["README.md", "docs/a/b.md", "design/mock.png", "src/server/x.test.ts", "e2e/git.spec.ts"]) expect(isLowRisk(p)).toBe(true);
+test("docs and design are low risk at any depth; source code is not", () => {
+  for (const p of ["README.md", "docs/a/b.md", "design/mock.png"]) expect(isLowRisk(p)).toBe(true);
   for (const p of ["src/server/ci.ts", "package.json", "vite.config.ts"]) expect(isLowRisk(p)).toBe(false);
 });
 
@@ -34,4 +34,30 @@ test("an empty change is not eligible", () => {
 test("concurrency falls back to 3 unless it's a positive integer", () => {
   for (const raw of [undefined, "", "0", "-2", "abc", "1.5"]) expect(concurrency(raw)).toBe(3);
   expect(concurrency("5")).toBe(5);
+});
+
+test("agent instructions and CI secrets are sensitive; tests alone are no longer low risk", () => {
+  for (const p of ["CLAUDE.md", "docs/CLAUDE.md", "AGENTS.md", ".claude/settings.json", "src/server/secret-box.ts", "src/server/log-mask.ts"]) expect(isSensitive(p)).toBe(true);
+  for (const p of ["src/server/x.test.ts", "e2e/git.spec.ts"]) expect(isLowRisk(p)).toBe(false);
+  expect(eligibility(["CLAUDE.md"], "low").eligible).toBe(false);
+});
+
+test("every SENSITIVE path is covered by CODEOWNERS", async () => {
+  const owners = (await Bun.file(".github/CODEOWNERS").text()).split("\n").filter((l) => l && !l.startsWith("#")).map((l) => l.split(/\s+/)[0]);
+  const covered = (p: string) =>
+    owners.some((o) =>
+      o.startsWith("**/") ? (o.endsWith("/") ? `/${p}`.includes(o.slice(2)) : `/${p}`.endsWith(o.slice(2)))
+      : o.endsWith("/") ? `/${p}`.startsWith(o)
+      : o.startsWith("/") ? `/${p}` === o
+      : p === o || p.endsWith(`/${o}`),
+    );
+  for (const p of [".github/workflows/ci.yml", "CLAUDE.md", "docs/AGENTS.md", ".claude/x", "src/server/access.ts", "src/server/db/schema.ts", "drizzle/0001.sql", "package.json", "bun.lock", "cli/Cargo.toml", "cli/Cargo.lock", "src/server/secret-box.ts", "docs/.claude/commands/x.md", "src/web/.cursor/rules.mdc", "e2e/.mcp.json"]) {
+    expect(isSensitive(p)).toBe(true);
+    expect(covered(p)).toBe(true);
+  }
+});
+
+test("agent files are sensitive in any case and any folder", () => {
+  for (const p of ["Claude.md", "src/web/CLAUDE.local.md", "GEMINI.md", ".mcp.json", ".cursor/rules/x.mdc", "cli/.cursorrules", "docs/.claude/commands/x.md", "src/.mcp.json"]) expect(isSensitive(p)).toBe(true);
+  expect(eligibility(["docs/.claude/commands/x.md"], "low").eligible).toBe(false);
 });

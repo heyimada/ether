@@ -113,7 +113,13 @@ Pull requests from collaborators with write access also get an automated review,
 
 Answer every finding. Either fix it, or resolve the thread with a short reply that says why it isn't a problem. When a later commit fixes a finding, the review resolves the thread itself. A finding resolved by a person instead means a maintainer has to approve the pull request. From the third round on, only the commits since the last review are checked.
 
-For now the review is report-only. It never approves or blocks a pull request. The **Review gate** check says whether the App would approve it. Pull requests from forks, bots and authors without write access get no AI review and always need a human approval.
+The **Review gate** check says whether the App approves the pull request. It approves only when all of these hold, and then it merges the pull request with auto-merge:
+
+- The author has write access to the repository. Bots never qualify.
+- The change is low risk: docs, copy or design files, or something the review rates as low risk. Workflow files, agent instructions (`CLAUDE.md`, `AGENTS.md`, `.claude/`), auth, access control, git and SSH handling, CI secrets, the database schema, migrations and dependencies never are. `.github/CODEOWNERS` lists them, and a maintainer other than the author has to approve those.
+- Both reviews finished for the latest commit, every finding is fixed (a finding resolved by a person doesn't count), and CI passed.
+
+Anything else needs a maintainer's approval as usual. That includes every pull request from a fork. Add the `no-automerge` label to keep the App from approving.
 
 A maintainer reviews the pull request and may ask for changes. Push follow-up commits to the same branch instead of opening a new pull request. If a pull request goes quiet for a while, a polite ping in the thread is welcome.
 
