@@ -109,8 +109,8 @@ export function github(token: string) {
     issueComments: (n: number) => paginate<IssueComment>(`${repo}/issues/${n}/comments`),
     createIssueComment: (n: number, body: string) => rest<IssueComment>("POST", `${repo}/issues/${n}/comments`, { body }),
     updateIssueComment: (id: number, body: string) => rest<IssueComment>("PATCH", `${repo}/issues/comments/${id}`, { body }),
-    createReview: (n: number, review: { commit_id: string; body: string; comments: ReviewComment[] }) =>
-      rest<Review>("POST", `${repo}/pulls/${n}/reviews`, { ...review, event: "COMMENT" }),
+    createReview: (n: number, review: { commit_id: string; body: string; comments: ReviewComment[]; event: "COMMENT" | "REQUEST_CHANGES" }) =>
+      rest<Review>("POST", `${repo}/pulls/${n}/reviews`, review),
     reviews: (n: number) => paginate<Review & { state: string }>(`${repo}/pulls/${n}/reviews`),
     approve: (n: number, commitId: string, body: string) => rest<Review>("POST", `${repo}/pulls/${n}/reviews`, { commit_id: commitId, body, event: "APPROVE" }),
     dismissReview: (n: number, id: number, message: string) => rest("PUT", `${repo}/pulls/${n}/reviews/${id}/dismissals`, { message, event: "DISMISS" }),

@@ -73,6 +73,12 @@ export function changesRequested(reviews: { user: { login: string; type: string 
   return [...latest].filter(([, s]) => s === "CHANGES_REQUESTED").map(([login]) => login);
 }
 
+// The App's requests for changes, once no finding is open. A push doesn't dismiss them the way it does approvals.
+export function staleChangeRequests(reviews: { id: number; user: { login: string; type: string } | null; state: string }[], openFindings: number, botLogin: string): number[] {
+  if (openFindings) return [];
+  return reviews.filter((r) => isReviewBot(r.user, botLogin) && r.state === "CHANGES_REQUESTED").map((r) => r.id);
+}
+
 // Every path a change touches, with the old name of a moved file, so moving a sensitive file out counts as touching it.
 // null when GitHub's list is shorter than the pull request (it stops at 3000 files), so nothing can be ruled out.
 export function touchedPaths(files: { filename: string; previous_filename?: string }[], changedFiles: number): string[] | null {
@@ -154,6 +160,8 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
   // File names come from the pull request and git allows newlines in them; a line starting with "::" would run a
   // workflow command in a job that holds the App's token.
   console.error(`#${number} at ${head.slice(0, 7)}: ${title}: ${decision.reasons.join("; ").replace(/[\r\n]+/g, " ")}`);
+  // Before the report-only return: the App's own request for changes would otherwise block the merge for good.
+  for (const id of staleChangeRequests(prReviews, openFindings, BOT_LOGIN)) await write.dismissReview(number, id, `Every review finding is resolved as of ${head.slice(0, 7)}.`);
   if (REPORT_ONLY) return;
 
   // The App's approval stands in for the human one only when decide() says so, and covers just this head commit:

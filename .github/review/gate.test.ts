@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { fixedMarker } from "./findings";
-import { changesRequested, ciState, decide, touchedPaths, type GateInput } from "./gate";
+import { changesRequested, ciState, decide, staleChangeRequests, touchedPaths, type GateInput } from "./gate";
 import { isReviewBot, resolvedAsFixed, type CheckRun, type Thread } from "./github";
 
 const HEAD = "a".repeat(40);
@@ -117,6 +117,19 @@ test("a person's request for changes always beats the App", () => {
   expect(changesRequested([human("JustKatze", "CHANGES_REQUESTED"), human("JustKatze", "COMMENTED")])).toEqual(["JustKatze"]);
   expect(changesRequested([human("JustKatze", "CHANGES_REQUESTED"), human("JustKatze", "APPROVED")])).toEqual([]);
   expect(changesRequested([{ user: { login: "ether-review[bot]", type: "Bot" }, state: "CHANGES_REQUESTED" }])).toEqual([]);
+});
+
+test("the App's requests for changes are dismissed once no finding is open, and only the App's", () => {
+  const bot = { login: "ether-review[bot]", type: "Bot" };
+  const reviews = [
+    { id: 1, user: bot, state: "CHANGES_REQUESTED" },
+    { id: 2, user: bot, state: "COMMENTED" },
+    { id: 3, user: bot, state: "DISMISSED" },
+    { id: 4, user: { login: "JustKatze", type: "User" }, state: "CHANGES_REQUESTED" },
+    { id: 5, user: { login: "ether-review[bot]", type: "User" }, state: "CHANGES_REQUESTED" },
+  ];
+  expect(staleChangeRequests(reviews, 0, "ether-review[bot]")).toEqual([1]);
+  expect(staleChangeRequests(reviews, 1, "ether-review[bot]")).toEqual([]);
 });
 
 test("touched paths include old names of moved files and refuse a truncated list", () => {
