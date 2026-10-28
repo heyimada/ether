@@ -77,7 +77,8 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
 
   const bot = isBot(pull.user);
   const [permission, files, comments, threads, runs] = await Promise.all([
-    bot ? Promise.resolve<Permission>("none") : read.permission(pull.user.login).catch(() => "none" as const),
+    // Through the App token, the path verified to work; a failed lookup fails the job instead of reading as "none".
+    bot ? Promise.resolve<Permission>("none") : (dryRun ? read : github(appToken!)).permission(pull.user.login),
     read.pullFiles(number),
     read.issueComments(number),
     read.threads(number),

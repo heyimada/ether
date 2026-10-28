@@ -25,14 +25,23 @@ jobs:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: review
     permissions: {}
     outputs:
       trusted: ${{ steps.check.outputs.trusted }}
     steps:
+      # The permission lookup goes through the App, whose token is verified to read it; GITHUB_TOKEN with no
+      # permissions isn't verified to.
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.REVIEW_APP_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+          permission-pull-requests: read
       # The author's live permission, not who pushed last. Bots and forks are never trusted.
       - id: check
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
           AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
