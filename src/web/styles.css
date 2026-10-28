@@ -190,6 +190,8 @@
   --shadow-card: var(--elevation-sm), var(--highlight);
   --shadow-lift: var(--elevation-lift);
   --shadow-pop: var(--elevation-pop);
+  /* Cards that float above the page: the lifted drop plus the lit edge. */
+  --shadow-raised: var(--elevation-lift), var(--highlight);
   --radius-md: var(--radius);
   --font-sans: var(--sans);
   --font-mono: var(--mono);
@@ -221,6 +223,12 @@
   --breakpoint-sm: 640px;
   --breakpoint-md: 720px;
   --breakpoint-lg: 860px;
+  --breakpoint-xl: 900px;
+  --breakpoint-2xl: 1180px;
+
+  --default-transition-timing-function: ease;
+  --animate-page-in: page-in 280ms var(--ease-out) backwards;
+  --animate-pop-in: pop-in 180ms var(--ease-out);
 }
 
 @layer base {
@@ -244,14 +252,9 @@
 
   /* ---------- shell ---------- */
   /* Frosted bar: content scrolls underneath, softened rather than cut off. */
-  .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 24px; padding: 12px 24px; background: var(--surface-glass); -webkit-backdrop-filter: saturate(1.6) blur(14px); backdrop-filter: saturate(1.6) blur(14px); border-bottom: 1px solid var(--border); }
-  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; color: var(--text); letter-spacing: 0.02em; }
-  .brand:hover { text-decoration: none; }
   .brand-mark { position: relative; flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .brand-mark::after { content: ""; position: absolute; inset: 0; margin: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); transition: transform var(--dur) var(--ease-out); }
-  .brand:hover .brand-mark::after { transform: scale(1.5); }
-  .topbar nav { display: flex; gap: 16px; margin-left: auto; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
-  .topbar nav a, .topbar nav button { color: var(--text); font-weight: 500; }
+  a:hover > .brand-mark::after { transform: scale(1.5); }
   .page { position: relative; isolation: isolate; max-width: 1120px; margin: 0 auto; padding: 24px; }
   /* Content-heavy pages (dashboard, repository, profiles) use the wider measure GitHub uses. */
   .page.wide { max-width: 1280px; }
@@ -317,10 +320,6 @@
   .empty::before { content: ""; display: block; width: 28px; height: 28px; margin: 0 auto 10px; background: currentColor; opacity: 0.55; -webkit-mask: var(--icon-inbox) center / contain no-repeat; mask: var(--icon-inbox) center / contain no-repeat; }
 
   .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); text-transform: capitalize; }
-  .state { color: var(--on-state); border: 0; padding: 4px 12px; font-size: 13px; box-shadow: var(--elevation-xs); }
-  .state-open { background: var(--open); }
-  .state-closed { background: var(--closed); }
-  .state-merged { background: var(--merged); }
 
   /* ---------- repository ---------- */
   .repo-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 20px; letter-spacing: -0.01em; }
@@ -362,9 +361,6 @@
   .files .when { color: var(--muted); text-align: right; white-space: nowrap; }
   .clone { display: flex; gap: 8px; align-items: center; }
   .clone input { flex: 1; min-width: 0; padding: 5px 8px; font-size: 12px; background: var(--surface-2); }
-  .copy-icon { display: inline-flex; }
-  .copy-button[data-copied] { border-color: color-mix(in srgb, var(--open) 45%, var(--border)); }
-  .copy-button[data-copied] .copy-icon { color: var(--open); }
   pre.setup { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; overflow-x: auto; }
   .layout-2 { display: grid; grid-template-columns: 1fr 260px; gap: 24px; }
   @media (max-width: 860px) { .layout-2 { grid-template-columns: 1fr; } }
@@ -467,7 +463,6 @@
   .jump-list [cmdk-item][data-selected="true"], .popover-item[data-selected="true"] { background: var(--accent-soft); }
   .jump-name { overflow-wrap: anywhere; }
   @media (max-width: 720px) {
-    .topbar { flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
     .jump { order: 3; flex: 1 1 100%; }
   }
 
@@ -507,69 +502,89 @@
   .stack-sm > label { margin-bottom: -6px; }
 
   /* ---------- signed-out pages ---------- */
-  /* The front door: what Ether is on the left, the form on the right; one column on phones. */
-  .auth { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
-  .auth-hero { position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 20px; padding: 64px clamp(24px, 6vw, 88px); background: radial-gradient(ellipse 80% 60% at 0% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%), radial-gradient(ellipse 70% 50% at 100% 100%, color-mix(in srgb, var(--merged) 9%, transparent), transparent 70%), var(--surface); border-right: 1px solid var(--border); }
+  /* The front door's backdrop: accent and merged-purple glows over a dot grid. */
+  .auth-hero {
+    background:
+      radial-gradient(ellipse 80% 60% at 0% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+      radial-gradient(ellipse 70% 50% at 100% 100%, color-mix(in srgb, var(--merged) 9%, transparent), transparent 70%),
+      var(--surface);
+  }
+  @media (max-width: 900px) {
+    .auth-hero {
+      background: radial-gradient(ellipse 90% 80% at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%);
+    }
+  }
   /* Dot grid that fades out toward the edges. */
-  .auth-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: radial-gradient(var(--dot) 1px, transparent 1.5px); background-size: 22px 22px; -webkit-mask-image: radial-gradient(ellipse 70% 70% at 40% 40%, #000 30%, transparent 80%); mask-image: radial-gradient(ellipse 70% 70% at 40% 40%, #000 30%, transparent 80%); }
-  .auth-hero > * { animation: page-in 360ms var(--ease-out) backwards; }
+  .auth-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image: radial-gradient(var(--dot) 1px, transparent 1.5px);
+    background-size: 22px 22px;
+    mask-image: radial-gradient(ellipse 70% 70% at 40% 40%, #000 30%, transparent 80%);
+  }
+  /* The pitch arrives line by line. */
+  .auth-hero > * {
+    animation: page-in 360ms var(--ease-out) backwards;
+  }
   .auth-hero > :nth-child(2) { animation-delay: 40ms; }
   .auth-hero > :nth-child(3) { animation-delay: 80ms; }
   .auth-hero > :nth-child(4) { animation-delay: 120ms; }
   .auth-hero > :nth-child(5) { animation-delay: 160ms; }
-  .auth-brand { display: flex; align-items: center; gap: 12px; }
-  .auth-brand p { margin: 0; }
-  .brand-mark-lg { width: 40px; height: 40px; border-width: 3px; box-shadow: 0 0 0 6px var(--accent-soft); }
-  .brand-mark-lg::after { width: 12px; height: 12px; }
+
+  .brand-mark-lg {
+    width: 40px;
+    height: 40px;
+    border-width: 3px;
+    box-shadow: 0 0 0 6px var(--accent-soft);
+  }
+  .brand-mark-lg::after {
+    width: 12px;
+    height: 12px;
+  }
   /* A slow breath on the big mark; it is decoration, so it may loop. */
-  .brand-mark-lg::before { content: ""; position: absolute; inset: -9px; border-radius: 50%; border: 1px solid var(--accent); opacity: 0; animation: breathe 3.6s var(--ease-in-out) 1s infinite; }
-  .auth-name { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
-  .auth-headline { margin: 8px 0 0; max-width: 15ch; font-size: clamp(30px, 3.6vw, 46px); font-weight: 700; line-height: 1.08; letter-spacing: -0.035em; text-wrap: balance; }
-  .auth-tag { margin: 0; max-width: 40ch; font-size: 16px; text-wrap: balance; }
-  .auth-features { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; max-width: 560px; }
-  .auth-features li { display: flex; align-items: center; gap: 10px; font-weight: 500; }
-  .auth-features svg { flex: none; box-sizing: content-box; padding: 6px; border-radius: 8px; color: var(--link); background: var(--accent-soft); }
-  .auth-preview { width: min(100%, 460px); margin-top: 12px; overflow: hidden; font-size: 13px; box-shadow: var(--elevation-lift), var(--highlight); transform: perspective(1400px) rotateX(5deg) rotateY(-7deg); transform-origin: left center; }
-  .auth-preview-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
-  .auth-preview-title { font-weight: 600; }
-  .auth-preview-diff { display: flex; flex-direction: column; font-size: 12px; padding: 6px 0; }
-  .auth-preview-diff > span { padding: 1px 14px; white-space: pre; animation: page-in 300ms var(--ease-out) backwards; }
+  .brand-mark-lg::before {
+    content: "";
+    position: absolute;
+    inset: -9px;
+    border-radius: 50%;
+    border: 1px solid var(--accent);
+    opacity: 0;
+    animation: breathe 3.6s var(--ease-in-out) 1s infinite;
+  }
+
+  /* The pull request still life leans back, and its diff and verdicts arrive in turn. */
+  .auth-preview {
+    transform: perspective(1400px) rotateX(5deg) rotateY(-7deg);
+    transform-origin: left center;
+  }
+  .auth-preview-diff > span {
+    padding: 1px 14px;
+    white-space: pre;
+    animation: page-in 300ms var(--ease-out) backwards;
+  }
   .auth-preview-diff > span:nth-child(3) { animation-delay: 240ms; }
   .auth-preview-diff > span:nth-child(4) { animation-delay: 290ms; }
   .auth-preview-diff > span:nth-child(5) { animation-delay: 340ms; }
-  .auth-preview-diff .dl-add { color: var(--add-fg); }
-  .auth-preview-diff .dl-del { color: var(--del-fg); }
-  .auth-preview-foot { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border); }
-  .auth-preview-foot .avatar { width: 22px; height: 22px; }
-  .auth-preview-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); animation: pop-in 260ms var(--ease-out) 440ms backwards; }
-  .auth-preview-chip + .auth-preview-chip { animation-delay: 500ms; }
-  .auth-panel { width: 100%; max-width: 420px; margin: 0 auto; padding: 48px 24px; display: flex; flex-direction: column; justify-content: center; animation: page-in 300ms var(--ease-out) backwards; }
-  .auth-title { font-size: 26px; margin: 0; }
-  .auth-footer { font-size: 13px; text-wrap: balance; }
-  .auth .card { box-shadow: var(--elevation-lift), var(--highlight); }
-  .auth button.primary { min-height: 40px; }
-  button.wide { width: 100%; justify-content: center; }
-  @media (max-width: 900px) {
-    .auth { grid-template-columns: minmax(0, 1fr); min-height: 0; }
-    .auth-hero { align-items: center; text-align: center; gap: 8px; padding: 40px 16px 8px; border-right: 0; background: radial-gradient(ellipse 90% 80% at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%); }
-    .auth-brand { flex-direction: column; gap: 8px; }
-    .auth-headline, .auth-features, .auth-preview { display: none; }
-    .auth-tag { max-width: 32ch; font-size: 14px; }
-    .auth-panel { padding: 24px 16px 48px; }
-    .auth-title { font-size: 20px; text-align: center; }
-    .auth-footer { text-align: center; }
+  .auth-preview-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    animation: pop-in 260ms var(--ease-out) 440ms backwards;
   }
+  .auth-preview-chip + .auth-preview-chip { animation-delay: 500ms; }
+  button.wide { width: 100%; justify-content: center; }
 
   /* ---------- account menu ---------- */
-  .user-trigger { margin-left: auto; background: none; border: 0; padding: 2px; min-height: 0; gap: 4px; border-radius: 999px; color: var(--muted); box-shadow: none; }
-  .user-trigger:hover:not(:disabled) { background: var(--surface-3); }
   .user-trigger .avatar { transition: box-shadow var(--dur) ease; }
   .user-trigger:hover .avatar, .user-trigger[data-state="open"] .avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent); }
-  .user-trigger > svg { transition: transform var(--dur) var(--ease-out); }
-  .user-trigger[data-state="open"] > svg { transform: rotate(180deg); }
   .menu { z-index: 50; min-width: 220px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--elevation-pop); color: var(--text); }
-  .menu-label { padding: 8px 10px; font-size: 13px; overflow-wrap: anywhere; }
-  .menu-sep { height: 1px; margin: 4px 0; background: var(--border); }
   .menu-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); color: var(--text); cursor: pointer; outline: none; font-size: 14px; transition: background-color 90ms ease; }
   .menu-item svg { color: var(--muted); transition: color 90ms ease, transform var(--dur) var(--ease-out); }
   .menu-item:hover, .menu-item[data-highlighted] { background: var(--accent-soft); text-decoration: none; }

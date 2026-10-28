@@ -67,15 +67,17 @@ export function Avatar({ name, size = 20, labelled = false }: { name: string; si
 }
 
 const STATE_LABEL = { open: "Open", closed: "Closed", merged: "Merged" } as const;
+const STATE_TEXT = { open: "text-open", closed: "text-closed", merged: "text-merged" } as const;
+const STATE_FILL = { open: "bg-open", closed: "bg-closed", merged: "bg-merged" } as const;
 
 // State as a labelled icon for list rows; the colour repeats what the icon and label say.
 export function StateIcon({ state, isPull }: { state: "open" | "closed" | "merged"; isPull: boolean }) {
   const Icon = state === "merged" ? GitMerge : isPull ? (state === "open" ? GitPullRequest : GitPullRequestClosed) : state === "open" ? CircleDot : CircleCheck;
-  return <Icon size={16} role="img" aria-label={STATE_LABEL[state]} aria-hidden={false} className={`state-icon state-icon-${state}`} />;
+  return <Icon size={16} role="img" aria-label={STATE_LABEL[state]} aria-hidden={false} className={`shrink-0 ${STATE_TEXT[state]}`} />;
 }
 
 export function StateBadge({ state }: { state: "open" | "closed" | "merged" }) {
-  return <span className={`badge state state-${state}`}>{state[0].toUpperCase() + state.slice(1)}</span>;
+  return <span className={`badge border-0 px-3 py-1 text-sm text-on-state shadow-xs ${STATE_FILL[state]}`}>{state[0].toUpperCase() + state.slice(1)}</span>;
 }
 
 export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
@@ -83,8 +85,7 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
   return (
     <button
       type="button"
-      className="small copy-button"
-      data-copied={copied || undefined}
+      className={`small ${copied ? "border-[color-mix(in_srgb,var(--open)_45%,var(--border))]" : ""}`}
       onClick={async () => {
         await navigator.clipboard.writeText(text);
         setCopied(true);
@@ -92,7 +93,7 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
       }}
     >
       <AnimatePresence initial={false} mode="popLayout">
-        <motion.span key={copied ? "done" : "copy"} className="copy-icon" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.4, opacity: 0 }} transition={snappy}>
+        <motion.span key={copied ? "done" : "copy"} className={`inline-flex ${copied ? "text-open" : ""}`} initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.4, opacity: 0 }} transition={snappy}>
           {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
         </motion.span>
       </AnimatePresence>
@@ -137,36 +138,36 @@ export function RouteProgress() {
 
 // Brand header for the signed-out pages, which double as Ether's front door: what Ether is
 // on one side, the form on the other. On phones the pitch shrinks to the brand line.
+const AUTH_FEATURES = [
+  { Icon: GitBranch, text: "Git over HTTPS and SSH" },
+  { Icon: GitPullRequest, text: "Pull requests with line-by-line reviews" },
+  { Icon: MessageSquareText, text: "Issues, labels, wikis and releases" },
+  { Icon: Workflow, text: "Checks that run on every push" },
+];
+
 export function AuthShell({ title, children, footer }: { title: string; children: ReactNode; footer: ReactNode }) {
   return (
-    <main className="auth">
-      <section className="auth-hero">
-        <div className="auth-brand">
+    <main className="grid min-h-screen grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] max-xl:min-h-0 max-xl:grid-cols-1">
+      <section className="auth-hero relative isolate flex flex-col justify-center gap-5 overflow-hidden border-r border-border px-[clamp(24px,6vw,88px)] py-16 max-xl:items-center max-xl:gap-2 max-xl:border-r-0 max-xl:px-4 max-xl:pt-10 max-xl:pb-2 max-xl:text-center">
+        <div className="flex items-center gap-3 max-xl:flex-col max-xl:gap-2">
           <span className="brand-mark brand-mark-lg" aria-hidden />
-          <p className="auth-name">Ether</p>
+          <p className="m-0 text-3xl font-bold tracking-tight">Ether</p>
         </div>
-        <p className="auth-headline">Code hosting and review, on a server you own.</p>
-        <p className="muted auth-tag">Self-hosted code hosting and review for your team.</p>
-        <ul className="auth-features">
-          <li>
-            <GitBranch size={16} aria-hidden /> Git over HTTPS and SSH
-          </li>
-          <li>
-            <GitPullRequest size={16} aria-hidden /> Pull requests with line-by-line reviews
-          </li>
-          <li>
-            <MessageSquareText size={16} aria-hidden /> Issues, labels, wikis and releases
-          </li>
-          <li>
-            <Workflow size={16} aria-hidden /> Checks that run on every push
-          </li>
+        <p className="mt-2 mb-0 max-w-[15ch] text-[clamp(30px,3.6vw,46px)] leading-[1.08] font-bold tracking-[-0.035em] text-balance max-xl:hidden">Code hosting and review, on a server you own.</p>
+        <p className="m-0 max-w-[40ch] text-lg text-balance text-muted max-xl:max-w-[32ch] max-xl:text-base">Self-hosted code hosting and review for your team.</p>
+        <ul className="mt-1 mb-0 grid max-w-[560px] list-none grid-cols-2 gap-x-5 gap-y-2.5 p-0 max-xl:hidden">
+          {AUTH_FEATURES.map(({ Icon, text }) => (
+            <li key={text} className="flex items-center gap-2.5 font-medium">
+              <Icon size={16} aria-hidden className="box-content shrink-0 rounded-lg bg-accent-soft p-1.5 text-link" /> {text}
+            </li>
+          ))}
         </ul>
         <AuthPreview />
       </section>
-      <section className="auth-panel stack">
-        <h1 className="auth-title">{title}</h1>
+      <section className="stack mx-auto w-full max-w-[420px] animate-page-in justify-center px-6 py-12 max-xl:px-4 max-xl:pt-6 max-xl:pb-12">
+        <h1 className="m-0 text-4xl max-xl:text-center max-xl:text-2xl">{title}</h1>
         {children}
-        <p className="auth-footer muted">{footer}</p>
+        <p className="text-sm text-balance text-muted max-xl:text-center">{footer}</p>
       </section>
     </main>
   );
@@ -175,26 +176,26 @@ export function AuthShell({ title, children, footer }: { title: string; children
 // A still life of a pull request, drawn from the app's own pieces. Decoration only.
 function AuthPreview() {
   return (
-    <div className="auth-preview card" aria-hidden>
-      <div className="auth-preview-head">
-        <GitPullRequest size={16} className="state-icon-open" />
-        <span className="auth-preview-title">Add analytical parser</span>
-        <span className="muted">#42</span>
+    <div className="auth-preview card mt-3 w-[min(100%,460px)] overflow-hidden text-sm shadow-raised max-xl:hidden" aria-hidden>
+      <div className="flex items-center gap-2 border-b border-border bg-surface-2 px-3.5 py-2.5">
+        <GitPullRequest size={16} className="text-open" />
+        <span className="font-semibold">Add analytical parser</span>
+        <span className="text-muted">#42</span>
       </div>
-      <div className="auth-preview-diff mono">
-        <span className="dl-hunk">@@ -1,3 +1,4 @@</span>
+      <div className="auth-preview-diff flex flex-col py-1.5 font-mono text-xs">
+        <span className="bg-hunk-bg text-muted">@@ -1,3 +1,4 @@</span>
         <span>{"  export function parse(input: string) {"}</span>
-        <span className="dl-del">{"-   return input.split(' ');"}</span>
-        <span className="dl-add">{"+   return input.split(/\\s+/)"}</span>
-        <span className="dl-add">{"+     .filter(Boolean);"}</span>
+        <span className="bg-del-bg text-del-fg">{"-   return input.split(' ');"}</span>
+        <span className="bg-add-bg text-add-fg">{"+   return input.split(/\\s+/)"}</span>
+        <span className="bg-add-bg text-add-fg">{"+     .filter(Boolean);"}</span>
         <span>{"  }"}</span>
       </div>
-      <div className="auth-preview-foot">
-        <span className="avatar">M</span>
-        <span className="review-approved auth-preview-chip">
+      <div className="flex items-center gap-2.5 border-t border-border px-3.5 py-2.5">
+        <span className="avatar size-[22px]">M</span>
+        <span className="auth-preview-chip text-open">
           <Check size={14} /> Approved
         </span>
-        <span className="ci-success auth-preview-chip">
+        <span className="auth-preview-chip text-open">
           <CircleCheck size={14} /> Checks passed
         </span>
       </div>

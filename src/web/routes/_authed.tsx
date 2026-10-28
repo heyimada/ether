@@ -38,8 +38,8 @@ function AuthedLayout() {
   }, [me]);
   return (
     <PeopleContext.Provider value={directory}>
-      <header className="topbar">
-        <Link to="/" className="brand">
+      <header className="sticky top-0 z-10 flex items-center gap-6 border-b border-border bg-surface-glass px-6 py-3 backdrop-blur-[14px] backdrop-saturate-[1.6] max-md:flex-wrap max-md:gap-3 max-md:px-4">
+        <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-wide text-fg hover:no-underline">
           <span className="brand-mark" aria-hidden />
           Ether
         </Link>
@@ -47,7 +47,7 @@ function AuthedLayout() {
         {me ? (
           <UserMenu me={me} displayName={directory.get(me.username)?.displayName ?? ""} />
         ) : (
-          <Link to="/login" className="button primary small sign-in">
+          <Link to="/login" className="button primary small">
             Sign in
           </Link>
         )}
@@ -66,17 +66,17 @@ function UserMenu({ me, displayName }: { me: Me; displayName: string }) {
   };
   return (
     <Menu.Root>
-      <Menu.Trigger className="user-trigger" aria-label="Account menu">
+      <Menu.Trigger className="user-trigger group ml-auto min-h-0 gap-1 rounded-full border-0 bg-transparent p-0.5 text-muted shadow-none hover:bg-surface-3" aria-label="Account menu">
         <Avatar name={me.username} size={28} />
-        <ChevronDown size={14} aria-hidden />
+        <ChevronDown size={14} aria-hidden className="transition-transform duration-220 ease-out group-data-[state=open]:rotate-180" />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content className="menu" align="end" sideOffset={8}>
-          <Menu.Label className="menu-label">
+          <Menu.Label className="px-2.5 py-2 text-sm wrap-anywhere">
             Signed in as <strong>{me.username}</strong>
-            {displayName && <span className="muted"> ({displayName})</span>}
+            {displayName && <span className="text-muted"> ({displayName})</span>}
           </Menu.Label>
-          <Menu.Separator className="menu-sep" />
+          <Menu.Separator className="my-1 h-px bg-border" />
           <Menu.Item asChild className="menu-item">
             <Link to="/$owner" params={{ owner: me.username }}>
               <User size={16} aria-hidden /> Your profile
@@ -99,7 +99,7 @@ function UserMenu({ me, displayName }: { me: Me; displayName: string }) {
               </Link>
             </Menu.Item>
           )}
-          <Menu.Separator className="menu-sep" />
+          <Menu.Separator className="my-1 h-px bg-border" />
           <Menu.Item className="menu-item" onSelect={signOut}>
             <LogOut size={16} aria-hidden /> Sign out
           </Menu.Item>

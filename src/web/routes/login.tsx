@@ -30,7 +30,7 @@ function Login() {
         </>
       }
     >
-      <form className="card body" onSubmit={onSubmit(signIn.run)}>
+      <form className="card body shadow-raised" onSubmit={onSubmit(signIn.run)}>
         <ErrorNote error={signIn.error} />
         <Field id="username" label="Username">
           <input id="username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
@@ -38,7 +38,7 @@ function Login() {
         <Field id="password" label="Password">
           <input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </Field>
-        <button className="primary wide" disabled={signIn.pending}>
+        <button className="primary wide min-h-10" disabled={signIn.pending}>
           {signIn.pending ? "Signing in…" : "Sign in"}
         </button>
       </form>
