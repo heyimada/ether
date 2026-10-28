@@ -1,0 +1,65 @@
+name: Merge gate
+
+# Posts the "Review gate" check run (as the review App) with what the App would decide for the pull request's head
+# commit. Report-only for now: it never approves or enables auto-merge. Runs gate.ts from main and never checks out
+# the pull request's code.
+#
+# Re-runs when the pull request changes, and through workflow_run when a review, CI or a human review finishes.
+# workflow_run always runs from main with secrets, also for forks, and carries no pull request for them, so gate.ts
+# finds the pull request by head commit.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  workflow_run:
+    workflows: [Review, Review trigger, CI]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  # Keyed on the head commit for both events, so the newest event for a commit cancels older runs that read staler state.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: 1.4.0
+
+jobs:
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: review
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      # Pinned because this step holds the App's private key; Dependabot bumps it.
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.REVIEW_APP_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+          permission-checks: write
+          permission-pull-requests: read
+      # gate.ts only uses Bun built-ins, so there is nothing to install.
+      - run: |
+          if [ -n "$PR" ]; then
+            bun .github/review/gate.ts --pr "$PR"
+          else
+            bun .github/review/gate.ts --sha "$SHA"
+          fi
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          REVIEW_APP_TOKEN: ${{ steps.app.outputs.token }}
+          REVIEW_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
