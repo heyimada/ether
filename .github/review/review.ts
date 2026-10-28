@@ -29,6 +29,7 @@ import {
   type ReviewState,
   fixedMarker,
   changedPaths,
+  findingTouched,
 } from "./findings";
 import { github, isReviewBot, readToken, resolvedAsFixed, type GitHub, type PullFile, type ReviewComment } from "./github";
 
@@ -91,20 +92,20 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   let costUsd = 0;
   const spend = <T extends { costUsd: number }>(r: T) => ((costUsd += r.costUsd), r);
 
-  // Threads whose finding is fixed at this head get a short reply and are resolved. Only files changed since the finding
-  // was posted are re-checked, and every voter has to agree it's fixed, the same bar as posting it. Threads a person
-  // resolved are re-checked too: authors often fix and resolve in one go, and the reply is what tells the gate it was a fix.
+  // Threads whose finding is fixed at this head get a short reply and are resolved. A thread is re-checked only when its
+  // file, or a file the finding names, changed since it was posted, and every voter has to agree it's fixed, the same
+  // bar as posting it. Threads a person resolved are re-checked too: authors often fix and resolve in one go, and the
+  // reply is what tells the gate it was a fix.
   const resolved: { file: string; title: string; reason: string }[] = [];
   const open = symlink ? [] : botThreads.filter((t) => !resolvedAsFixed(t.thread, BOT_LOGIN) && t.posted.marker.sha !== head);
   const changedSince = new Map<string, Promise<Set<string> | null>>();
-  const touched = async (sha: string, file: string) => {
+  const touched = async (sha: string, file: string, body: string) => {
     if (!changedSince.has(sha)) changedSince.set(sha, read.compare(sha, head).then(changedPaths, () => null));
-    // Unknown after a force push or when the list may be truncated, so check it.
-    return (await changedSince.get(sha)!)?.has(file) ?? true;
+    return findingTouched(await changedSince.get(sha)!, file, body);
   };
   await Promise.all(
     open.map(async ({ thread, posted }) => {
-      if (!(await touched(posted.marker.sha, posted.file))) return;
+      if (!(await touched(posted.marker.sha, posted.file, thread.comment.body))) return;
       const finding = { file: posted.file, line: thread.comment.line, title: posted.title, failure: thread.comment.body };
       const votes = await Promise.all(Array.from({ length: DEPTH.voters }, () => isFixed(finding, PR_DIR).then(spend)));
       const failed = votes.find((v) => !v.ok);
