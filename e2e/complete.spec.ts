@@ -94,7 +94,8 @@ test("header search jumps to a repository or an issue number", async ({ page }) 
 
   const search = page.getByRole("combobox", { name: "Search or jump to" });
   await search.click();
-  await search.fill(name.slice(0, 10));
+  // The whole name: other specs create repos with the same prefix at the same time, and the box shows only 8 matches.
+  await search.fill(name);
   await page.getByRole("option", { name: new RegExp(`admin/${name}`) }).click();
   await expect(page).toHaveURL(`${baseURL()}/admin/${name}`);
   // "#n" jumps within the repository you are looking at, so wait until it has rendered.
