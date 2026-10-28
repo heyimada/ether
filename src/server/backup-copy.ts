@@ -1,5 +1,5 @@
 import { copyFileSync, lstatSync, mkdirSync, readdirSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
-import { basename, join } from "node:path";
+import { join, relative, sep } from "node:path";
 
 type List = (dir: string) => string[];
 const listDir: List = (dir) => readdirSync(dir);
@@ -43,10 +43,13 @@ export function copyTree(from: string, to: string, list: List = listDir) {
 }
 
 // Git's lock, temp and quarantine files come and go during every push; losing one changes nothing in the repository.
-const isGitScratch = (path: string) => {
-  const name = basename(path);
-  return name.endsWith(".lock") || name.startsWith("tmp_") || name.startsWith("incoming-") || name === "gc.pid" || name === "gc.log";
-};
+// path is relative to the repository. Everything inside a quarantine or temp folder counts too: a finished push moves
+// its objects out of objects/incoming-*/ under their ordinary names.
+export function isGitScratch(path: string) {
+  const parts = path.split(sep);
+  const name = parts.at(-1)!;
+  return name.endsWith(".lock") || name === "gc.pid" || name === "gc.log" || parts.some((p) => p.startsWith("incoming-") || p.startsWith("tmp_"));
+}
 
 // Copies a bare repository: loose refs, then packed-refs, then the rest, then objects. While objects are only added,
 // every ref in the copy points at objects copied after it. gc and pack-refs break that by deleting loose objects, old
@@ -60,7 +63,7 @@ export function copyRepoConsistently(from: string, to: string, list: List = list
     rmSync(to, { recursive: true, force: true });
     mkdirSync(to, { recursive: true });
     const lost: string[] = [];
-    const onVanished = (path: string) => void (isGitScratch(path) || lost.push(path));
+    const onVanished = (path: string) => void (isGitScratch(relative(from, path)) || lost.push(path));
     for (const name of entries.toSorted((a, b) => order(a) - order(b))) copyEntry(join(from, name), join(to, name), list, onVanished);
     if (!lost.length) return;
     // The repository itself was deleted while it was being copied.

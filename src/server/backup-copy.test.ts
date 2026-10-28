@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { copyRepoConsistently, copyTree, listIfPresent } from "./backup-copy";
+import { copyRepoConsistently, copyTree, isGitScratch, listIfPresent } from "./backup-copy";
 
 const tmp = mkdtempSync(join(tmpdir(), "backup-copy-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -71,4 +71,24 @@ test("a repository deleted mid-backup is left out, and empty folders are kept", 
   expect(listIfPresent(join(tmp, "nope"))).toBeNull();
   writeFileSync(join(tmp, "file"), "");
   expect(listIfPresent(join(tmp, "file"))).toBeNull();
+});
+
+test("files inside a push's quarantine or a temp folder count as scratch, wherever the repository lives", () => {
+  for (const p of ["shallow.lock", "refs/heads/main.lock", "objects/incoming-a1b2/pack/pack-123.pack", "objects/incoming-a1b2/ab/cdef", "objects/pack/tmp_pack_x", "gc.pid"])
+    expect(isGitScratch(join(...p.split("/")))).toBe(true);
+  for (const p of ["objects/ab/cdef", "objects/pack/pack-123.pack", "refs/heads/main", "packed-refs"]) expect(isGitScratch(join(...p.split("/")))).toBe(false);
+});
+
+test("a push finishing mid-copy, moving objects out of its quarantine folder, doesn't make the repository copy again", () => {
+  const from = bareRepo("quarantine.git");
+  mkdirSync(join(from, "objects", "incoming-a1b2", "pack"), { recursive: true });
+  const listed: string[] = [];
+  // The quarantine's pack is listed, then git moves it into objects/pack/ before the copy reaches it.
+  const list = (dir: string) => {
+    listed.push(dir);
+    const names = readdirSync(dir);
+    return dir === join(from, "objects", "incoming-a1b2", "pack") ? [...names, "pack-123.pack"] : names;
+  };
+  copyRepoConsistently(join(tmp, "quarantine.git"), join(tmp, "quarantine-copy.git"), list);
+  expect(listed.filter((d) => d === from)).toHaveLength(1);
 });
