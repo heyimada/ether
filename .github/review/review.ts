@@ -33,18 +33,10 @@ import {
 } from "./findings";
 import { github, isReviewBot, readToken, resolvedAsFixed, type GitHub, type PullFile, type ReviewComment } from "./github";
 
-const DIFF_BUDGET = 150_000;
-const ELIGIBILITY_DIFF_BUDGET = 60_000;
-
-function renderDiff(files: PullFile[], budget: number): string {
-  let out = "";
-  const skipped: string[] = [];
-  for (const f of files) {
-    const chunk = `--- ${f.filename} (${f.status})\n${f.patch ?? "(no textual diff)"}\n`;
-    if (out.length + chunk.length > budget) skipped.push(f.filename);
-    else out += chunk;
-  }
-  return skipped.length ? `${out}\nToo large to include; read these files yourself:\n${skipped.join("\n")}` : out;
+// The whole diff, never cut: a file left out would hide its removed lines, which the head checkout can't show. A diff
+// too large for the model fails the agent, and a failed review or eligibility check sends the change to a human.
+function renderDiff(files: PullFile[]): string {
+  return files.map((f) => `--- ${f.filename} (${f.status})\n${f.patch ?? "(no textual diff)"}\n`).join("");
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -138,7 +130,7 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
     pr: prNumber,
     title: pull.title,
     body: pull.body ?? "",
-    diff: renderDiff(reviewable, DIFF_BUDGET),
+    diff: renderDiff(reviewable),
     sinceSha,
     prior: prior.map((p) => ({ fingerprint: p.marker.fp, file: p.file, lens: p.marker.lens, title: p.title })),
     cwd: PR_DIR,
@@ -149,7 +141,7 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
     group !== "bugs" ? Promise.resolve(undefined)
     : symlink ? Promise.resolve("errored")
     : files.some((f) => isSensitive(f.filename)) ? Promise.resolve("missing")
-    : classifyEligibility({ ...ctx, diff: renderDiff(files, ELIGIBILITY_DIFF_BUDGET), sinceSha: null }).then((r) => {
+    : classifyEligibility({ ...ctx, diff: renderDiff(files), sinceSha: null }).then((r) => {
         spend(r);
         if (!r.ok) return errors.push(`eligibility: ${r.error}`), "errored";
         return r.value.risk;
@@ -169,7 +161,7 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
     const patches = new Map(files.map((f) => [f.filename, f.patch ?? ""]));
     const voted = await Promise.all(
       findings.map(async (f, i) => {
-        const voterCtx = { ...ctx, diff: renderDiff([{ filename: f.file, status: "modified", patch: patches.get(f.file) }], DIFF_BUDGET) };
+        const voterCtx = { ...ctx, diff: renderDiff([{ filename: f.file, status: "modified", patch: patches.get(f.file) }]) };
         const votes = await Promise.all(Array.from({ length: DEPTH.voters }, () => runVoter(f, findings.slice(0, i), voterCtx).then(spend)));
         for (const v of votes) if (!v.ok) errors.push(`voter ${f.fingerprint}: ${v.error}`);
         const result = tally(f, votes.flatMap((v) => (v.ok ? [v.value] : [])), DEPTH.votesToPost);
