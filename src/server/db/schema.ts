@@ -424,6 +424,27 @@ export const sshKey = sqliteTable(
   (t) => [index("ssh_key_user_idx").on(t.userId)],
 );
 
+// An SSH key that reaches one repository (and its wiki) with its own role, not as any account.
+export const deployKey = sqliteTable(
+  "deploy_key",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    keyType: text("key_type").notNull(),
+    blob: text("blob").notNull().unique(),
+    fingerprint: text("fingerprint").notNull(),
+    readOnly: integer("read_only", { mode: "boolean" }).notNull().default(true),
+    // Pushes made with the key are attributed to whoever added it.
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("deploy_key_repo_idx").on(t.repoId)],
+);
+
 export const ciRun = sqliteTable(
   "ci_run",
   {

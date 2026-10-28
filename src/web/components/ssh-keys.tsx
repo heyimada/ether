@@ -2,13 +2,14 @@ import { useRouter } from "@tanstack/react-router";
 import { KeyRound } from "lucide-react";
 import { useState } from "react";
 import { api, del, post, timeAgo } from "../lib/api";
+import type { Instance } from "../routes/_authed";
 import { ErrorNote, Field, onSubmit, useAction } from "./ui";
 
 export type SshKey = { id: number; title: string; keyType: string; fingerprint: string; createdAt: string; lastUsedAt: string | null };
 
 export const loadSshKeys = () => api<{ keys: SshKey[] }>("/api/me/ssh-keys").then((r) => r.keys);
 
-export function SshKeys({ keys, sshBase }: { keys: SshKey[]; sshBase: string | null }) {
+export function SshKeys({ keys, sshBase, hostKey }: { keys: SshKey[]; sshBase: string | null; hostKey: Instance["sshHostKey"] }) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [key, setKey] = useState("");
@@ -37,6 +38,14 @@ export function SshKeys({ keys, sshBase }: { keys: SshKey[]; sshBase: string | n
             "Git over SSH is turned off on this server; your keys will work once an admin turns it on."
           )}
         </p>
+        {hostKey && (
+          <p className="muted" style={{ margin: 0 }}>
+            On your first connection, check that ssh shows this server's host key fingerprint:{" "}
+            <code aria-label="Host key fingerprint" style={{ overflowWrap: "anywhere" }}>
+              {hostKey.fingerprint}
+            </code>
+          </p>
+        )}
         <ErrorNote error={remove.error} />
         {keys.length > 0 && (
           <ul className="list card" aria-label="SSH keys">

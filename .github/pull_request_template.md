@@ -14,7 +14,7 @@
 
 ## Checklist
 
-- [ ] `bun run build` and `bun run typecheck` pass
+- [ ] `bun run build`, `bun run typecheck` and `bun run test` pass
 - [ ] `bun run test:e2e` passes, and new behavior has an e2e test
 - [ ] For `cli/` changes: `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and `cargo build` are clean
 - [ ] Schema changes include a generated migration in `drizzle/`

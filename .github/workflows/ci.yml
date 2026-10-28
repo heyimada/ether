@@ -30,6 +30,7 @@ jobs:
       # The build generates src/web/routeTree.gen.ts, which the typecheck needs.
       - run: bun run build
       - run: bun run typecheck
+      - run: bun run test
 
   cli:
     name: CLI (Rust)

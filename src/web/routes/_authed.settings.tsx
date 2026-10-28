@@ -46,7 +46,7 @@ function Settings() {
       <h1>Settings</h1>
       <ProfileSettings me={me.username} data={profile} repos={repos} />
       <Appearance saved={me.accent} savedTheme={me.theme} />
-      <SshKeys keys={sshKeys} sshBase={instance.sshBase} />
+      <SshKeys keys={sshKeys} sshBase={instance.sshBase} hostKey={instance.sshHostKey} />
       <h2>Access tokens</h2>
       <p className="muted">
         Git uses personal access tokens instead of your password. When git asks for credentials, enter <code>{me.username}</code> as the username and a

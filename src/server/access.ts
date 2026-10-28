@@ -121,7 +121,8 @@ function resolve(r: typeof repo.$inferSelect, viewerId: string, m: Memberships):
   return { role, relation };
 }
 
-export function repoAccess(viewer: Pick<Viewer, "id">, ownerName: string, repoName: string): RepoAccess | null {
+// A repository by name, regardless of who asks. Callers decide access themselves.
+export function findRepo(ownerName: string, repoName: string): Omit<RepoAccess, "role"> | null {
   const row = db
     .select({ repo, owner: user.username })
     .from(repo)
@@ -129,9 +130,15 @@ export function repoAccess(viewer: Pick<Viewer, "id">, ownerName: string, repoNa
     .where(and(eq(user.username, ownerName.toLowerCase()), eq(repo.name, repoName.toLowerCase())))
     .get();
   if (!row) return null;
-  const access = resolve(row.repo, viewer.id, memberships(viewer.id));
+  return { repo: row.repo, owner: row.owner!, path: repoPath(row.owner!, row.repo.name) };
+}
+
+export function repoAccess(viewer: Pick<Viewer, "id">, ownerName: string, repoName: string): RepoAccess | null {
+  const found = findRepo(ownerName, repoName);
+  if (!found) return null;
+  const access = resolve(found.repo, viewer.id, memberships(viewer.id));
   if (!access) return null;
-  return { repo: row.repo, owner: row.owner!, role: access.role, path: repoPath(row.owner!, row.repo.name) };
+  return { ...found, role: access.role };
 }
 
 export const allows = (role: Role, need: Role) => rank[role] >= rank[need];

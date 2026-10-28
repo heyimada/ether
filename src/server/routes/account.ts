@@ -19,6 +19,7 @@ import { ciAllowed } from "../ci";
 import { config } from "../config";
 import { db } from "../db/client";
 import { accessToken, instanceSetting, invite, profile, user, userPref } from "../db/schema";
+import { hostKeyInfo } from "../ssh";
 
 const MIN_PASSWORD = 10;
 // The accent ends up inside a stylesheet, so nothing but a plain hex colour is stored.
@@ -55,6 +56,7 @@ export const accountRoutes = new Elysia()
     ciEnabled: ciAllowed(),
     // Base for ssh:// clone URLs, or null when git over SSH is off.
     sshBase: config.sshPort ? `ssh://git@${config.sshHost}${config.sshPort === 22 ? "" : `:${config.sshPort}`}` : null,
+    sshHostKey: hostKeyInfo(),
   }))
   .put("/admin/settings", async ({ request, body }) => {
     await requireAdmin(request);
