@@ -4,7 +4,16 @@ import { CiBadge, ciDone, type CiStatus } from "../components/ci";
 import { ErrorNote, useAction } from "../components/ui";
 import { api, post, repoApi, shortSha, timeAgo } from "../lib/api";
 
-type Job = { id: number; name: string; status: CiStatus; log: string; steps: { name: string }[]; startedAt: string | null; finishedAt: string | null };
+type JobDeployment = {
+  environment: string;
+  url: string | null;
+  status: string;
+  reviewers: string[];
+  reviewedBy: string | null;
+  notBefore: string | null;
+  canReview: boolean;
+};
+type Job = { id: number; name: string; status: CiStatus; log: string; steps: { name: string }[]; startedAt: string | null; finishedAt: string | null; deployment: JobDeployment | null };
 type RunDetail = { run: { id: number; sha: string; ref: string; status: CiStatus; message: string; subject: string; createdAt: string }; jobs: Job[] };
 
 export const Route = createFileRoute("/_authed/$owner/$repo/ci/$id")({
@@ -22,7 +31,8 @@ function RunPage() {
   const params = { owner: info.repo.owner, repo: info.repo.name };
   useEffect(() => {
     if (ciDone(run.status)) return;
-    const t = setInterval(() => router.invalidate(), 1500);
+    // A deployment can wait for a reviewer for hours, so check less often meanwhile.
+    const t = setInterval(() => router.invalidate(), run.status === "waiting" ? 5000 : 1500);
     return () => clearInterval(t);
   }, [run.status, router]);
   const act = useAction(async (what: "rerun" | "cancel") => {
@@ -73,11 +83,55 @@ function RunPage() {
             <span className="spacer" />
             <span className="muted num">{duration(j.startedAt, j.finishedAt)}</span>
           </header>
+          {j.deployment && <DeploymentNote job={j} deployment={j.deployment} base={repoApi(info.repo.owner, info.repo.name)} />}
           <LiveLog live={j.status === "running"} label={`${j.name} log`}>
             {j.log || (j.status === "queued" ? "Waiting for a runner…" : "")}
           </LiveLog>
         </section>
       ))}
+    </div>
+  );
+}
+
+// Where a deploy job goes and what it waits for; reviewers approve or reject it here.
+function DeploymentNote({ job, deployment: d, base }: { job: Job; deployment: JobDeployment; base: string }) {
+  const router = useRouter();
+  const review = useAction(async (approve: boolean) => {
+    await post(`${base}/ci/jobs/${job.id}/review`, { approve });
+    await router.invalidate();
+  });
+  const waiting = job.status === "waiting";
+  return (
+    <div className="body stack-sm" style={{ borderBottom: "1px solid var(--border)" }} aria-label={`Deployment of ${job.name}`} role="group">
+      <p style={{ margin: 0 }}>
+        Deploys to <strong className="mono">{d.environment}</strong>
+        {d.url && (
+          <>
+            {" · "}
+            <a href={d.url} target="_blank" rel="noreferrer noopener">
+              {d.url}
+            </a>
+          </>
+        )}
+        {d.reviewedBy && <span className="muted"> · {d.status === "rejected" ? "rejected" : "approved"} by {d.reviewedBy}</span>}
+      </p>
+      {waiting && d.notBefore && <p className="muted" style={{ margin: 0 }}>Waiting until {new Date(d.notBefore).toLocaleString()} before it starts.</p>}
+      {waiting && !d.notBefore && (
+        <p className="muted" style={{ margin: 0 }}>
+          Waiting for {d.reviewers.length === 1 ? d.reviewers[0] : `one of ${d.reviewers.join(", ")}`} to approve.
+        </p>
+      )}
+      {d.canReview && (
+        <div className="row">
+          <ErrorNote error={review.error} />
+          <button className="primary small" onClick={() => review.run(true)} disabled={review.pending}>
+            Approve and deploy
+          </button>
+          <button className="danger small" onClick={() => review.run(false)} disabled={review.pending}>
+            Reject
+          </button>
+        </div>
+      )}
     </div>
   );
 }

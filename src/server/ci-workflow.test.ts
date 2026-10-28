@@ -46,3 +46,29 @@ test("image names that could be read as CLI flags are refused", () => {
   expect(img("-v /:/host")).toThrow();
   expect(img("alpine:3.20")).not.toThrow();
 });
+
+test("jobs may name an environment, alone or with a url", () => {
+  const jobs = parseWorkflow(`jobs:
+  staging:
+    environment: staging
+    steps: [{ run: ./deploy }]
+  prod:
+    environment:
+      name: production
+      url: https://example.com
+    steps: [{ run: ./deploy }]
+  build:
+    steps: [{ run: make }]
+`);
+  expect(jobs.map((j) => j.environment)).toEqual([{ name: "staging", url: null }, { name: "production", url: "https://example.com" }, null]);
+});
+
+test("environment names and urls are checked", () => {
+  const env = (e: string) => () => parseWorkflow(`jobs:\n  t:\n    environment: ${e}\n    steps: [{ run: x }]\n`);
+  expect(env('"prod env"')).toThrow("environment must be a name");
+  expect(env("{ name: prod, url: javascript:alert(1) }")).toThrow("http(s) address");
+  expect(env("{ name: prod, url: ftp://x }")).toThrow("http(s) address");
+  expect(env("{ url: https://x }")).toThrow("environment must be a name");
+  expect(env("prod.eu-1")).not.toThrow();
+});
+

@@ -473,7 +473,7 @@ export const ciRun = sqliteTable(
       .references(() => repo.id, { onDelete: "cascade" }),
     sha: text("sha").notNull(),
     ref: text("ref").notNull(),
-    status: text("status", { enum: ["queued", "running", "success", "failure", "cancelled", "error"] }).notNull(),
+    status: text("status", { enum: ["queued", "waiting", "running", "success", "failure", "cancelled", "error"] }).notNull(),
     // Whose push or re-run started it; failures are reported to them.
     actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
     // Why a run errored before any job ran, e.g. an invalid workflow file.
@@ -495,7 +495,12 @@ export const ciJob = sqliteTable("ci_job", {
   steps: text("steps").notNull(),
   // The container image the job runs in when CI is isolated; null means the server's default.
   image: text("image"),
-  status: text("status", { enum: ["queued", "running", "success", "failure", "cancelled", "error"] }).notNull(),
+  // The environment the job deploys to (see deploy.ts), and the link it names for the deployment.
+  environment: text("environment"),
+  url: text("url"),
+  // While a deploy job waits for its environment's wait timer: when it may start.
+  notBefore: integer("not_before", { mode: "timestamp_ms" }),
+  status: text("status", { enum: ["queued", "waiting", "running", "success", "failure", "cancelled", "error"] }).notNull(),
   log: text("log").notNull().default(""),
   startedAt: integer("started_at", { mode: "timestamp_ms" }),
   finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
@@ -539,3 +544,83 @@ export const ciSecret = sqliteTable(
   },
   (t) => [uniqueIndex("ci_secret_repo_name_idx").on(t.repoId, t.name)],
 );
+
+// A place a repository deploys to, such as production. Jobs name it with `environment:` and it is created
+// on first use; owners add rules: branches that may deploy (patterns as in branch protection; none means any),
+// people who have to approve each deployment, and a wait before it starts.
+export const environment = sqliteTable(
+  "environment",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // JSON array of branch patterns.
+    branches: text("branches").notNull().default("[]"),
+    waitMinutes: integer("wait_minutes").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("environment_repo_name_idx").on(t.repoId, t.name)],
+);
+
+export const environmentReviewer = sqliteTable(
+  "environment_reviewer",
+  {
+    environmentId: integer("environment_id")
+      .notNull()
+      .references(() => environment.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.environmentId, t.userId] })],
+);
+
+// Like ci_secret, but only for jobs deploying to this environment, where they replace a repository secret of the same name.
+export const environmentSecret = sqliteTable(
+  "environment_secret",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    environmentId: integer("environment_id")
+      .notNull()
+      .references(() => environment.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    value: text("value").notNull(),
+    updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("environment_secret_env_name_idx").on(t.environmentId, t.name)],
+);
+
+// One per CI job that deploys to an environment: the history shown per environment and on pull requests.
+export const deployment = sqliteTable(
+  "deployment",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    environmentId: integer("environment_id")
+      .notNull()
+      .references(() => environment.id, { onDelete: "cascade" }),
+    runId: integer("run_id")
+      .notNull()
+      .references(() => ciRun.id, { onDelete: "cascade" }),
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => ciJob.id, { onDelete: "cascade" }),
+    sha: text("sha").notNull(),
+    ref: text("ref").notNull(),
+    actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
+    status: text("status", { enum: ["queued", "waiting", "in_progress", "success", "failure", "cancelled", "rejected"] }).notNull(),
+    url: text("url"),
+    // Who approved or rejected it, when the environment requires a review.
+    reviewedBy: text("reviewed_by").references(() => user.id, { onDelete: "set null" }),
+    reviewedAt: integer("reviewed_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+    finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("deployment_env_idx").on(t.environmentId, t.createdAt), uniqueIndex("deployment_job_idx").on(t.jobId)],
+);
+

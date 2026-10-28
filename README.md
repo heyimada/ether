@@ -89,6 +89,37 @@ An admin can instead choose **On this machine, as the user Ether runs as** (the 
 
 **Secrets.** Owners add them under **Settings → CI secrets**. Values are encrypted in the database with a key derived from the auth secret (so a backup restores them along with it), can't be read back through the API or the UI, and are masked as `***` in logs. They reach a job only as the environment variables it names, and only in a container. Masking only prevents accidents: anyone who can push to the repository can write a workflow that prints a secret in another form, so only store what everyone with write access may know. If the auth secret changes (for example a new `BETTER_AUTH_SECRET`), jobs report that a secret can't be decrypted until it's set again.
 
+## Deployments
+
+A job that names an `environment` deploys there:
+
+```yaml
+jobs:
+  staging:
+    environment: staging
+    steps:
+      - run: ./scripts/deploy.sh staging
+  production:
+    environment:
+      name: production
+      url: https://example.com          # shown on the run and the repository home
+    env:
+      DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+    steps:
+      - run: ./scripts/deploy.sh production
+```
+
+An environment is created the first time a job names it. Under **Settings → Environments** owners can give it rules, all optional:
+
+- **Branches that may deploy**: names or patterns like `main` or `release/*`, matched like protected branches. A job from any other branch fails without running.
+- **Required reviewers**: up to six people with write access. The job waits until one of them clicks **Approve and deploy** on the CI run, or **Reject**, which fails it. Nobody else can answer, the owner included.
+- **Wait timer**: minutes the job waits before it starts, counted from the approval (or from the push when no approval is needed).
+- **Secrets**: like CI secrets, but only for jobs deploying to this environment, where they replace a repository secret of the same name.
+
+A waiting job steps out of the CI queue, so other runs go on, and the run shows as **Waiting** until it continues or is cancelled. Steps get `CI_ENVIRONMENT` with the environment's name. The repository home lists each environment with the commit it currently runs; a pull request whose head commit runs somewhere says **Deployed to …**. `GET /api/repos/:owner/:repo/deployments?environment=…` returns the history.
+
+Reviewers and wait timers decide whether a deployment *starts*, not what it does. Anyone who can push can change the workflow, so keep the credentials that reach production in production's environment secrets: then only a job that passed its rules gets them.
+
 ## Command-line client
 
 `cli/` is a Rust client in the spirit of GitHub's `gh`, built as `ether`:
