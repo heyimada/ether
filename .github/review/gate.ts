@@ -27,8 +27,8 @@ export interface GateInput {
   dismissedFindings: number;
   // People whose latest review asks for changes. Their objection always wins over the App.
   changesRequestedBy: string[];
-  // Commits the App wrote for /fix. Nobody has read those, so a person has to approve.
-  appCommits: number;
+  // Commits the App wrote for /fix. Nobody has read those, so a person has to approve. null when they can't be counted.
+  appCommits: number | null;
   ci: CiState;
 }
 export interface Decision {
@@ -52,7 +52,8 @@ export function decide(i: GateInput): Decision {
     if (!r || r.reviewedSha !== i.headSha) pending.push(`the ${lens} review hasn't finished for ${i.headSha.slice(0, 7)}`);
     else if (r.state === "errored") human.push(`the ${lens} review errored`);
   }
-  if (i.appCommits) human.push(`${i.appCommits} commit${i.appCommits === 1 ? " was" : "s were"} written by /fix`);
+  if (i.appCommits === null) human.push("GitHub didn't list every commit, so commits written by /fix can't be ruled out");
+  else if (i.appCommits) human.push(`${i.appCommits} commit${i.appCommits === 1 ? " was" : "s were"} written by /fix`);
   if (i.changesRequestedBy.length) human.push(`${i.changesRequestedBy.join(", ")} requested changes`);
   if (i.dismissedFindings) human.push(`${i.dismissedFindings} finding${i.dismissedFindings === 1 ? " was" : "s were"} resolved without the review confirming a fix`);
   if (!i.eligibility.eligible) human.push(`not eligible for auto-merge: ${i.eligibility.reason}`);
@@ -84,8 +85,11 @@ export function staleChangeRequests(reviews: { id: number; user: { login: string
 
 // Commits /fix made: by the App, or carrying its trailer, in case GitHub attributes the App's commit some other way.
 // Squashing one into a person's own commit hides it from this count.
-export const appCommits = (commits: PullCommit[], botLogin: string) =>
-  commits.filter((c) => isReviewBot(c.author, botLogin) || c.commit.message.split("\n").includes(FIX_TRAILER)).length;
+// null when GitHub's list is shorter than the pull request, so a /fix commit could be among the missing ones.
+export function appCommits(commits: PullCommit[], total: number, botLogin: string): number | null {
+  if (commits.length < total) return null;
+  return commits.filter((c) => isReviewBot(c.author, botLogin) || c.commit.message.split("\n").includes(FIX_TRAILER)).length;
+}
 
 // Every path a change touches, with the old name of a moved file, so moving a sensitive file out counts as touching it.
 // null when GitHub's list is shorter than the pull request (it stops at 3000 files), so nothing can be ruled out.
@@ -147,7 +151,7 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
     openFindings,
     dismissedFindings,
     changesRequestedBy: changesRequested(prReviews),
-    appCommits: appCommits(commits, BOT_LOGIN),
+    appCommits: appCommits(commits, pull.commits, BOT_LOGIN),
     ci: ciState(runs),
   };
   const decision = decide(input);

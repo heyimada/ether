@@ -158,6 +158,9 @@ async function commit(pr: number, sha: string, from: string, by: { login: string
   if (patch.size > MAX_PATCH_BYTES) return say(`\`/fix\` produced a ${Math.round(patch.size / 1024)} KB patch, more than the ${MAX_PATCH_BYTES / 1024} KB limit, so nothing was pushed.`);
 
   const pull = await write.pull(pr);
+  // A pull request can come from main or a release branch; /fix only ever commits to a topic branch.
+  if ([pull.base.repo.default_branch, pull.base.ref].includes(pull.head.ref) || /^release\//i.test(pull.head.ref))
+    return say(`\`/fix\` doesn't commit to ${sanitize(pull.head.ref, 100).replace(/`/g, "")}, so nothing was pushed.`);
   if (pull.head.sha !== sha) return say(`The branch moved from ${short(sha)} to ${short(pull.head.sha)} while \`/fix\` ran, so nothing was pushed. Comment \`/fix\` again.`);
 
   const git = (...args: string[]) => Bun.spawnSync(["git", "-C", PR_DIR, ...args]);

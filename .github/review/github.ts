@@ -15,9 +15,10 @@ export interface Pull {
   user: { login: string; type: string };
   labels: { name: string }[];
   head: { sha: string; ref: string; repo: { full_name: string } | null };
-  base: { sha: string; repo: { full_name: string } };
+  base: { sha: string; ref: string; repo: { full_name: string; default_branch: string } };
   node_id: string;
   changed_files: number;
+  commits: number;
   auto_merge: { enabled_by: { login: string; type: string } | null } | null;
 }
 export interface PullFile {
@@ -108,7 +109,8 @@ export function github(token: string) {
     pull: (n: number) => rest<Pull>("GET", `${repo}/pulls/${n}`),
     openPulls: () => paginate<Pull>(`${repo}/pulls?state=open`),
     pullFiles: (n: number) => paginate<PullFile>(`${repo}/pulls/${n}/files`),
-    // author is the GitHub account the commit is attributed to, null when its email matches none.
+    // author is the GitHub account the commit is attributed to, null when its email matches none. GitHub lists at most
+    // 250 commits.
     pullCommits: (n: number) => paginate<PullCommit>(`${repo}/pulls/${n}/commits`),
     // Three-dot compare: the changes on head since it diverged from base. status is "ahead" when base is an ancestor.
     compare: (base: string, head: string) => rest<{ status: string; files?: PullFile[] }>("GET", `${repo}/compare/${base}...${head}`),

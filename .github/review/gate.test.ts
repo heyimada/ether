@@ -157,7 +157,12 @@ test("commits written by /fix need a human", () => {
 test("a /fix commit counts by the App as author or by its trailer", () => {
   const c = (author: { login: string; type: string } | null, message = "Fix a thing") => ({ sha: "s", author, commit: { message } });
   const bot = "ether-review[bot]";
-  expect(appCommits([c({ login: "ether-review[bot]", type: "Bot" }), c({ login: "JustKatze", type: "User" })], bot)).toBe(1);
-  expect(appCommits([c(null, `Fix review findings\n\nsummary\n\n${FIX_TRAILER}`)], bot)).toBe(1);
-  expect(appCommits([c({ login: "ether-review", type: "User" }), c(null, `mentions ${FIX_TRAILER} inline`)], bot)).toBe(0);
+  expect(appCommits([c({ login: "ether-review[bot]", type: "Bot" }), c({ login: "JustKatze", type: "User" })], 2, bot)).toBe(1);
+  expect(appCommits([c(null, `Fix review findings\n\nsummary\n\n${FIX_TRAILER}`)], 1, bot)).toBe(1);
+  expect(appCommits([c({ login: "ether-review", type: "User" }), c(null, `mentions ${FIX_TRAILER} inline`)], 2, bot)).toBe(0);
+});
+
+test("a commit list GitHub cut short needs a human", () => {
+  expect(appCommits([], 300, "ether-review[bot]")).toBeNull();
+  expect(blockedBy({ appCommits: null })).toContain("commits written by /fix can't be ruled out");
 });
