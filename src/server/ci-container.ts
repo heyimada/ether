@@ -105,3 +105,27 @@ export const execArgs = (container: string, command: string[]) => [
 
 // Hands the copied checkout (root-owned after `cp`) to the user the image runs as, so steps can write to it.
 export const chownWorkspaceArgs = (container: string, owner: string) => ["exec", "--user", "0", container, "chown", "-R", owner, "/workspace"];
+
+// A container CLI call whose output goes to `append` (the job's log); resolves with its exit code. Never
+// blocks the event loop, always drains both pipes (a chatty image can't stall it) and is killed after `timeoutMs`.
+export async function cli(runtime: string, args: string[], append: (s: string) => void, timeoutMs: number): Promise<number> {
+  const proc = Bun.spawn([runtime, ...args], { stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+  const timer = setTimeout(() => proc.kill(), timeoutMs);
+  const pump = async (s: ReadableStream<Uint8Array>) => {
+    const decoder = new TextDecoder();
+    for await (const chunk of s) append(decoder.decode(chunk, { stream: true }));
+  };
+  try {
+    await Promise.all([pump(proc.stdout as ReadableStream<Uint8Array>), pump(proc.stderr as ReadableStream<Uint8Array>)]);
+    return await proc.exited;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Like cli, but keeps the first `max` characters of the output for the caller instead of logging it.
+export async function collect(runtime: string, args: string[], timeoutMs: number, max = 64 * 1024): Promise<{ code: number; output: string }> {
+  let output = "";
+  const code = await cli(runtime, args, (s) => (output.length < max ? (output += s.slice(0, max - output.length)) : undefined), timeoutMs);
+  return { code, output };
+}

@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chownWorkspaceArgs, createArgs, envScript, execArgs, IMAGE_RE, instanceLabel, shellCommand } from "./ci-container";
+import { chownWorkspaceArgs, collect, createArgs, envScript, execArgs, IMAGE_RE, instanceLabel, shellCommand } from "./ci-container";
 
 test("containers are created locked down and idle, without mounting anything from the host", () => {
   const args = createArgs("ether-ci-1-2", "oven/bun:1", "abc123");
@@ -70,3 +70,23 @@ test("steps default to bash when the image has it, and Windows shells are refuse
   expect(() => shellCommand("cmd", "x")).toThrow("isn't available in a container");
   expect(() => shellCommand("powershell", "x")).toThrow();
 });
+
+// sh stands in for docker here: what matters is how the call treats a command it can't trust.
+test("a container call that never returns is killed at its timeout without blocking the event loop", async () => {
+  let ticks = 0;
+  const timer = setInterval(() => ticks++, 20);
+  const started = Date.now();
+  const res = await collect("sh", ["-c", "sleep 30"], 300);
+  clearInterval(timer);
+  expect(Date.now() - started).toBeLessThan(5000);
+  expect(res.code).not.toBe(0);
+  expect(ticks).toBeGreaterThan(5);
+});
+
+test("endless output is drained and capped instead of stalling the call", async () => {
+  const res = await collect("sh", ["-c", "yes ether"], 500, 1000);
+  expect(res.output.length).toBe(1000);
+  expect(res.code).not.toBe(0);
+  expect(await collect("sh", ["-c", "echo 101:101; echo noise >&2"], 5000)).toEqual({ code: 0, output: expect.stringContaining("101:101") });
+});
+

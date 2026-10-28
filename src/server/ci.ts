@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { chownWorkspaceArgs, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, instanceLabel, shellCommand } from "./ci-container";
+import { chownWorkspaceArgs, cli, collect, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, instanceLabel, shellCommand } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
 import { parseWorkflow, WORKFLOW, type EnvValue, type Shell, type Step } from "./ci-workflow";
 import { config } from "./config";
@@ -56,19 +56,6 @@ function hostEnv() {
 const secretNames = (steps: Step[]) => [...new Set(steps.flatMap((s) => Object.values(s.env ?? {}).flatMap((v) => (typeof v === "string" ? [] : [v.secret]))))];
 const resolveEnv = (env: Record<string, EnvValue> | undefined, secrets: Map<string, string>) =>
   Object.fromEntries(Object.entries(env ?? {}).map(([k, v]) => [k, typeof v === "string" ? v : secrets.get(v.secret)!]));
-
-// A container CLI call whose output goes to the job's log; resolves with its exit code.
-async function cli(runtime: string, args: string[], append: (s: string) => void, timeoutMs: number): Promise<number> {
-  const proc = Bun.spawn([runtime, ...args], { stdout: "pipe", stderr: "pipe", stdin: "ignore" });
-  const timer = setTimeout(() => proc.kill(), timeoutMs);
-  const pump = async (s: ReadableStream<Uint8Array>) => {
-    const decoder = new TextDecoder();
-    for await (const chunk of s) append(decoder.decode(chunk, { stream: true }));
-  };
-  await Promise.all([pump(proc.stdout as ReadableStream<Uint8Array>), pump(proc.stderr as ReadableStream<Uint8Array>)]);
-  clearTimeout(timer);
-  return proc.exited;
-}
 
 const instance = () => instanceLabel(resolve(config.dataDir));
 
@@ -166,9 +153,11 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
       if ((await cli(runtime, ["cp", `${dir}/.`, `${box.name}:/workspace`], append, 10 * 60_000)) !== 0) return fail("✖ Could not copy the checkout into the container");
       if ((await cli(runtime, ["start", box.name], append, 60_000)) !== 0) return fail("✖ Could not start the container");
       // `cp` leaves the checkout owned by root; an image that runs as another user needs it to be theirs.
-      const who = Bun.spawnSync([runtime, "exec", box.name, "sh", "-c", 'echo "$(id -u):$(id -g)"'], { stdout: "pipe", stderr: "pipe" });
-      const owner = new TextDecoder().decode(who.stdout).trim();
-      if (who.exitCode === 0 && /^\d+:\d+$/.test(owner) && owner !== "0:0" && (await cli(runtime, chownWorkspaceArgs(box.name, owner), append, 5 * 60_000)) !== 0)
+      // The image decides what `sh` and `id` do here, so this runs like every other call: async and with a timeout.
+      const who = await collect(runtime, ["exec", box.name, "sh", "-c", 'echo "$(id -u):$(id -g)"'], 30_000);
+      // stdout and stderr arrive together, so pick out the uid:gid line.
+      const owner = who.code === 0 ? (/^(\d+:\d+)$/m.exec(who.output)?.[1] ?? null) : null;
+      if (owner && owner !== "0:0" && (await cli(runtime, chownWorkspaceArgs(box.name, owner), append, 5 * 60_000)) !== 0)
         append(`Could not hand /workspace to the image's user ${owner}; steps may not be able to write to it\n`);
       append("\n");
     }
@@ -281,15 +270,20 @@ export const latestRun = (repoId: number, sha: string) =>
   db.select().from(ciRun).where(and(eq(ciRun.repoId, repoId), eq(ciRun.sha, sha))).orderBy(desc(ciRun.id)).get() ?? null;
 
 // Runs interrupted by a restart can't resume mid-step; queued ones simply continue.
-export function resumeQueue() {
-  // Containers of this server's jobs that a crash or restart interrupted; another Ether's on the same daemon stay.
+// Containers of this server's jobs that a crash or restart interrupted; another Ether's on the same daemon stay.
+// Async and with timeouts, so a slow or wedged daemon can't hold up the server's start.
+async function removeLeftoverContainers() {
   const runtime = containerRuntime();
-  if (runtime) {
-    const list = Bun.spawnSync([runtime, "ps", "--all", "--quiet", "--filter", "label=ether.ci=1", "--filter", `label=ether.ci.instance=${instance()}`]);
-    const ids = list.exitCode === 0 ? new TextDecoder().decode(list.stdout).split(/\s+/).filter(Boolean) : [];
-    if (ids.length) Bun.spawnSync([runtime, "rm", "--force", ...ids]);
-  }
+  if (!runtime) return;
+  const list = await collect(runtime, ["ps", "--all", "--quiet", "--filter", "label=ether.ci=1", "--filter", `label=ether.ci.instance=${instance()}`], 30_000);
+  const ids = list.code === 0 ? list.output.split(/\s+/).filter(Boolean) : [];
+  if (ids.length) await collect(runtime, ["rm", "--force", ...ids], 60_000);
+}
+
+export function resumeQueue() {
   db.update(ciRun).set({ status: "error", message: "Ether restarted while this run was in progress", finishedAt: new Date() }).where(eq(ciRun.status, "running")).run();
   db.update(ciJob).set({ status: "cancelled" }).where(eq(ciJob.status, "running")).run();
+  // Leftovers have unique names, so queued jobs needn't wait for them to go.
+  void removeLeftoverContainers().catch((e) => console.error("Removing leftover CI containers failed:", e));
   void drain();
 }
