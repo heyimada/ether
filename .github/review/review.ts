@@ -186,7 +186,7 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
         (resolved.length ? ` ${plural(resolved.length, "earlier finding")} resolved as fixed.` : ""),
       state === "errored" ? "Part of the review failed, so this commit needs a human review. The workflow log has the details." : "",
       state === "not-applicable" ? "Nothing to review in this commit." : "",
-      round > ROUND_CAP ? `This pull request is past ${ROUND_CAP} review rounds, so only important findings are posted now. If findings keep coming, consider a different approach.` : "",
+      round > ROUND_CAP ? `This pull request is past ${ROUND_CAP} review rounds, so only important findings are posted now.${posted.length ? " If findings keep coming, consider a different approach." : ""}` : "",
       "Answer each finding: fix it, or resolve the thread with a reason.",
       REPORT_ONLY ? "Report-only: this review doesn't approve or block merging yet." : "",
       summaryMarker({ lens: group, round, reviewedSha: head, state, ...(eligibility ? { eligibility } : {}) }),
