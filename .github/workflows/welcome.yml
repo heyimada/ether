@@ -1,0 +1,25 @@
+name: Welcome first-time contributors
+
+# pull_request_target so the comment can be posted on pull requests from forks. This
+# workflow never checks out or runs the pull request's code.
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  welcome:
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/first-interaction@v3
+        with:
+          issue_message: |
+            Thanks for opening your first issue in Ether! A maintainer will take a look soon. If it's a bug, steps to reproduce from a fresh setup help us most.
+          pr_message: |
+            Thanks for your first pull request to Ether! [CONTRIBUTING.md](https://github.com/heyimada/ether/blob/HEAD/CONTRIBUTING.md) explains how to run the checks locally. If the end-to-end tests fail, the `e2e-report` artifact on the CI run has screenshots and the server log.

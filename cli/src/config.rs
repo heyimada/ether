@@ -22,7 +22,9 @@ fn dir() -> Result<PathBuf> {
     if let Ok(d) = std::env::var("ETHER_CONFIG_DIR") {
         return Ok(PathBuf::from(d));
     }
-    Ok(dirs::config_dir().context("no config directory on this system")?.join("ether"))
+    Ok(dirs::config_dir()
+        .context("no config directory on this system")?
+        .join("ether"))
 }
 
 fn path() -> Result<PathBuf> {
@@ -40,7 +42,7 @@ impl Config {
             return Ok(Config::default());
         }
         let text = fs::read_to_string(&p).with_context(|| format!("reading {}", p.display()))?;
-        Ok(serde_json::from_str(&text).with_context(|| format!("{} is not valid", p.display()))?)
+        serde_json::from_str(&text).with_context(|| format!("{} is not valid", p.display()))
     }
 
     pub fn save(&self) -> Result<()> {
@@ -63,11 +65,9 @@ impl Config {
             .map(|h| normalize_host(&h))
             .or_else(|| self.default.clone())
             .context("not logged in; run `ether auth login --host <url>`")?;
-        let entry = self
-            .hosts
-            .get(&host)
-            .cloned()
-            .with_context(|| format!("not logged in to {host}; run `ether auth login --host {host}`"))?;
+        let entry = self.hosts.get(&host).cloned().with_context(|| {
+            format!("not logged in to {host}; run `ether auth login --host {host}`")
+        })?;
         Ok((host, entry))
     }
 }

@@ -1,0 +1,69 @@
+name: Bug report
+description: Something in Ether doesn't work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please search the [open issues](https://github.com/heyimada/ether/issues) first.
+        **Security problems go to [private reporting](https://github.com/heyimada/ether/security/advisories/new), not here.**
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Start from a fresh setup if you can (`bun run ether create-admin …`, then `bun run start`).
+      placeholder: |
+        1. Create a repository …
+        2. Push a branch named …
+        3. Open …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - Web UI
+        - API
+        - Git over HTTPS
+        - Git over SSH
+        - CI
+        - Admin command (`bun run ether …`)
+        - Command-line client (`cli/`)
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Ether commit
+      description: Output of `git rev-parse --short HEAD` in your Ether checkout.
+      placeholder: 95191da
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, `bun --version`, browser (for UI bugs), git version (for git bugs), and how Ether is reached (localhost, Tailscale serve, reverse proxy …).
+      placeholder: |
+        OS: Ubuntu 24.04
+        Bun: 1.4.0
+        Browser: Firefox 140
+        Reached via: tailscale serve
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Server output, browser console errors, or `git` output with `GIT_TRACE=1`. Remove tokens and passwords before you paste.
+      render: shell
