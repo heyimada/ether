@@ -9,7 +9,10 @@ import { SEVERITIES, type Candidate, type Finding, type Vote } from "./findings"
 
 export type AgentResult<T> = { ok: true; value: T; costUsd: number } | { ok: false; error: string; costUsd: number };
 
-const TOOLS = ["Read", "Grep", "Glob"];
+export const TOOLS = ["Read", "Grep", "Glob"];
+// The /fix agent also edits, inside the same checkout. Never Bash: running the pull request's code in a job on main
+// would let it write main's Actions cache.
+export const EDIT_TOOLS = [...TOOLS, "Edit", "Write"];
 // The SDK delivers outputFormat results through this tool call, so the hook has to let it through.
 const OUTPUT_TOOL = "StructuredOutput";
 const GLOB_CHARS = /[*?[\]]/;
@@ -74,13 +77,13 @@ export function findSymlink(dir: string): string | null {
 }
 
 // Returns why a tool call must be denied, or null if it stays inside root. root must already be a realpath.
-export function denyReason(root: string, tool: string, input: Record<string, unknown>): string | null {
+export function denyReason(root: string, tool: string, input: Record<string, unknown>, tools = TOOLS): string | null {
   if (tool === OUTPUT_TOOL) return null;
-  if (!TOOLS.includes(tool)) return `${tool} is not available in this review`;
+  if (!tools.includes(tool)) return `${tool} is not available in this review`;
   const str = (k: string) => (typeof input[k] === "string" && input[k] ? (input[k] as string) : null);
   const base = str("path") ?? root;
   if (!inside(root, base)) return "path is outside the pull request checkout";
-  if (tool === "Read" && !inside(root, str("file_path") ?? "")) return "file is outside the pull request checkout";
+  if (["Read", "Edit", "Write"].includes(tool) && !inside(root, str("file_path") ?? "")) return "file is outside the pull request checkout";
   if (tool === "Glob" && !patternInside(root, resolve(root, base), str("pattern") ?? "")) return "pattern reaches outside the pull request checkout";
   if (tool === "Grep" && str("glob") && !patternInside(root, resolve(root, base), str("glob")!)) return "glob reaches outside the pull request checkout";
   return null;
@@ -95,13 +98,17 @@ export function agentEnv(): Record<string, string> {
   return env;
 }
 
-async function run<T>(prompt: string, schema: Record<string, unknown>, maxTurns: number, cwd: string): Promise<AgentResult<T>> {
-  const root = realpathSync(cwd);
-  const sandbox: HookCallback = async (input) => {
+// Denies every tool call that leaves root, which must already be a realpath.
+export function sandbox(root: string, tools = TOOLS): HookCallback {
+  return async (input) => {
     if (input.hook_event_name !== "PreToolUse") return {};
-    const reason = denyReason(root, input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>);
+    const reason = denyReason(root, input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>, tools);
     return reason ? { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } } : {};
   };
+}
+
+async function run<T>(prompt: string, schema: Record<string, unknown>, maxTurns: number, cwd: string): Promise<AgentResult<T>> {
+  const root = realpathSync(cwd);
   const env = agentEnv();
 
   return limit(async () => {
@@ -117,7 +124,7 @@ async function run<T>(prompt: string, schema: Record<string, unknown>, maxTurns:
           persistSession: false,
           env,
           cwd: root,
-          hooks: { PreToolUse: [{ hooks: [sandbox] }] },
+          hooks: { PreToolUse: [{ hooks: [sandbox(root)] }] },
           outputFormat: { type: "json_schema", schema },
           maxTurns,
         },

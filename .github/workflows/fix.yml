@@ -3,10 +3,10 @@ name: Fix
 # A "/fix" comment on a pull request asks an agent to fix the open review findings. Only works when both the commenter
 # and the pull request's author have write access and the branch is in this repository.
 #
-# issue_comment always runs this file from main, never the pull request's copy. The job that runs the pull request's
-# code (the agent may install it and run its tests) holds only a Claude token from the fix environment, no GitHub
-# token that can write. The job that holds the App token never runs that code: it checks the patch and commits it
-# through the API as the App. A commit by the App makes the merge gate ask for a person's approval.
+# issue_comment always runs this file from main, never the pull request's copy. Because these jobs run on main, nothing
+# here runs the pull request's code: it could write cache entries that main's CI restores. The agent only reads and
+# edits files in pr/, and holds only a Claude token from the fix environment. The job that holds the App token checks
+# the patch and commits it through the API as the App. A commit by the App makes the merge gate ask for a person's approval.
 on:
   issue_comment:
     types: [created]
@@ -27,6 +27,7 @@ jobs:
     outputs:
       trusted: ${{ steps.check.outputs.trusted }}
       sha: ${{ steps.check.outputs.sha }}
+      bot-login: ${{ steps.app.outputs.app-slug }}[bot]
     steps:
       # Pinned because this step holds the App's private key; Dependabot bumps it.
       - id: app
@@ -82,6 +83,8 @@ jobs:
           ref: ${{ needs.trust.outputs.sha }}
           path: pr
           persist-credentials: false
+      # A symlink could point the agent's file tools outside pr/. fix.ts also refuses to run if one is left.
+      - run: find pr -type l -delete
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
@@ -90,11 +93,12 @@ jobs:
         env:
           PR: ${{ github.event.issue.number }}
           GITHUB_TOKEN: ${{ github.token }}
-      # No GitHub token in this step: the agent runs the pull request's code here.
-      - run: bun .github/review/fix.ts edit
+          REVIEW_BOT_LOGIN: ${{ needs.trust.outputs.bot-login }}
+      - run: bun .github/review/fix.ts edit --sha "$SHA"
         env:
+          SHA: ${{ needs.trust.outputs.sha }}
           FIX_REQUEST: ${{ github.event.comment.body }}
-          # Its own secret, not the review's: the pull request's code can read it. Without it the agent can't log in.
+          # Its own secret, not the review's. Without it the agent can't log in.
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.FIX_CLAUDE_CODE_OAUTH_TOKEN }}
       - uses: actions/upload-artifact@v7
         with:
@@ -107,8 +111,8 @@ jobs:
   commit:
     name: Commit
     needs: [trust, fix]
-    # Also after a failed fix job, to say so on the pull request.
-    if: ${{ always() && needs.trust.outputs.trusted == 'true' }}
+    # Also after a failed fix job, to say so on the pull request. Not after a cancelled one: a newer /fix replaced it.
+    if: ${{ always() && needs.trust.outputs.trusted == 'true' && needs.fix.result != 'cancelled' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: review

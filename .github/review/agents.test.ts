@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { denyReason, findSymlink, limiter } from "./agents";
+import { denyReason, EDIT_TOOLS, findSymlink, limiter } from "./agents";
 
 // realpath matters: on macOS the temp dir is /var/folders/..., which is a symlink to /private/var/....
 const tmp = realpathSync(mkdtempSync(join(tmpdir(), "review-sandbox-")));
@@ -77,6 +77,16 @@ test("a symlink anywhere in the checkout is found without following it", () => {
 test("tools other than the read-only three are denied; the structured output tool is allowed", () => {
   expect(denyReason(root, "Bash", { command: "env" })).not.toBeNull();
   expect(denyReason(root, "Write", { file_path: "src/a.ts", content: "" })).not.toBeNull();
+});
+
+test("the /fix agent edits inside the checkout and nowhere else, and never runs anything", () => {
+  const fix = (tool: string, input: Record<string, unknown>) => denyReason(root, tool, input, EDIT_TOOLS);
+  expect(fix("Edit", { file_path: "src/a.ts", old_string: "a", new_string: "b" })).toBeNull();
+  expect(fix("Write", { file_path: join(root, "src/new.ts"), content: "" })).toBeNull();
+  expect(fix("Write", { file_path: "up/evil.js", content: "" })).not.toBeNull();
+  expect(fix("Edit", { file_path: "/home/runner/work/_actions/x/dist/index.js", old_string: "a", new_string: "b" })).not.toBeNull();
+  expect(fix("Write", { file_path: "../escape.ts", content: "" })).not.toBeNull();
+  expect(fix("Bash", { command: "bun install" })).not.toBeNull();
   expect(denyReason(root, "WebFetch", { url: "https://example.com" })).not.toBeNull();
   expect(denyReason(root, "StructuredOutput", { anything: 1 })).toBeNull();
 });
