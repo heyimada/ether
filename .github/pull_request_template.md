@@ -8,6 +8,10 @@
 
 <!-- The e2e specs you added or ran, plus any manual steps. -->
 
+## How to undo this
+
+<!-- How to roll this back if it goes wrong: revert the commit, a migration to undo, a setting to switch off. -->
+
 ## Screenshots
 
 <!-- For UI changes: before and after, in light and dark theme if colors are involved. Delete this section otherwise. -->
@@ -20,3 +24,4 @@
 - [ ] Schema changes include a generated migration in `drizzle/`
 - [ ] New data is only shown to people who can read it (see `src/server/access.ts`)
 - [ ] The README is updated for changed commands, environment variables or behavior
+- [ ] I directed and reviewed this change, and I can explain every line
