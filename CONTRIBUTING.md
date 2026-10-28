@@ -116,7 +116,7 @@ Answer every finding. Either fix it, or resolve the thread with a short reply th
 The **Review gate** check says whether the App approves the pull request. It approves only when all of these hold, and then it merges the pull request with auto-merge:
 
 - The author has write access to the repository. Bots never qualify.
-- The change is low risk: docs, copy or design files, or something the review rates as low risk. Workflow files, agent instructions (`CLAUDE.md`, `AGENTS.md`, `.claude/`), auth, access control, git and SSH handling, CI secrets, the database schema, migrations and dependencies never are. `.github/CODEOWNERS` lists them, and a maintainer other than the author has to approve those.
+- The change is low risk: docs or design files, or a change the review rates as low risk. A feature or bug fix can qualify when it is contained, a revert fully undoes it, it keeps existing routes, CLI commands and protocols working, and tests in the pull request cover it, or it is a visual or copy change you can check by reading it. Workflow files, agent instructions (`CLAUDE.md`, `AGENTS.md`, `.claude/`), auth, access control, git and SSH handling, CI secrets, the database schema, migrations and dependencies never are. `.github/CODEOWNERS` lists them, and a maintainer other than the author has to approve those.
 - Both reviews finished for the latest commit, every finding is fixed (a finding resolved by a person doesn't count), and CI passed.
 
 Anything else needs a maintainer's approval as usual. That includes every pull request from a fork. Add the `no-automerge` label to keep the App from approving.

@@ -15,7 +15,7 @@ export const ROUND_CAP = 3;
 export const concurrency = (raw: string | undefined) => (raw && /^[1-9]\d*$/.test(raw) ? Number(raw) : 3);
 export const CONCURRENCY = concurrency(process.env.REVIEW_CONCURRENCY);
 
-export const MAX_TURNS = { finder: 60, voter: 30, isFixed: 20, eligibility: 15 };
+export const MAX_TURNS = { finder: 60, voter: 30, isFixed: 20, eligibility: 30 };
 
 export const LENS_GROUPS = {
   bugs: ["correctness", "lifecycle", "contracts"],
