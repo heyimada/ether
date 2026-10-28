@@ -252,7 +252,7 @@ export async function classifyEligibility(ctx: Context): Promise<AgentResult<{ r
 - Existing behavior others rely on keeps working: HTTP routes, the git and SSH protocols, the CLI's commands, flags and output, and the web app's URLs only gain things; nothing is removed or renamed.
 - Changed or new behavior is covered by tests in the diff that would fail without the change, or it is a visual or copy change you can verify by reading it.
 - No tests or assertions are deleted, skipped or loosened.
-"not-low" is anything else, and always: how requests are authenticated or authorized, how user input reaches the shell, git, the filesystem or SQL, secrets, rate limits or resource limits, error handling that could hide failures, and the build or CI. When unsure, answer "not-low".`,
+"not-low" is anything else, and always: how requests are authenticated or authorized, permissions and branch protection, git or SSH handling (including push hooks and what a push may change), how user input reaches the shell, git, the filesystem or SQL, secrets, rate limits or resource limits, error handling that could hide failures, and the build or CI. When unsure, answer "not-low".`,
   ].join("\n\n");
   return run(
     prompt,
