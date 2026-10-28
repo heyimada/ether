@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9b4bff93-b11e-48f7-b9ee-0391a0b06fd3",
+  "id": "5054e4cb-e074-43b2-9032-2ef4519b6ed2",
   "prevId": "3a3f9b93-b4dc-4d7b-8272-5ed5b1288a8f",
   "tables": {
     "access_token": {
@@ -86,6 +86,92 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "branch_protection": {
+      "name": "branch_protection",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "repo_id": {
+          "name": "repo_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pattern": {
+          "name": "pattern",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "require_pull_request": {
+          "name": "require_pull_request",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "allow_force_push": {
+          "name": "allow_force_push",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "allow_deletion": {
+          "name": "allow_deletion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "branch_protection_repo_pattern_idx": {
+          "name": "branch_protection_repo_pattern_idx",
+          "columns": [
+            "repo_id",
+            "pattern"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "branch_protection_repo_id_repo_id_fk": {
+          "name": "branch_protection_repo_id_repo_id_fk",
+          "tableFrom": "branch_protection",
+          "tableTo": "repo",
+          "columnsFrom": [
+            "repo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "ci_job": {
       "name": "ci_job",
       "columns": {
@@ -115,13 +201,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "image": {
-          "name": "image",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "status": {
@@ -280,94 +359,6 @@
           "tableTo": "user",
           "columnsFrom": [
             "actor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "ci_secret": {
-      "name": "ci_secret",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "repo_id": {
-          "name": "repo_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "value": {
-          "name": "value",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "ci_secret_repo_name_idx": {
-          "name": "ci_secret_repo_name_idx",
-          "columns": [
-            "repo_id",
-            "name"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "ci_secret_repo_id_repo_id_fk": {
-          "name": "ci_secret_repo_id_repo_id_fk",
-          "tableFrom": "ci_secret",
-          "tableTo": "repo",
-          "columnsFrom": [
-            "repo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "ci_secret_updated_by_user_id_fk": {
-          "name": "ci_secret_updated_by_user_id_fk",
-          "tableFrom": "ci_secret",
-          "tableTo": "user",
-          "columnsFrom": [
-            "updated_by"
           ],
           "columnsTo": [
             "id"

@@ -110,8 +110,15 @@
     {
       "idx": 15,
       "version": "6",
-      "when": 1793213186863,
-      "tag": "0015_ci_isolation",
+      "when": 1793189887083,
+      "tag": "0015_branch_protection",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1793215341722,
+      "tag": "0016_ci_isolation",
       "breakpoints": true
     }
   ]

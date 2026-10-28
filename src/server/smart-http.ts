@@ -1,4 +1,5 @@
 import { fixHead } from "./git";
+import type { Guard } from "./protection";
 
 export type Service = "git-upload-pack" | "git-receive-pack";
 
@@ -10,8 +11,9 @@ const noCache = {
   Expires: "Fri, 01 Jan 1980 00:00:00 GMT",
 };
 
-function spawnService(service: Service, repo: string, advertise: boolean) {
-  const args = [service.slice(4), "--stateless-rpc"];
+
+function spawnService(service: Service, repo: string, advertise: boolean, guard: Guard = { args: [], env: {} }) {
+  const args = [...guard.args, service.slice(4), "--stateless-rpc"];
   if (advertise) args.push("--advertise-refs");
   args.push(repo);
   return Bun.spawn(["git", ...args], {
@@ -19,7 +21,7 @@ function spawnService(service: Service, repo: string, advertise: boolean) {
     stdout: "pipe",
     stderr: "pipe",
     // Protocol v0/v1 only: the advertisement framing below is the v0 form.
-    env: { ...process.env, GIT_PROTOCOL: "", GIT_CONFIG_NOSYSTEM: "1" },
+    env: { ...process.env, ...guard.env, GIT_PROTOCOL: "", GIT_CONFIG_NOSYSTEM: "1" },
   });
 }
 
@@ -42,8 +44,8 @@ export function advertiseRefs(service: Service, repo: string): Response {
 
 // POST /git-upload-pack and /git-receive-pack. Both directions are streamed: pushes arrive
 // chunked with no Content-Length and can be far larger than memory should hold.
-export function runService(service: Service, repo: string, req: Request, afterPush?: () => Promise<void>): Response {
-  const proc = spawnService(service, repo, false);
+export function runService(service: Service, repo: string, req: Request, afterPush?: () => Promise<void>, guard?: Guard): Response {
+  const proc = spawnService(service, repo, false, guard);
   let input = req.body;
   const encoding = req.headers.get("content-encoding")?.toLowerCase();
   if (input && (encoding === "gzip" || encoding === "x-gzip")) input = input.pipeThrough(new DecompressionStream("gzip"));

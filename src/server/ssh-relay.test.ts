@@ -3,11 +3,12 @@ import { randomBytes } from "node:crypto";
 import type { EventEmitter } from "node:events";
 import type { AddressInfo } from "node:net";
 import { Client, Server, utils, type Connection, type ServerChannel } from "ssh2";
-import { channelPump } from "./ssh-relay";
+import { channelPump, hangUps, type HangUp } from "./ssh-relay";
 
 // A real ssh2 server streams endless output, like a big clone, to a client that hangs up partway.
 // The pump has to finish anyway, or every aborted clone leaves a handler waiting forever.
-async function abortedTransfer(setup: (stream: ServerChannel, conn: Connection) => { closers: EventEmitter[] }) {
+// `hangUp` is how the client leaves: closing just the channel, or ending the whole connection.
+async function abortedTransfer(hangUp: "channel" | "connection", setup: (stream: ServerChannel, conn: Connection) => HangUp[]) {
   let pumped: Promise<void> | null = null;
   let killed = false;
   // Writing to a closed channel is what used to hang: write() returns false and drain never comes.
@@ -18,12 +19,12 @@ async function abortedTransfer(setup: (stream: ServerChannel, conn: Connection) 
       conn.on("session", (accept) =>
         accept().on("exec", (ok) => {
           const stream = ok();
-          const { closers } = setup(stream, conn);
+          const signals = setup(stream, conn);
           let closed = false;
-          for (const c of closers) c.once("close", () => (closed = true));
+          for (const [emitter, event] of signals) emitter.once(event, () => (closed = true));
           const write = stream.write.bind(stream);
           stream.write = ((chunk: Uint8Array) => (closed && writesAfterClose++, write(chunk))) as typeof stream.write;
-          const relay = channelPump(closers, () => (killed = true));
+          const relay = channelPump(signals, () => (killed = true));
           // Stands in for git's stdout: once the process is killed, what's left in the pipe still comes out, then it ends.
           let leftInPipe = 4;
           const output = new ReadableStream<Uint8Array>({ pull: (c) => (killed && leftInPipe-- === 0 ? c.close() : c.enqueue(randomBytes(64 * 1024))) });
@@ -45,7 +46,11 @@ async function abortedTransfer(setup: (stream: ServerChannel, conn: Connection) 
         channel.on("data", (chunk: Buffer) => {
           received += chunk.length;
           // Hang up after a few windows' worth, while the server is still writing.
-          if (received > 4 * 1024 * 1024) client.end(), resolve();
+          if (received > 4 * 1024 * 1024 && received - chunk.length <= 4 * 1024 * 1024) {
+            if (hangUp === "channel") channel.close();
+            else client.end();
+            resolve();
+          }
         });
       }),
     );
@@ -54,18 +59,20 @@ async function abortedTransfer(setup: (stream: ServerChannel, conn: Connection) 
   });
 
   const finished = await Promise.race([pumped!.then(() => true), Bun.sleep(3000).then(() => false)]);
+  client.end();
   server.close();
   return { finished, killed, writesAfterClose };
 }
 
-test("the pump finishes when the channel closes mid-transfer", async () => {
+test("the pump finishes when the client closes the channel mid-transfer", async () => {
   // The channel's input flows, as with the stdin feed in ssh.ts, so ssh2 emits the channel's close.
-  const r = await abortedTransfer((stream) => (stream.on("data", () => {}), { closers: [stream] }));
+  const r = await abortedTransfer("channel", (stream) => (stream.on("data", () => {}), [[stream, "close"]]));
   expect(r).toEqual({ finished: true, killed: true, writesAfterClose: 0 });
 });
 
-test("the pump finishes when the connection drops while the channel's input is paused", async () => {
-  // A paused channel never ends its input, so ssh2 never closes it; the connection's close still counts.
-  const r = await abortedTransfer((stream, conn) => (stream.pause(), { closers: [stream, conn] }));
+test("the pump finishes when the client hangs up while the channel's input is paused", async () => {
+  // A paused channel never ends its input, so ssh2 never closes it; the connection ending still counts,
+  // even while its close waits behind buffered output.
+  const r = await abortedTransfer("connection", (stream, conn) => (stream.pause(), hangUps(stream, conn)));
   expect(r).toEqual({ finished: true, killed: true, writesAfterClose: 0 });
 });
