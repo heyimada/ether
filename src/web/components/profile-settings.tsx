@@ -1,7 +1,7 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { api, del, patch, put } from "../lib/api";
-import { Avatar, ErrorNote, Field, onSubmit, useAction } from "./ui";
+import { Avatar, ErrorNote, Field, onSubmit, ROW, useAction } from "./ui";
 
 export type MyProfile = {
   profile: {
@@ -22,9 +22,11 @@ export type MyProfile = {
 
 export const loadMyProfile = () => api<MyProfile>("/api/me/profile");
 
+const FORM_GRID = "grid grid-cols-2 gap-x-4 max-sm:grid-cols-1";
+
 const Status = ({ text }: { text: string }) =>
   text ? (
-    <span role="status" className="muted">
+    <span role="status" className="text-muted">
       {text}
     </span>
   ) : null;
@@ -102,18 +104,18 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
     <>
       <section className="card">
         <header>
-          <h2 style={{ margin: 0 }}>Public profile</h2>
-          <span className="spacer" />
+          <h2 className="m-0">Public profile</h2>
+          <span className="flex-1" />
           <Link to="/$owner" params={{ owner: me }}>
             View profile
           </Link>
         </header>
         <div className="body stack-md">
-          <div className="avatar-row">
+          <div className="flex flex-wrap items-start gap-4">
             <Avatar name={me} size={96} />
             <div className="stack-sm">
               <ErrorNote error={upload.error ?? removeAvatar.error} />
-              <label htmlFor="avatar-file" className="button" style={{ alignSelf: "start", margin: 0 }}>
+              <label htmlFor="avatar-file" className="button m-0 self-start">
                 Upload avatar
               </label>
               <input
@@ -128,10 +130,10 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
                   e.target.value = "";
                 }}
               />
-              <span className="hint" style={{ margin: 0 }}>
+              <span className="hint m-0">
                 PNG, JPEG, GIF or WebP. Animated GIFs stay animated (up to 2 MB). Images are cropped to a square.
               </span>
-              <div className="row">
+              <div className={ROW}>
                 {p.avatarVersion && (
                   <button type="button" className="small" onClick={() => removeAvatar.run()} disabled={removeAvatar.pending}>
                     Remove avatar
@@ -143,7 +145,7 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
           </div>
           <form className="stack-md" onSubmit={onSubmit(saveProfile.run)}>
             <ErrorNote error={saveProfile.error} />
-            <div className="form-grid">
+            <div className={FORM_GRID}>
               <Field id="p-name" label="Display name">
                 <input id="p-name" value={form.displayName} onChange={set("displayName")} maxLength={64} autoComplete="name" />
               </Field>
@@ -152,12 +154,12 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
               </Field>
             </div>
             <Field id="p-bio" label="Bio" hint="Plain text, up to 200 characters.">
-              <textarea id="p-bio" value={form.bio} onChange={set("bio")} maxLength={200} style={{ minHeight: 72 }} />
+              <textarea className="min-h-[72px]" id="p-bio" value={form.bio} onChange={set("bio")} maxLength={200} />
             </Field>
             <Field id="p-status" label="Status" hint="A short note shown on your profile, like what you are working on.">
               <input id="p-status" value={form.status} onChange={set("status")} maxLength={80} />
             </Field>
-            <div className="form-grid">
+            <div className={FORM_GRID}>
               <Field id="p-company" label="Company">
                 <input id="p-company" value={form.company} onChange={set("company")} maxLength={64} autoComplete="organization" />
               </Field>
@@ -186,7 +188,7 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
                 />
               ))}
             </fieldset>
-            <div className="row">
+            <div className={ROW}>
               <button className="primary" disabled={saveProfile.pending}>
                 Save profile
               </button>
@@ -198,16 +200,16 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
 
       <section className="card">
         <header>
-          <h2 style={{ margin: 0 }}>Contributions</h2>
+          <h2 className="m-0">Contributions</h2>
         </header>
         <form className="body stack-sm" onSubmit={onSubmit(saveEmails.run)}>
           <ErrorNote error={saveEmails.error} />
           <Field id="emails" label="Commit emails" hint="One per line. Commits authored with these addresses count towards your contribution graph. An address can belong to one account only.">
-            <textarea id="emails" value={emails} onChange={(e) => setEmails(e.target.value)} style={{ minHeight: 72 }} className="mono" />
+            <textarea id="emails" value={emails} onChange={(e) => setEmails(e.target.value)} className="font-mono min-h-[72px]" />
           </Field>
           {data.pushEmails.some((p) => !p.yours) && (
-            <div className="stack-sm" style={{ gap: 6 }}>
-              <span className="hint" style={{ margin: 0 }}>
+            <div className="stack-sm gap-1.5">
+              <span className="hint m-0">
                 Found in commits you pushed. Add the ones that are yours.
               </span>
               <ul className="list card" aria-label="Emails in your pushes">
@@ -216,14 +218,14 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
                   .map((p) => {
                     const listed = emails.split(/[\s,]+/).includes(p.email);
                     return (
-                      <li key={p.email} style={{ padding: "8px 12px" }}>
-                        <span className="mono" style={{ overflowWrap: "anywhere", minWidth: 0 }}>
+                      <li className="py-2 px-3" key={p.email}>
+                        <span className="font-mono wrap-anywhere min-w-0">
                           {p.email}
                         </span>
-                        <span className="muted num">
+                        <span className="text-muted tabular-nums">
                           {p.commits} {p.commits === 1 ? "commit" : "commits"}
                         </span>
-                        <span className="spacer" />
+                        <span className="flex-1" />
                         <button
                           type="button"
                           className="small"
@@ -241,7 +243,7 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
               </ul>
             </div>
           )}
-          <div className="row">
+          <div className={ROW}>
             <button disabled={saveEmails.pending}>Save commit emails</button>
             <Status text={emailStatus} />
           </div>
@@ -250,17 +252,17 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
 
       <section className="card">
         <header>
-          <h2 style={{ margin: 0 }}>Pinned repositories</h2>
-          <span className="muted num">{pins.length} / 6</span>
+          <h2 className="m-0">Pinned repositories</h2>
+          <span className="text-muted tabular-nums">{pins.length} / 6</span>
         </header>
         <form className="body stack-sm" onSubmit={onSubmit(savePins.run)}>
           <ErrorNote error={savePins.error} />
           {repos.length === 0 ? (
-            <p className="muted" style={{ margin: 0 }}>
+            <p className="text-muted m-0">
               No repositories to pin yet.
             </p>
           ) : (
-            <fieldset className="fieldset pin-list">
+            <fieldset className="fieldset flex flex-col gap-2">
               <legend className="sr-only">Repositories to pin</legend>
               {repos.map((full) => {
                 const checked = pins.includes(full);
@@ -275,13 +277,13 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
                         setPinStatus("");
                       }}
                     />
-                    <span className="mono">{full}</span>
+                    <span className="font-mono">{full}</span>
                   </label>
                 );
               })}
             </fieldset>
           )}
-          <div className="row">
+          <div className={ROW}>
             <button disabled={savePins.pending}>Save pins</button>
             <Status text={pinStatus} />
           </div>

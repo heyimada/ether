@@ -6,7 +6,7 @@ import { rise, staggered } from "../lib/motion";
 import { patch, post, repoApi, timeAgo, type Comment, type Issue, type RepoInfo } from "../lib/api";
 import { Markdown } from "./content";
 import { LabelPill } from "./labels";
-import { Avatar, ErrorNote, StateBadge, StateIcon, onSubmit, useAction } from "./ui";
+import { Avatar, ErrorNote, onSubmit, ROW, StateBadge, StateIcon, useAction } from "./ui";
 
 export function IssueList({
   info,
@@ -28,18 +28,18 @@ export function IssueList({
   return (
     <section className="card">
       <header>
-        <Link to={listTo} params={params} search={{}} className={state === "open" ? "active" : "muted"}>
+        <Link to={listTo} params={params} search={{}} className={state === "open" ? "active" : "text-muted"}>
           {data.open} Open
         </Link>
-        <Link to={listTo} params={params} search={{ state: "closed" }} className={state === "closed" ? "active" : "muted"}>
+        <Link to={listTo} params={params} search={{ state: "closed" }} className={state === "closed" ? "active" : "text-muted"}>
           {data.closed} Closed
         </Link>
         {(filter.label || filter.assignee) && (
-          <Link to={listTo} params={params} search={state === "closed" ? { state } : {}} className="filter-chip">
+          <Link to={listTo} params={params} search={state === "closed" ? { state } : {}} className="rounded-full border border-border px-2 py-0.5 text-xs text-fg">
             {filter.label ? `label: ${filter.label}` : `assignee: ${filter.assignee}`} ×
           </Link>
         )}
-        <span className="spacer" />
+        <span className="flex-1" />
         {kind === "issues" && (
           <Link to="/$owner/$repo/labels" params={params} className="button small">
             Labels
@@ -59,34 +59,33 @@ export function IssueList({
             <motion.li key={i.number} variants={rise} custom={n}>
               <StateIcon state={i.state} isPull={i.isPull} />
               <div>
-                <Link
+                <Link className="font-semibold"
                   to={i.isPull ? "/$owner/$repo/pull/$number" : "/$owner/$repo/issues/$number"}
                   params={{ ...params, number: String(i.number) }}
-                  style={{ fontWeight: 600 }}
                 >
                   {i.title}
                 </Link>
                 {i.labels.length > 0 && (
-                  <span className="row-labels">
+                  <span className="my-1 inline-flex flex-wrap gap-1">
                     {i.labels.map((l) => (
                       <LabelPill key={l.name} label={l} info={kind === "issues" ? info : undefined} />
                     ))}
                   </span>
                 )}
-                <div className="muted">
+                <div className="text-muted">
                   {i.isPull ? `${i.head} → ${i.base} · ` : ""}opened {timeAgo(i.createdAt)} by {i.author}
                 </div>
               </div>
-              <span className="spacer" />
+              <span className="flex-1" />
               {i.assignees.length > 0 && (
-                <span className="assignee-stack" aria-label={`Assigned to ${i.assignees.join(", ")}`}>
+                <span className="inline-flex gap-0.5" aria-label={`Assigned to ${i.assignees.join(", ")}`}>
                   {i.assignees.slice(0, 3).map((a) => (
                     <Avatar key={a} name={a} size={20} />
                   ))}
                 </span>
               )}
               {i.comments > 0 && (
-                <span className="muted num" aria-label={`${i.comments} comments`}>
+                <span className="text-muted tabular-nums" aria-label={`${i.comments} comments`}>
                   <MessageSquare size={14} aria-hidden /> {i.comments}
                 </span>
               )}
@@ -100,14 +99,14 @@ export function IssueList({
 
 export function IssueHeader({ issue }: { issue: Issue }) {
   return (
-    <div style={{ marginBottom: 16 }}>
-      <h1 className="issue-title">
+    <div className="mb-4">
+      <h1 className="text-5xl font-semibold tracking-tighter">
         {issue.title}
-        <span className="num">#{issue.number}</span>
+        <span className="ml-2 font-normal text-muted tabular-nums">#{issue.number}</span>
       </h1>
-      <div className="row">
+      <div className={ROW}>
         <StateBadge state={issue.state} />
-        <span className="muted">
+        <span className="text-muted">
           <strong>{issue.author}</strong> opened this {timeAgo(issue.createdAt)}
           {issue.isPull && (
             <>
@@ -127,7 +126,7 @@ function CommentCard({ author, at, body, i = 0 }: { author: string; at: string; 
       <header>
         <Avatar name={author} size={24} />
         <strong>{author}</strong>
-        <span className="muted">commented {timeAgo(at)}</span>
+        <span className="text-muted">commented {timeAgo(at)}</span>
       </header>
       <Markdown source={body} />
     </motion.section>
@@ -158,7 +157,7 @@ export function Conversation({ info, issue, comments, me }: { info: RepoInfo; is
         <CommentCard key={c.id} author={c.author} at={c.createdAt} body={c.body} i={i + 1} />
       ))}
       {!me ? (
-        <p className="card body muted" style={{ margin: 0 }}>
+        <p className="card body text-muted m-0">
           <Link to="/login">Sign in</Link> to join the conversation.
         </p>
       ) : (
@@ -166,8 +165,8 @@ export function Conversation({ info, issue, comments, me }: { info: RepoInfo; is
         <ErrorNote error={comment.error ?? setState.error} />
         <label htmlFor="comment">Comment</label>
         <textarea id="comment" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Markdown is supported" />
-        <div className="row">
-          <span className="spacer" />
+        <div className={ROW}>
+          <span className="flex-1" />
           {canToggle &&
             (issue.state === "open" ? (
               <button type="button" onClick={() => setState.run("closed")} disabled={setState.pending}>

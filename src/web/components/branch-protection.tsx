@@ -2,7 +2,7 @@ import { useRouter } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { del, patch, post } from "../lib/api";
-import { ErrorNote, Field, onSubmit, useAction } from "./ui";
+import { ErrorNote, Field, onSubmit, ROW, useAction } from "./ui";
 
 export type BranchRule = { id: number; pattern: string; requirePullRequest: boolean; allowForcePush: boolean; allowDeletion: boolean };
 type Settings = Pick<BranchRule, "requirePullRequest" | "allowForcePush" | "allowDeletion">;
@@ -19,7 +19,7 @@ function RuleOptions({ value, onChange }: { value: Settings; onChange: (v: Setti
         <input type="checkbox" checked={value.requirePullRequest} onChange={(e) => onChange({ ...value, requirePullRequest: e.target.checked })} />
         Require a pull request: no direct pushes
       </label>
-      <span className="hint" style={{ margin: 0 }}>
+      <span className="hint m-0">
         Anyone with write access can still merge their own pull request, unless approving reviews are required under Pull requests.
       </span>
       <label className="radio">
@@ -31,7 +31,7 @@ function RuleOptions({ value, onChange }: { value: Settings; onChange: (v: Setti
         Allow deleting matching branches
       </label>
       {value.allowDeletion && (
-        <span className="hint" style={{ margin: 0 }}>
+        <span className="hint m-0">
           {value.requirePullRequest
             ? "A deleted branch can't be pushed again, since that would skip pull requests."
             : "Deleting a branch and pushing it again replaces its history, so this also allows rewriting it."}
@@ -55,17 +55,17 @@ function RuleRow({ base, rule }: { base: string; rule: BranchRule }) {
     await router.invalidate();
   });
   return (
-    <li style={{ flexWrap: "wrap" }} aria-label={`Rule ${rule.pattern}`}>
-      <ShieldCheck size={18} aria-hidden className="muted" />
-      <div style={{ minWidth: 0 }}>
-        <strong className="mono">{rule.pattern}</strong>
-        <div className="muted" style={{ fontSize: 12 }}>
+    <li className="flex-wrap" aria-label={`Rule ${rule.pattern}`}>
+      <ShieldCheck size={18} aria-hidden className="text-muted" />
+      <div className="min-w-0">
+        <strong className="font-mono">{rule.pattern}</strong>
+        <div className="text-muted text-xs">
           {summary(rule)}
         </div>
       </div>
-      <span className="spacer" />
+      <span className="flex-1" />
       {mode === "view" && (
-        <div className="row">
+        <div className={ROW}>
           <button className="small" aria-label={`Edit rule ${rule.pattern}`} onClick={() => (setValue(rule), setMode("edit"))}>
             Edit
           </button>
@@ -75,10 +75,10 @@ function RuleRow({ base, rule }: { base: string; rule: BranchRule }) {
         </div>
       )}
       {mode === "edit" && (
-        <form className="stack-sm" style={{ flexBasis: "100%" }} onSubmit={onSubmit(save.run)}>
+        <form className="stack-sm basis-full" onSubmit={onSubmit(save.run)}>
           <ErrorNote error={save.error} />
           <RuleOptions value={value} onChange={setValue} />
-          <div className="row">
+          <div className={ROW}>
             <button className="primary" disabled={save.pending}>
               Save rule
             </button>
@@ -89,12 +89,12 @@ function RuleRow({ base, rule }: { base: string; rule: BranchRule }) {
         </form>
       )}
       {mode === "remove" && (
-        <div className="notice stack-sm" style={{ flexBasis: "100%" }} role="alertdialog" aria-label={`Confirm removing rule ${rule.pattern}`}>
+        <div className="notice stack-sm basis-full" role="alertdialog" aria-label={`Confirm removing rule ${rule.pattern}`}>
           <ErrorNote error={remove.error} />
-          <p style={{ margin: 0 }}>
+          <p className="m-0">
             Remove protection from <code>{rule.pattern}</code>? Pushes to matching branches will no longer be checked.
           </p>
-          <div className="row">
+          <div className={ROW}>
             <button className="danger" onClick={() => remove.run()} disabled={remove.pending}>
               Remove protection
             </button>
@@ -118,10 +118,10 @@ export function BranchProtection({ base, rules, defaultBranch }: { base: string;
   return (
     <section className="card">
       <header>
-        <h2 style={{ margin: 0 }}>Protected branches</h2>
+        <h2 className="m-0">Protected branches</h2>
       </header>
       <div className="body stack-md">
-        <p className="muted" style={{ margin: 0 }}>
+        <p className="text-muted m-0">
           Rules apply to every push over HTTPS and SSH, including yours and deploy keys'. Merging a pull request in Ether is always allowed. In a repository with
           rules, branch names that differ from an existing branch only in case are refused.
         </p>
@@ -135,7 +135,7 @@ export function BranchProtection({ base, rules, defaultBranch }: { base: string;
         <form className="stack-sm" onSubmit={onSubmit(add.run)}>
           <ErrorNote error={add.error} />
           <Field id="protect-pattern" label="Branch name or pattern" hint="For example main, release/* or hotfix/**. * stays within one path segment, ** spans several.">
-            <input id="protect-pattern" className="mono" value={pattern} onChange={(e) => setPattern(e.target.value)} required maxLength={200} />
+            <input id="protect-pattern" className="font-mono" value={pattern} onChange={(e) => setPattern(e.target.value)} required maxLength={200} />
           </Field>
           <RuleOptions value={value} onChange={setValue} />
           <div>

@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef, type ReactNode } from "react";
 import { CiBadge, ciDone, type CiStatus } from "../components/ci";
-import { ErrorNote, useAction } from "../components/ui";
+import { ErrorNote, ROW, useAction } from "../components/ui";
 import { api, post, repoApi, shortSha, timeAgo } from "../lib/api";
 
 type JobDeployment = {
@@ -20,6 +20,18 @@ export const Route = createFileRoute("/_authed/$owner/$repo/ci/$id")({
   loader: ({ context: { info }, params }) => api<RunDetail>(`${repoApi(info.repo.owner, info.repo.name)}/ci/runs/${params.id}`),
   component: RunPage,
 });
+
+// A job's outcome colours its left edge. A running job keeps its class for the shimmer on its header (see styles.css).
+const JOB_EDGE: Record<CiStatus, string> = {
+  queued: "border-l-border",
+  waiting: "border-l-border",
+  running: "job-running border-l-accent",
+  success: "border-l-open",
+  failure: "border-l-danger",
+  error: "border-l-danger",
+  cancelled: "border-l-border",
+  skipped: "border-l-border",
+};
 
 const duration = (a: string | null, b: string | null) => (a && b ? `${((new Date(b).getTime() - new Date(a).getTime()) / 1000).toFixed(1)}s` : "");
 
@@ -42,12 +54,12 @@ function RunPage() {
   });
 
   return (
-    <div className="stack-md" style={{ maxWidth: 1000 }}>
-      <div className="row">
+    <div className="stack-md max-w-[1000px]">
+      <div className={ROW}>
         <Link to="/$owner/$repo/ci" params={params}>
           ← All runs
         </Link>
-        <span className="spacer" />
+        <span className="flex-1" />
         {info.role !== "read" &&
           (ciDone(run.status) ? (
             <button className="small" onClick={() => act.run("rerun")} disabled={act.pending}>
@@ -60,11 +72,11 @@ function RunPage() {
           ))}
       </div>
       <ErrorNote error={act.error} />
-      <div className="row">
-        <h2 style={{ margin: 0 }}>{run.subject || shortSha(run.sha)}</h2>
+      <div className={ROW}>
+        <h2 className="m-0">{run.subject || shortSha(run.sha)}</h2>
         <CiBadge status={run.status} />
       </div>
-      <p className="muted" style={{ margin: 0 }}>
+      <p className="text-muted m-0">
         Run #{run.id} on <code>{run.ref}</code> at{" "}
         <Link to="/$owner/$repo/commit/$sha" params={{ ...params, sha: run.sha }}>
           <code>{shortSha(run.sha)}</code>
@@ -73,15 +85,15 @@ function RunPage() {
       </p>
       {run.message && <p className="error">{run.message}</p>}
       {jobs.map((j) => (
-        <section key={j.id} className={`card job job-${j.status}`} aria-labelledby={`job-${j.id}`}>
+        <section key={j.id} className={`card border-l-3 ${JOB_EDGE[j.status]}`} aria-labelledby={`job-${j.id}`}>
           <header>
-            <h3 id={`job-${j.id}`} style={{ margin: 0 }}>
+            <h3 className="m-0" id={`job-${j.id}`}>
               <span className="sr-only">Job </span>
               {j.name}
             </h3>
             <CiBadge status={j.status} />
-            <span className="spacer" />
-            <span className="muted num">{duration(j.startedAt, j.finishedAt)}</span>
+            <span className="flex-1" />
+            <span className="text-muted tabular-nums">{duration(j.startedAt, j.finishedAt)}</span>
           </header>
           {j.deployment && <DeploymentNote job={j} deployment={j.deployment} base={repoApi(info.repo.owner, info.repo.name)} />}
           <LiveLog live={j.status === "running"} label={`${j.name} log`}>
@@ -102,9 +114,9 @@ function DeploymentNote({ job, deployment: d, base }: { job: Job; deployment: Jo
   });
   const waiting = job.status === "waiting";
   return (
-    <div className="body stack-sm" style={{ borderBottom: "1px solid var(--border)" }} aria-label={`Deployment of ${job.name}`} role="group">
-      <p style={{ margin: 0 }}>
-        Deploys to <strong className="mono">{d.environment}</strong>
+    <div className="body stack-sm border-b border-border" aria-label={`Deployment of ${job.name}`} role="group">
+      <p className="m-0">
+        Deploys to <strong className="font-mono">{d.environment}</strong>
         {d.url && (
           <>
             {" · "}
@@ -113,16 +125,16 @@ function DeploymentNote({ job, deployment: d, base }: { job: Job; deployment: Jo
             </a>
           </>
         )}
-        {d.reviewedBy && <span className="muted"> · {d.status === "rejected" ? "rejected" : "approved"} by {d.reviewedBy}</span>}
+        {d.reviewedBy && <span className="text-muted"> · {d.status === "rejected" ? "rejected" : "approved"} by {d.reviewedBy}</span>}
       </p>
-      {waiting && d.notBefore && <p className="muted" style={{ margin: 0 }}>Waiting until {new Date(d.notBefore).toLocaleString()} before it starts.</p>}
+      {waiting && d.notBefore && <p className="text-muted m-0">Waiting until {new Date(d.notBefore).toLocaleString()} before it starts.</p>}
       {waiting && !d.notBefore && (
-        <p className="muted" style={{ margin: 0 }}>
+        <p className="text-muted m-0">
           Waiting for {d.reviewers.length === 1 ? d.reviewers[0] : `one of ${d.reviewers.join(", ")}`} to approve.
         </p>
       )}
       {d.canReview && (
-        <div className="row">
+        <div className={ROW}>
           <ErrorNote error={review.error} />
           <button className="primary small" onClick={() => review.run(true)} disabled={review.pending}>
             Approve and deploy

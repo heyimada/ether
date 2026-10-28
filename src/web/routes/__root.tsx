@@ -31,7 +31,7 @@ export const Route = createRootRoute({
   notFoundComponent: () => (
     <main className="page">
       <h1>Not found</h1>
-      <p className="muted">That page doesn’t exist, or you don’t have access to it.</p>
+      <p className="text-muted">That page doesn’t exist, or you don’t have access to it.</p>
     </main>
   ),
 });
@@ -42,7 +42,7 @@ function Root() {
     <MotionConfig reducedMotion="user">
       <RouteProgress />
       <Outlet />
-      <Toaster position="bottom-right" className="toaster" gap={8} />
+      <Toaster position="bottom-right" gap={8} />
     </MotionConfig>
   );
 }

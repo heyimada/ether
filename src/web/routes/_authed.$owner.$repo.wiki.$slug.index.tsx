@@ -14,18 +14,18 @@ function WikiPageView() {
   const page = Route.useLoaderData();
   const params = { owner: info.repo.owner, repo: info.repo.name, slug: page.slug };
   return (
-    <div className="layout-2">
-      <div className="main-col">
-        <div className="row">
-          <h2 style={{ margin: 0 }}>{page.title}</h2>
-          <span className="spacer" />
+    <div className="grid grid-cols-[1fr_260px] gap-6 max-lg:grid-cols-[1fr]">
+      <div className="flex min-w-0 flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="m-0">{page.title}</h2>
+          <span className="flex-1" />
           {info.role !== "read" && (
             <Link to="/$owner/$repo/wiki/$slug/edit" params={params} className="button small">
               Edit page
             </Link>
           )}
         </div>
-        <p className="muted" style={{ margin: 0 }}>
+        <p className="text-muted m-0">
           {page.lastEdit && (
             <>
               {page.lastEdit.author} edited this {timeAgo(page.lastEdit.date)} ·{" "}

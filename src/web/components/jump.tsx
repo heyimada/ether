@@ -51,11 +51,12 @@ export function JumpBox() {
   };
 
   return (
-    <div className="jump" ref={root}>
+    <div className="relative min-w-0 flex-[0_1_320px] max-md:order-3 max-md:flex-[1_1_100%]" ref={root}>
       <Command shouldFilter={false} label="Search or jump to" loop>
-        <div className="jump-field">
-          <Search size={16} aria-hidden className="muted" />
+        <div className="flex items-center gap-2 rounded-sm border border-border bg-[color-mix(in_srgb,var(--surface-2)_80%,transparent)] px-2.5 text-muted [transition:border-color_150ms_ease,box-shadow_220ms_ease] hover:border-control-border focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-focus focus-within:bg-surface focus-within:shadow-[0_0_0_6px_color-mix(in_srgb,var(--focus)_14%,transparent)]">
+          <Search size={16} aria-hidden className="text-muted" />
           <Command.Input
+            className="min-w-0 border-0 bg-transparent px-0 py-1.5 text-fg outline-none focus-visible:shadow-none focus-visible:outline-none"
             aria-label="Search or jump to"
             placeholder="Search or jump to…"
             value={query}
@@ -95,7 +96,7 @@ export function JumpBox() {
                     }}
                   >
                     <BookLock size={16} aria-hidden />
-                    <span className="jump-name">
+                    <span className="wrap-anywhere">
                       {r.owner}/{r.name}
                     </span>
                   </Command.Item>

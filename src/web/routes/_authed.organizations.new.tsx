@@ -19,10 +19,10 @@ function NewOrg() {
     await router.navigate({ to: "/$owner", params: { owner: org.name } });
   });
   return (
-    <main className="page stack" style={{ maxWidth: 640 }}>
+    <main className="page stack max-w-[640px]">
       <div className="stack-sm">
-        <h1 style={{ margin: 0 }}>Create an organization</h1>
-        <p className="muted" style={{ margin: 0 }}>
+        <h1 className="m-0">Create an organization</h1>
+        <p className="text-muted m-0">
           Organizations own repositories together. Members get a base permission on every repository; owners manage members and settings.
         </p>
       </div>

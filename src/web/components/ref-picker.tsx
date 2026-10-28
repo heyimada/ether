@@ -5,6 +5,10 @@ import { Check, ChevronDown, GitBranch, Tag } from "lucide-react";
 import { useState } from "react";
 import type { RepoInfo } from "../lib/api";
 
+// The Branches / Tags tabs, shared with the clone box on the repository page.
+export const TAB_BUTTON =
+  "min-h-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-1.5 shadow-none [transition:border-color_220ms_var(--ease-out),background-color_150ms_ease] hover:not-disabled:border-transparent hover:not-disabled:bg-surface-3 active:transform-none aria-selected:border-b-accent aria-selected:font-semibold aria-selected:hover:not-disabled:border-b-accent";
+
 // Branch and tag switcher: a filter field, Branches and Tags tabs, the current ref checked
 // and the default branch marked. Picking a ref opens the same view at that ref.
 export function RefPicker({ info, current, kind }: { info: RepoInfo; current: string; kind: "tree" | "commits" }) {
@@ -26,34 +30,42 @@ export function RefPicker({ info, current, kind }: { info: RepoInfo; current: st
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger className="ref-trigger" aria-label={`Switch branch or tag, current ${current}`}>
+      <Popover.Trigger className="max-w-full" aria-label={`Switch branch or tag, current ${current}`}>
         {isTag ? <Tag size={16} aria-hidden /> : <GitBranch size={16} aria-hidden />}
-        <span className="mono ref-name">{current}</span>
+        <span className="max-w-[220px] truncate font-mono">{current}</span>
         <ChevronDown size={16} aria-hidden />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content className="popover" align="start" sideOffset={6} aria-label="Switch branch or tag">
           <Command shouldFilter={false} label="Branches and tags">
-            <div className="popover-head">
+            <div className="flex flex-col gap-2 border-b border-border p-3">
               <strong>Switch branches or tags</strong>
-              <Command.Input className="popover-filter" value={query} onValueChange={setQuery} placeholder="Filter branches and tags" aria-label="Filter branches and tags" />
+              <Command.Input
+                className="px-2 py-1.5"
+                value={query}
+                onValueChange={setQuery}
+                placeholder="Filter branches and tags"
+                aria-label="Filter branches and tags"
+              />
             </div>
-            <div className="popover-tabs" role="tablist" aria-label="Ref type">
+            <div className="flex gap-1 border-b border-border px-3 pt-2 pb-0" role="tablist" aria-label="Ref type">
               {(["branches", "tags"] as const).map((t) => (
-                <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+                <button key={t} type="button" role="tab" className={TAB_BUTTON} aria-selected={tab === t} onClick={() => setTab(t)}>
                   {t === "branches" ? "Branches" : "Tags"}
                 </button>
               ))}
             </div>
-            <Command.List className="popover-list">
+            <Command.List className="max-h-[280px] overflow-y-auto p-1">
               {refs.map((ref) => (
                 <Command.Item key={ref} value={ref} onSelect={() => pick(ref)} className="popover-item">
                   <Check size={16} aria-hidden className={ref === current ? "" : "invisible"} />
-                  <span className="mono popover-ref">{ref}</span>
+                  <span className="min-w-0 flex-1 wrap-anywhere font-mono text-sm">{ref}</span>
                   {tab === "branches" && ref === def && <span className="pill">default</span>}
                 </Command.Item>
               ))}
-              <Command.Empty className="popover-empty">{tab === "branches" ? "No branches match." : info.tags.length ? "No tags match." : "No tags yet."}</Command.Empty>
+              <Command.Empty className="px-2 py-1.5 text-xs text-muted">
+                {tab === "branches" ? "No branches match." : info.tags.length ? "No tags match." : "No tags yet."}
+              </Command.Empty>
             </Command.List>
           </Command>
         </Popover.Content>

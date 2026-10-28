@@ -15,8 +15,8 @@ function EditPage() {
   const { info } = Route.useRouteContext();
   const page = Route.useLoaderData();
   return (
-    <div className="stack-md" style={{ maxWidth: 900 }}>
-      <h2 style={{ margin: 0 }}>Editing {page.title}</h2>
+    <div className="stack-md max-w-[900px]">
+      <h2 className="m-0">Editing {page.title}</h2>
       <WikiEditor info={info} slug={page.slug} initial={{ title: page.title, content: page.content }} />
     </div>
   );

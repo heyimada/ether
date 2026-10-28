@@ -4,7 +4,7 @@ import { Check, CircleDot, MessageSquare, Settings2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api, post, put, repoApi, timeAgo, type Issue, type RepoInfo } from "../lib/api";
 import { Markdown } from "./content";
-import { Avatar, ErrorNote, onSubmit, useAction } from "./ui";
+import { Avatar, ErrorNote, MENU_LABEL, onSubmit, PEOPLE, PERSON, SIDE_HEAD, useAction } from "./ui";
 
 export type Review = {
   id: number;
@@ -25,6 +25,15 @@ export type ReviewData = {
 };
 
 const VERB = { approved: "approved these changes", changes_requested: "requested changes", commented: "reviewed" } as const;
+const SIDE_TEXT = "m-0 text-base text-muted wrap-anywhere";
+const REVIEW_STATE = "inline-flex items-center gap-1 whitespace-nowrap text-xs";
+const VERDICT_TEXT: Record<"approved" | "changes_requested" | "pending", string> = { approved: "text-open", changes_requested: "text-danger", pending: "text-muted" };
+const REVIEW_CARD: Record<Review["state"], string> = {
+  approved: "border-l-3 border-l-open [color:inherit]",
+  changes_requested: "border-l-3 border-l-danger [color:inherit]",
+  commented: "",
+};
+const LINE_COMMENT = "grid grid-cols-[minmax(0,2fr)_90px_minmax(0,3fr)_auto] max-sm:grid-cols-[minmax(0,1fr)] gap-2";
 
 // Requested and past reviewers with their latest verdict; writers pick who to ask.
 export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: Issue; data: ReviewData }) {
@@ -48,9 +57,9 @@ export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: I
   const everyone = [...new Set([...requested, ...Object.keys(data.reviewers)])].sort();
 
   return (
-    <section className="side-section">
-      <div className="side-head">
-        <h3>Reviewers</h3>
+    <section>
+      <div className={SIDE_HEAD}>
+        <h3 className="m-0 text-base">Reviewers</h3>
         {canEdit && (
           <Menu.Root>
             <Menu.Trigger className="ghost small" aria-label="Edit reviewers">
@@ -58,7 +67,7 @@ export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: I
             </Menu.Trigger>
             <Menu.Portal>
               <Menu.Content className="menu" align="end" sideOffset={4}>
-                <Menu.Label className="menu-label">Request a review</Menu.Label>
+                <Menu.Label className={MENU_LABEL}>Request a review</Menu.Label>
                 {(people ?? []).map((p) => (
                   <Menu.CheckboxItem key={p} className="menu-item" checked={requested.includes(p)} onSelect={(e) => e.preventDefault()} onCheckedChange={() => pick(p)}>
                     <Check size={14} aria-hidden className={requested.includes(p) ? "" : "invisible"} />
@@ -73,16 +82,16 @@ export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: I
       </div>
       <ErrorNote error={save.error} />
       {everyone.length ? (
-        <ul className="people" aria-label="Reviewers">
+        <ul className={PEOPLE} aria-label="Reviewers">
           {everyone.map((p) => {
             const verdict = requested.includes(p) ? "pending" : data.reviewers[p];
             return (
-              <li key={p}>
+              <li key={p} className={PERSON}>
                 <Avatar name={p} />
-                <Link to="/$owner" params={{ owner: p }} className="people-name">
+                <Link to="/$owner" params={{ owner: p }} className="min-w-0 flex-1 wrap-anywhere">
                   {p}
                 </Link>
-                <span className={`review-state review-${verdict}`}>
+                <span className={`${REVIEW_STATE} ${VERDICT_TEXT[verdict]}`}>
                   {verdict === "approved" ? (
                     <>
                       <Check size={14} aria-hidden /> Approved
@@ -102,7 +111,7 @@ export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: I
           })}
         </ul>
       ) : (
-        <p className="muted side-text">No reviews yet</p>
+        <p className={SIDE_TEXT}>No reviews yet</p>
       )}
     </section>
   );
@@ -112,20 +121,20 @@ export function ReviewList({ reviews }: { reviews: Review[] }) {
   return (
     <>
       {reviews.map((r) => (
-        <article key={r.id} className={`card comment review-card review-${r.state}`} aria-label={`Review by ${r.author}`}>
+        <article key={r.id} className={`card comment ${REVIEW_CARD[r.state]}`} aria-label={`Review by ${r.author}`}>
           <header>
             <Avatar name={r.author} size={24} />
             <span>
               <strong>{r.author}</strong> {VERB[r.state]}
             </span>
-            <span className="muted">{timeAgo(r.createdAt)}</span>
+            <span className="text-muted">{timeAgo(r.createdAt)}</span>
           </header>
           {r.body && <Markdown source={r.body} />}
           {r.comments.length > 0 && (
-            <ul className="list review-comments">
+            <ul className="list">
               {r.comments.map((c, i) => (
-                <li key={i} className="stack-sm" style={{ alignItems: "stretch" }}>
-                  <code className="muted">
+                <li key={i} className="stack-sm items-stretch">
+                  <code className="text-muted">
                     {c.path}:{c.line}
                   </code>
                   <Markdown source={c.body} />
@@ -163,12 +172,12 @@ export function ReviewPanel({ info, pull, diff, me }: { info: RepoInfo; pull: Is
   });
 
   return (
-    <section className="card body stack-sm review-panel" aria-label="Review">
-      <h2 style={{ margin: 0, fontSize: 16 }}>Review</h2>
+    <section className="card body stack-sm" aria-label="Review">
+      <h2 className="m-0 text-lg">Review</h2>
       <ErrorNote error={submit.error} />
       {files.length > 0 && (
         <form
-          className="line-comment"
+          className={LINE_COMMENT}
           onSubmit={onSubmit(() => {
             setPending([...pending, { path: file || files[0], line: Number(line), body: comment }]);
             setComment("");
@@ -191,12 +200,12 @@ export function ReviewPanel({ info, pull, diff, me }: { info: RepoInfo; pull: Is
         <ul className="list card" aria-label="Pending comments">
           {pending.map((c, i) => (
             <li key={i}>
-              <MessageSquare size={14} aria-hidden className="muted" />
+              <MessageSquare size={14} aria-hidden className="text-muted" />
               <code>
                 {c.path}:{c.line}
               </code>
-              <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{c.body}</span>
-              <span className="spacer" />
+              <span className="min-w-0 wrap-anywhere">{c.body}</span>
+              <span className="flex-1" />
               <button className="ghost small" aria-label={`Remove comment on ${c.path}:${c.line}`} onClick={() => setPending(pending.filter((_, j) => j !== i))}>
                 ×
               </button>
@@ -205,11 +214,11 @@ export function ReviewPanel({ info, pull, diff, me }: { info: RepoInfo; pull: Is
         </ul>
       )}
       <form className="stack-sm" onSubmit={onSubmit(submit.run)}>
-        <label htmlFor="review-summary" style={{ margin: 0 }}>
+        <label className="m-0" htmlFor="review-summary">
           Review summary
         </label>
-        <textarea id="review-summary" value={summary} onChange={(e) => setSummary(e.target.value)} style={{ minHeight: 80 }} placeholder="Markdown is supported" />
-        <fieldset className="fieldset stack-sm" style={{ gap: 6 }}>
+        <textarea className="min-h-[80px]" id="review-summary" value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Markdown is supported" />
+        <fieldset className="fieldset stack-sm gap-1.5">
           <legend className="sr-only">Verdict</legend>
           <label className="radio">
             <input type="radio" name="verdict" checked={state === "commented"} onChange={() => setState("commented")} />

@@ -42,13 +42,13 @@ function Settings() {
   });
 
   return (
-    <main className="page stack" style={{ maxWidth: 760 }}>
+    <main className="page stack max-w-[760px]">
       <h1>Settings</h1>
       <ProfileSettings me={me.username} data={profile} repos={repos} />
       <Appearance saved={me.accent} savedTheme={me.theme} />
       <SshKeys keys={sshKeys} sshBase={instance.sshBase} hostKey={instance.sshHostKey} />
       <h2>Access tokens</h2>
-      <p className="muted">
+      <p className="text-muted">
         Git uses personal access tokens instead of your password. When git asks for credentials, enter <code>{me.username}</code> as the username and a
         token as the password.
       </p>
@@ -61,9 +61,9 @@ function Settings() {
           Generate token
         </button>
         {created && (
-          <div className="notice" style={{ marginTop: 16 }}>
-            <p style={{ marginTop: 0 }}>Copy this token now. It won’t be shown again.</p>
-            <div className="clone">
+          <div className="notice mt-4">
+            <p className="mt-0">Copy this token now. It won’t be shown again.</p>
+            <div className="flex items-center gap-2">
               <code aria-label="New token">{created}</code>
               <CopyButton text={created} />
             </div>
@@ -72,7 +72,7 @@ function Settings() {
       </form>
       <section className="card">
         <header>
-          <h2 style={{ margin: 0 }}>Your tokens</h2>
+          <h2 className="m-0">Your tokens</h2>
         </header>
         <ErrorNote error={revoke.error} />
         {tokens.length === 0 ? (
@@ -83,11 +83,11 @@ function Settings() {
               <li key={t.id}>
                 <div>
                   <strong>{t.name}</strong>
-                  <div className="muted">
+                  <div className="text-muted">
                     Created {timeAgo(t.createdAt)} · {t.lastUsedAt ? `last used ${timeAgo(t.lastUsedAt)}` : "never used"}
                   </div>
                 </div>
-                <span className="spacer" />
+                <span className="flex-1" />
                 <button className="danger small" onClick={() => revoke.run(t.id)}>
                   Revoke
                 </button>
@@ -144,12 +144,12 @@ function Appearance({ saved, savedTheme }: { saved: string | null; savedTheme: T
   return (
     <section className="card">
       <header>
-        <h2 style={{ margin: 0 }}>Appearance</h2>
+        <h2 className="m-0">Appearance</h2>
       </header>
       <form className="body stack-sm" onSubmit={onSubmit(save.run)}>
         <ErrorNote error={save.error ?? saveTheme.error} />
-        <fieldset className="theme-choice">
-          <legend>Theme</legend>
+        <fieldset className="m-0 flex flex-wrap items-center gap-4 border-0 p-0">
+          <legend className="mb-2 p-0 font-semibold">Theme</legend>
           {THEMES.map((t) => (
             <label key={t.label} className="radio">
               <input type="radio" name="theme" checked={theme === t.value} onChange={() => saveTheme.run(t.value)} disabled={saveTheme.pending} />
@@ -157,19 +157,19 @@ function Appearance({ saved, savedTheme }: { saved: string | null; savedTheme: T
             </label>
           ))}
         </fieldset>
-        <div className="accent-row">
-          <label htmlFor="accent" style={{ margin: 0 }}>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="m-0" htmlFor="accent">
             Accent colour
           </label>
-          <input id="accent" type="color" className="accent-input" value={accent} onChange={(e) => choose(e.target.value)} />
-          <code className="muted">{accent}</code>
+          <input id="accent" type="color" className="h-8 w-12 cursor-pointer p-0.5" value={accent} onChange={(e) => choose(e.target.value)} />
+          <code className="text-muted">{accent}</code>
         </div>
-        <div className="swatches" role="group" aria-label="Suggested accents">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Suggested accents">
           {ACCENT_PRESETS.map((p) => (
             <button
               key={p.hex}
               type="button"
-              className="swatch"
+              className="size-8 min-h-0 rounded-full border-2 border-surface p-0 [box-shadow:0_0_0_1px_var(--border)] [transition:box-shadow_var(--dur)_ease,transform_var(--dur)_var(--ease-out)] hover:[transform:scale(1.1)] aria-pressed:[box-shadow:0_0_0_2px_var(--text)]"
               style={{ background: p.hex }}
               aria-label={p.hex === DEFAULT_ACCENT ? `${p.name} (default)` : p.name}
               aria-pressed={accent === p.hex}
@@ -177,10 +177,10 @@ function Appearance({ saved, savedTheme }: { saved: string | null; savedTheme: T
             />
           ))}
         </div>
-        <p className="hint" style={{ margin: 0 }}>
+        <p className="hint m-0">
           Any colour works. Ether adjusts its lightness where needed so text and buttons stay readable in light and dark mode.
         </p>
-        <div className="row">
+        <div className="flex flex-wrap items-center gap-3">
           <button className="primary" disabled={save.pending}>
             Save accent
           </button>
@@ -188,7 +188,7 @@ function Appearance({ saved, savedTheme }: { saved: string | null; savedTheme: T
             Use default
           </button>
           {status && (
-            <span role="status" className="muted">
+            <span role="status" className="text-muted">
               {status}
             </span>
           )}

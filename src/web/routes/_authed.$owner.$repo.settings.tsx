@@ -4,7 +4,7 @@ import { BranchProtection, type BranchRule } from "../components/branch-protecti
 import { CiSecrets, type CiSecret } from "../components/ci-secrets";
 import { DeployKeys, type DeployKey } from "../components/deploy-keys";
 import { Environments, type EnvironmentInfo } from "../components/environments";
-import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
+import { ErrorNote, Field, onSubmit, ROW, useAction } from "../components/ui";
 import { api, del, patch, put, repoApi } from "../lib/api";
 
 type Collaborator = { username: string; role: "read" | "write" };
@@ -87,7 +87,7 @@ function RepoSettings() {
   const candidates = users.filter((u) => u !== info.repo.owner && !collaborators.some((c) => c.username === u));
 
   return (
-    <div style={{ maxWidth: 760 }} className="timeline">
+    <div className="timeline max-w-[760px]">
       <form className="card body" onSubmit={onSubmit(save.run)}>
         <h2>General</h2>
         <ErrorNote error={save.error} />
@@ -109,13 +109,13 @@ function RepoSettings() {
       </form>
 
       <section className="card body stack-sm">
-        <h2 style={{ margin: 0 }}>CI</h2>
+        <h2 className="m-0">CI</h2>
         <ErrorNote error={ciToggle.error} />
         <label className="radio">
           <input type="checkbox" checked={ci.enabled} onChange={(e) => ciToggle.run({ ciEnabled: e.target.checked })} disabled={ciToggle.pending || (!instance.ciEnabled && !ci.enabled)} />
           Run <code>.ether/ci.yml</code> on every push
         </label>
-        {!instance.ciEnabled && <span className="hint" style={{ margin: 0 }}>An admin has to allow CI on this server first.</span>}
+        {!instance.ciEnabled && <span className="hint m-0">An admin has to allow CI on this server first.</span>}
         <label className="radio">
           <input type="checkbox" checked={ci.required} onChange={(e) => ciToggle.run({ requireChecks: e.target.checked })} disabled={ciToggle.pending} />
           Require passing checks before merging
@@ -133,13 +133,13 @@ function RepoSettings() {
       />
 
       <section className="card body stack-sm">
-        <h2 style={{ margin: 0 }}>Pull requests</h2>
+        <h2 className="m-0">Pull requests</h2>
         <ErrorNote error={protect.error} />
         <label className="radio">
           <input type="checkbox" checked={requireApproval} onChange={(e) => protect.run(e.target.checked)} disabled={protect.pending} />
           Require an approving review before merging
         </label>
-        <span className="hint" style={{ margin: 0 }}>
+        <span className="hint m-0">
           Someone with write access other than the author has to approve, and nobody may have outstanding requested changes.
         </span>
       </section>
@@ -147,21 +147,21 @@ function RepoSettings() {
       <BranchProtection base={base} rules={branchRules} defaultBranch={info.repo.defaultBranch} />
 
       <section className="card body stack-sm">
-        <h2 style={{ margin: 0 }}>Visibility</h2>
+        <h2 className="m-0">Visibility</h2>
         <ErrorNote error={changeVisibility.error} />
-        <p className="muted" style={{ margin: 0 }}>
+        <p className="text-muted m-0">
           {info.repo.visibility === "public"
             ? "This repository is public: everyone with an account on this server can see and clone it."
             : "This repository is private: only its owner, organization members and collaborators can see it."}
         </p>
         {confirmVisibility ? (
           <div className="notice stack-sm" role="alertdialog" aria-label="Confirm visibility change">
-            <p style={{ margin: 0 }}>
+            <p className="m-0">
               {next === "public"
                 ? "Everyone with an account will be able to read the code, issues and pull requests. Continue?"
                 : "People who aren't collaborators or members will lose access. Continue?"}
             </p>
-            <div className="row">
+            <div className={ROW}>
               <button className="primary" onClick={() => changeVisibility.run()} disabled={changeVisibility.pending}>
                 Make {next}
               </button>
@@ -177,7 +177,7 @@ function RepoSettings() {
 
       <section className="card">
         <header>
-          <h2 style={{ margin: 0 }}>Collaborators</h2>
+          <h2 className="m-0">Collaborators</h2>
         </header>
         <ErrorNote error={remove.error} />
         {collaborators.length === 0 ? (
@@ -188,7 +188,7 @@ function RepoSettings() {
               <li key={c.username}>
                 <strong>{c.username}</strong>
                 <span className="badge">{c.role}</span>
-                <span className="spacer" />
+                <span className="flex-1" />
                 <button className="danger small" onClick={() => remove.run(c.username)}>
                   Remove
                 </button>
@@ -196,8 +196,8 @@ function RepoSettings() {
             ))}
           </ul>
         )}
-        <form className="body row" onSubmit={onSubmit(add.run)} style={{ borderTop: "1px solid var(--border)", alignItems: "end" }}>
-          <div style={{ flex: 1 }}>
+        <form className={`body border-t border-border items-end ${ROW}`} onSubmit={onSubmit(add.run)}>
+          <div className="flex-1">
             <label htmlFor="collab-user">Add a person</label>
             <select id="collab-user" value={username} onChange={(e) => setUsername(e.target.value)} required>
               <option value="" disabled>
@@ -224,9 +224,9 @@ function RepoSettings() {
 
       <DeployKeys base={base} keys={deployKeys} sshBase={instance.sshBase} />
 
-      <form className="card body" onSubmit={onSubmit(destroy.run)} style={{ borderColor: "var(--del-fg)" }}>
+      <form className="card body border-del-fg" onSubmit={onSubmit(destroy.run)}>
         <h2>Delete this repository</h2>
-        <p className="muted">This permanently deletes the repository, its issues and pull requests. It cannot be undone.</p>
+        <p className="text-muted">This permanently deletes the repository, its issues and pull requests. It cannot be undone.</p>
         <ErrorNote error={destroy.error} />
         <Field id="confirm" label={`Type ${info.repo.name} to confirm`}>
           <input id="confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} />

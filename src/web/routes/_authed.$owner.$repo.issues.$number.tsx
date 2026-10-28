@@ -18,7 +18,7 @@ function IssuePage() {
   return (
     <div>
       <IssueHeader issue={issue} />
-      <div className="issue-layout">
+      <div className="grid grid-cols-[minmax(0,1fr)_240px] items-start gap-6 max-lg:grid-cols-[minmax(0,1fr)]">
         <Conversation info={info} issue={issue} comments={comments} me={me?.username ?? null} />
         <IssueSidebar info={info} issue={issue} />
       </div>

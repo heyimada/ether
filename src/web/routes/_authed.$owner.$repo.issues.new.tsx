@@ -16,7 +16,7 @@ function NewIssue() {
     await router.navigate({ to: "/$owner/$repo/issues/$number", params: { owner: info.repo.owner, repo: info.repo.name, number: String(issue.number) } });
   });
   return (
-    <form className="card body" onSubmit={onSubmit(create.run)} style={{ maxWidth: 820 }}>
+    <form className="card body max-w-[820px]" onSubmit={onSubmit(create.run)}>
       <ErrorNote error={create.error} />
       <Field id="title" label="Title">
         <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={256} autoFocus />

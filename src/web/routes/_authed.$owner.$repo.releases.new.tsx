@@ -37,10 +37,10 @@ function NewRelease() {
   });
 
   return (
-    <form className="card body stack-md" style={{ maxWidth: 900 }} onSubmit={onSubmit(publish.run)}>
-      <h2 style={{ margin: 0 }}>Create a release</h2>
+    <form className="card body stack-md max-w-[900px]" onSubmit={onSubmit(publish.run)}>
+      <h2 className="m-0">Create a release</h2>
       <ErrorNote error={publish.error} />
-      <div className="form-grid">
+      <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-x-4 max-sm:grid-cols-[minmax(0,1fr)]">
         <Field id="tag" label="Tag" hint={exists ? "Existing tag." : tag ? "A new tag will be created when you publish." : "For example v1.0.0."}>
           <input id="tag" value={tag} onChange={(e) => setTag(e.target.value.trim())} required maxLength={100} list="known-tags" />
         </Field>
@@ -61,7 +61,7 @@ function NewRelease() {
         <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} placeholder={tag || undefined} />
       </Field>
       <Field id="notes" label="Release notes" hint="Markdown is supported.">
-        <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ minHeight: 160 }} />
+        <textarea className="min-h-[160px]" id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Field>
       <Field id="files" label="Attach files" hint="Binaries or other downloads, up to 500 MB each.">
         <input id="files" type="file" multiple onChange={(e) => setFiles([...(e.target.files ?? [])])} />
@@ -70,12 +70,12 @@ function NewRelease() {
         <input type="checkbox" checked={prerelease} onChange={(e) => setPrerelease(e.target.checked)} />
         This is a pre-release
       </label>
-      <div className="row">
+      <div className="flex flex-wrap items-center gap-3">
         <button className="primary" disabled={publish.pending}>
           Publish release
         </button>
         {progress && (
-          <span role="status" className="muted">
+          <span role="status" className="text-muted">
             {progress}
           </span>
         )}

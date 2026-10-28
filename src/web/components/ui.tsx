@@ -4,6 +4,14 @@ import { AnimatePresence, motion } from "motion/react";
 import { createContext, useContext, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { snappy } from "../lib/motion";
 
+// Class lists shared by many screens.
+export const ROW = "flex flex-wrap items-center gap-3";
+export const MENU_LABEL = "px-2.5 py-2 text-sm wrap-anywhere";
+export const MENU_SEP = "my-1 h-px bg-border";
+export const PEOPLE = "m-0 flex list-none flex-col gap-2 p-0";
+export const PERSON = "flex items-center gap-2 text-sm";
+export const SIDE_HEAD = "flex items-center justify-between gap-2";
+
 // Wraps an async submit handler with pending and error state.
 export function useAction<A extends unknown[]>(fn: (...args: A) => Promise<unknown>) {
   const [pending, setPending] = useState(false);

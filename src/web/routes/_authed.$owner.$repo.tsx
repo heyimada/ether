@@ -32,21 +32,21 @@ function RepoLayout() {
   const { pathname } = useLocation();
   return (
     <main className="page">
-      <div className="repo-head">
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-2xl tracking-tight">
         <span className="badge">{info.repo.visibility === "public" ? "Public" : "Private"}</span>
         <span>
-          <Link to="/$owner" params={{ owner: info.repo.owner }} className="muted">
+          <Link to="/$owner" params={{ owner: info.repo.owner }} className="font-semibold text-muted">
             {info.repo.owner}
           </Link>
-          <span className="muted"> / </span>
-          <Link to="/$owner/$repo" params={params}>
+          <span className="text-muted"> / </span>
+          <Link to="/$owner/$repo" params={params} className="font-semibold">
             {info.repo.name}
           </Link>
         </span>
-        <span className="spacer" />
+        <span className="flex-1" />
         <StarButton info={info} />
       </div>
-      {info.repo.description && <p className="muted" style={{ margin: 0 }}>{info.repo.description}</p>}
+      {info.repo.description && <p className="m-0 text-muted">{info.repo.description}</p>}
       <TabBar label="Repository">
         <Link to="/$owner/$repo" params={params} activeOptions={{ exact: true }}>
           Code
@@ -93,9 +93,9 @@ function StarButton({ info }: { info: RepoInfo }) {
       </span>
     );
   return (
-    <button className="star-button" onClick={() => toggle.run()} disabled={toggle.pending} aria-pressed={info.starred}>
-      <motion.span key={String(info.starred)} className="star-icon" initial={info.starred ? { scale: 0.3, rotate: -40 } : false} animate={{ scale: 1, rotate: 0 }} transition={snappy}>
-        <StarIcon size={16} aria-hidden fill={info.starred ? "currentColor" : "none"} className={info.starred ? "starred" : ""} />
+    <button className="text-sm" onClick={() => toggle.run()} disabled={toggle.pending} aria-pressed={info.starred}>
+      <motion.span key={String(info.starred)} className="inline-flex" initial={info.starred ? { scale: 0.3, rotate: -40 } : false} animate={{ scale: 1, rotate: 0 }} transition={snappy}>
+        <StarIcon size={16} aria-hidden fill={info.starred ? "currentColor" : "none"} className={info.starred ? "text-star" : ""} />
       </motion.span>
       {info.starred ? "Unstar" : "Star"}
       <motion.span key={info.stars} className="count" initial={{ y: info.starred ? 6 : -6, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={snappy}>

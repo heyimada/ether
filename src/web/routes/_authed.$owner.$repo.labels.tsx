@@ -34,25 +34,25 @@ function Labels() {
   });
 
   return (
-    <div className="stack-md" style={{ maxWidth: 900 }}>
+    <div className="stack-md max-w-[900px]">
       <section className="card">
         <header>
-          <h2 style={{ margin: 0 }}>Labels</h2>
-          <span className="muted num">{labels.length}</span>
+          <h2 className="m-0">Labels</h2>
+          <span className="text-muted tabular-nums">{labels.length}</span>
         </header>
         <ErrorNote error={remove.error} />
         <ul className="list" aria-label="Labels">
           {labels.map((l) => (
             <li key={l.name}>
               <LabelPill label={l} info={info} />
-              <span className="muted" style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+              <span className="text-muted min-w-0 wrap-anywhere">
                 {l.description}
               </span>
-              <span className="spacer" />
+              <span className="flex-1" />
               {canEdit &&
                 (confirm === l.name ? (
                   <>
-                    <span className="muted">Remove from every issue?</span>
+                    <span className="text-muted">Remove from every issue?</span>
                     <button className="danger small" onClick={() => remove.run(l.name)}>
                       Delete
                     </button>
@@ -71,9 +71,9 @@ function Labels() {
       </section>
       {canEdit && (
         <form className="card body stack-sm" onSubmit={onSubmit(create.run)}>
-          <h2 style={{ margin: 0 }}>New label</h2>
+          <h2 className="m-0">New label</h2>
           <ErrorNote error={create.error} />
-          <div className="form-grid">
+          <div className="grid grid-cols-2 gap-x-4 max-sm:grid-cols-1">
             <Field id="label-name" label="Label name">
               <input id="label-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={50} />
             </Field>
@@ -81,11 +81,11 @@ function Labels() {
               <input id="label-description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={100} />
             </Field>
           </div>
-          <div className="accent-row">
-            <label htmlFor="label-color" style={{ margin: 0 }}>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="m-0" htmlFor="label-color">
               Colour
             </label>
-            <input id="label-color" type="color" className="accent-input" value={color} onChange={(e) => setColor(e.target.value)} />
+            <input id="label-color" type="color" className="h-8 w-12 cursor-pointer p-0.5" value={color} onChange={(e) => setColor(e.target.value)} />
             {name && <LabelPill label={{ name, color, description }} />}
           </div>
           <div>

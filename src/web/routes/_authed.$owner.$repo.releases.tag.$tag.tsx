@@ -20,16 +20,16 @@ function ReleasePage() {
     await router.navigate({ to: "/$owner/$repo/releases", params });
   });
   return (
-    <div className="stack-md" style={{ maxWidth: 900 }}>
-      <div className="row">
+    <div className="stack-md max-w-[900px]">
+      <div className="flex flex-wrap items-center gap-3">
         <Link to="/$owner/$repo/releases" params={params}>
           ← All releases
         </Link>
-        <span className="spacer" />
+        <span className="flex-1" />
         {info.role !== "read" &&
           (confirm ? (
             <>
-              <span className="muted">Delete this release? The tag stays.</span>
+              <span className="text-muted">Delete this release? The tag stays.</span>
               <button className="danger small" onClick={() => remove.run()}>
                 Delete
               </button>

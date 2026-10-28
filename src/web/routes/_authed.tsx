@@ -3,7 +3,7 @@ import { Link, Outlet, createFileRoute, redirect, useRouter } from "@tanstack/re
 import { Building2, ChevronDown, LogOut, Settings, Shield, User } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { JumpBox } from "../components/jump";
-import { Avatar, PeopleContext, type Person } from "../components/ui";
+import { Avatar, MENU_LABEL, MENU_SEP, PeopleContext, type Person } from "../components/ui";
 import { applyAppearance, clearAppearance } from "../lib/accent";
 import { ApiError, api, type Me } from "../lib/api";
 import { authClient } from "../lib/auth-client";
@@ -72,11 +72,11 @@ function UserMenu({ me, displayName }: { me: Me; displayName: string }) {
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content className="menu" align="end" sideOffset={8}>
-          <Menu.Label className="px-2.5 py-2 text-sm wrap-anywhere">
+          <Menu.Label className={MENU_LABEL}>
             Signed in as <strong>{me.username}</strong>
             {displayName && <span className="text-muted"> ({displayName})</span>}
           </Menu.Label>
-          <Menu.Separator className="my-1 h-px bg-border" />
+          <Menu.Separator className={MENU_SEP} />
           <Menu.Item asChild className="menu-item">
             <Link to="/$owner" params={{ owner: me.username }}>
               <User size={16} aria-hidden /> Your profile
@@ -99,7 +99,7 @@ function UserMenu({ me, displayName }: { me: Me; displayName: string }) {
               </Link>
             </Menu.Item>
           )}
-          <Menu.Separator className="my-1 h-px bg-border" />
+          <Menu.Separator className={MENU_SEP} />
           <Menu.Item className="menu-item" onSelect={signOut}>
             <LogOut size={16} aria-hidden /> Sign out
           </Menu.Item>
