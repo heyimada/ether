@@ -96,3 +96,26 @@ test("the limiter never runs more than its maximum at once", async () => {
   );
   expect(peak).toBe(2);
 });
+
+test("a call arriving while a finished slot is handed to a waiter doesn't run alongside it", async () => {
+  const limit = limiter(1);
+  let active = 0;
+  let peak = 0;
+  const body = async () => {
+    peak = Math.max(peak, ++active);
+    await Bun.sleep(1);
+    active--;
+  };
+  // Lands between the first call releasing its slot and the waiter's continuation, which is where the race was.
+  const late = Promise.withResolvers<void>();
+  const first = limit(async () => {
+    peak = Math.max(peak, ++active);
+    await Bun.sleep(1);
+    active--;
+    Promise.resolve()
+      .then(() => {})
+      .then(() => limit(body).then(late.resolve));
+  });
+  await Promise.all([first, limit(body), late.promise]);
+  expect(peak).toBe(1);
+});

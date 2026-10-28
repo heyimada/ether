@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ciState, decide, type GateInput } from "./gate";
-import { isReviewBot, type CheckRun } from "./github";
+import { isReviewBot, resolvedAsFixed, type CheckRun, type Thread } from "./github";
 
 const HEAD = "a".repeat(40);
 const done = (lens: "bugs" | "security", over = {}) => ({ lens, round: 1, reviewedSha: HEAD, state: "done" as const, ...over });
@@ -13,6 +13,7 @@ const input = (over: Partial<GateInput> = {}): GateInput => ({
   eligibility: { eligible: true, reason: "only low-risk paths" },
   reviews: { bugs: done("bugs"), security: done("security") },
   openFindings: 0,
+  dismissedFindings: 0,
   ci: "success",
   ...over,
 });
@@ -85,4 +86,21 @@ test("a re-run replaces the earlier result of the same check", () => {
 
 test("checks from other apps don't count, even with a required name", () => {
   expect(ciState([run("Build", "completed", "success", "impostor"), run("E2E", "completed", "success")], REQUIRED)).toBe("pending");
+});
+
+test("findings resolved by a person instead of the App send the change to a human", () => {
+  expect(blockedBy({ dismissedFindings: 1 })).toContain("needs human approval: 1 finding was resolved without the review confirming a fix");
+});
+
+test("only the App resolving a thread counts as fixed", () => {
+  const thread = (resolvedBy: Thread["resolvedBy"], isResolved = true): Thread => ({
+    id: "t",
+    isResolved,
+    resolvedBy,
+    comment: { databaseId: 1, body: "", path: "a.ts", line: 1, byBot: true, login: "ether-review" },
+  });
+  expect(resolvedAsFixed(thread({ login: "ether-review", byBot: true }), "ether-review[bot]")).toBe(true);
+  expect(resolvedAsFixed(thread({ login: "ether-review", byBot: false }), "ether-review[bot]")).toBe(false);
+  expect(resolvedAsFixed(thread({ login: "JustKatze", byBot: false }), "ether-review[bot]")).toBe(false);
+  expect(resolvedAsFixed(thread(null, false), "ether-review[bot]")).toBe(false);
 });

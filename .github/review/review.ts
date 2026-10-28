@@ -28,7 +28,7 @@ import {
   type Posted,
   type ReviewState,
 } from "./findings";
-import { github, isReviewBot, readToken, type GitHub, type PullFile, type ReviewComment } from "./github";
+import { github, isReviewBot, readToken, resolvedAsFixed, type GitHub, type PullFile, type ReviewComment } from "./github";
 
 const DIFF_BUDGET = 150_000;
 const ELIGIBILITY_DIFF_BUDGET = 60_000;
@@ -78,7 +78,8 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
       const posted = postedFinding(t.comment.body, t.comment.path);
       return posted && lenses.includes(posted.marker.lens) ? [{ thread: t, posted }] : [];
     });
-  const prior: Posted[] = botThreads.map((t) => t.posted);
+  // Findings the App resolved as fixed may come back if the fix regresses, so only the others count as already reported.
+  const prior: Posted[] = botThreads.filter((t) => !resolvedAsFixed(t.thread, BOT_LOGIN)).map((t) => t.posted);
   const errors: string[] = [];
   // The path hook can't see what a glob matches, so a symlink anywhere in the checkout stops the agents (review.yml deletes them first).
   const symlink = findSymlink(PR_DIR);
@@ -86,17 +87,29 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   let costUsd = 0;
   const spend = <T extends { costUsd: number }>(r: T) => ((costUsd += r.costUsd), r);
 
-  // Threads whose finding is fixed at this head get a short reply and are resolved.
+  // Threads whose finding is fixed at this head get a short reply and are resolved. Only files changed since the finding
+  // was posted are re-checked, and every voter has to agree it's fixed, the same bar as posting it.
   const resolved: { file: string; title: string; reason: string }[] = [];
-  const stale = symlink ? [] : botThreads.filter((t) => !t.thread.isResolved && t.posted.marker.sha !== head);
+  const open = symlink ? [] : botThreads.filter((t) => !t.thread.isResolved && t.posted.marker.sha !== head);
+  const changedSince = new Map<string, Promise<Set<string> | null>>();
+  const touched = async (sha: string, file: string) => {
+    if (!changedSince.has(sha)) changedSince.set(sha, read.compare(sha, head).then((c) => (c.status === "ahead" && c.files ? new Set(c.files.map((f) => f.filename)) : null), () => null));
+    // Unknown after a force push, so check it.
+    return (await changedSince.get(sha)!)?.has(file) ?? true;
+  };
   await Promise.all(
-    stale.map(async ({ thread, posted }) => {
-      const res = spend(await isFixed({ file: posted.file, line: thread.comment.line, title: posted.title, failure: thread.comment.body }, PR_DIR));
-      if (!res.ok) return void errors.push(`isFixed ${posted.file}: ${res.error}`);
-      if (!res.value.fixed) return;
-      resolved.push({ file: posted.file, title: posted.title, reason: res.value.reason });
+    open.map(async ({ thread, posted }) => {
+      if (!(await touched(posted.marker.sha, posted.file))) return;
+      const finding = { file: posted.file, line: thread.comment.line, title: posted.title, failure: thread.comment.body };
+      const votes = await Promise.all(Array.from({ length: DEPTH.voters }, () => isFixed(finding, PR_DIR).then(spend)));
+      const failed = votes.find((v) => !v.ok);
+      if (failed && !failed.ok) return void errors.push(`isFixed ${posted.file}: ${failed.error}`);
+      const fixed = votes.flatMap((v) => (v.ok && v.value.fixed ? [v.value] : []));
+      if (fixed.length < votes.length) return;
+      const reason = fixed[0].reason;
+      resolved.push({ file: posted.file, title: posted.title, reason });
       if (!write) return;
-      await write.reply(prNumber, thread.comment.databaseId, guard(`Fixed as of ${short(head)}: ${sanitize(res.value.reason, 1000)}`));
+      await write.reply(prNumber, thread.comment.databaseId, guard(`Fixed as of ${short(head)}: ${sanitize(reason, 1000)}`));
       await write.resolveThread(thread.id);
     }),
   );
@@ -104,7 +117,8 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   // Rounds before the cap see the whole PR; from the cap on, only what changed since the last reviewed commit.
   let scope = files;
   let sinceSha: string | null = null;
-  if (round >= ROUND_CAP && prev && prev.reviewedSha !== head) {
+  // An errored round didn't review everything, so it can't be the baseline: fall back to the full diff.
+  if (round >= ROUND_CAP && prev && prev.state !== "errored" && prev.reviewedSha !== head) {
     const cmp = await read.compare(prev.reviewedSha, head).catch(() => null);
     // After a force push the old SHA is no longer an ancestor, so fall back to the full diff.
     if (cmp?.status === "ahead" && cmp.files) (scope = cmp.files), (sinceSha = prev.reviewedSha);

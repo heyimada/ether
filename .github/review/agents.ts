@@ -18,13 +18,15 @@ export function limiter(max: number) {
   let active = 0;
   const waiting: (() => void)[] = [];
   return async <T>(fn: () => Promise<T>): Promise<T> => {
+    // A finishing call hands its slot straight to the next waiter, so a call arriving in between can't take it too.
     if (active >= max) await new Promise<void>((r) => waiting.push(r));
-    active++;
+    else active++;
     try {
       return await fn();
     } finally {
-      active--;
-      waiting.shift()?.();
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
     }
   };
 }

@@ -9,7 +9,7 @@
 import { parseArgs } from "node:util";
 import { BOT_LOGIN, eligibility, GATE_CHECK, LENS_GROUPS, NO_AUTOMERGE_LABEL, REPORT_ONLY, REQUIRED_CHECKS, type EligibilityVerdict, type LensGroup } from "./config";
 import { parseSummaryMarker, postedFinding, type SummaryMarker } from "./findings";
-import { github, isBot, isReviewBot, readToken, sameBot, type CheckRun, type Permission } from "./github";
+import { github, isBot, isReviewBot, readToken, resolvedAsFixed, sameBot, type CheckRun, type Permission } from "./github";
 
 export type CiState = "success" | "pending" | "failure";
 
@@ -23,6 +23,8 @@ export interface GateInput {
   // The latest bot summary per lens, whatever commit it was for.
   reviews: Record<LensGroup, SummaryMarker | null>;
   openFindings: number;
+  // Resolved by a person instead of by the App after a fix. Fine for merging, but a human has to approve it.
+  dismissedFindings: number;
   ci: CiState;
 }
 export interface Decision {
@@ -42,6 +44,7 @@ export function decide(i: GateInput): Decision {
     if (!r || r.reviewedSha !== i.headSha) human.push(`the ${lens} review hasn't finished for ${i.headSha.slice(0, 7)}`);
     else if (r.state === "errored") human.push(`the ${lens} review errored`);
   }
+  if (i.dismissedFindings) human.push(`${i.dismissedFindings} finding${i.dismissedFindings === 1 ? " was" : "s were"} resolved without the review confirming a fix`);
   if (!i.eligibility.eligible) human.push(`not eligible for auto-merge: ${i.eligibility.reason}`);
 
   const blocked: string[] = [];
@@ -88,7 +91,9 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
   const summaries = comments.filter((c) => isReviewBot(c.user, BOT_LOGIN)).map((c) => parseSummaryMarker(c.body)).filter((m) => m !== null);
   const reviews = Object.fromEntries((Object.keys(LENS_GROUPS) as LensGroup[]).map((l) => [l, summaries.find((s) => s.lens === l) ?? null])) as Record<LensGroup, SummaryMarker | null>;
   const verdict: EligibilityVerdict = reviews.bugs?.reviewedSha === head ? (reviews.bugs.eligibility ?? "missing") : "missing";
-  const openFindings = threads.filter((t) => !t.isResolved && t.comment.byBot && sameBot(t.comment.login, BOT_LOGIN) && postedFinding(t.comment.body, t.comment.path)).length;
+  const findingThreads = threads.filter((t) => t.comment.byBot && sameBot(t.comment.login, BOT_LOGIN) && postedFinding(t.comment.body, t.comment.path));
+  const openFindings = findingThreads.filter((t) => !t.isResolved).length;
+  const dismissedFindings = findingThreads.filter((t) => t.isResolved && !resolvedAsFixed(t, BOT_LOGIN)).length;
 
   const input: GateInput = {
     headSha: head,
@@ -99,6 +104,7 @@ async function gate(target: { pr: number } | { sha: string }, dryRun: boolean) {
     eligibility: eligibility(files.map((f) => f.filename), verdict),
     reviews,
     openFindings,
+    dismissedFindings,
     ci: ciState(runs),
   };
   const decision = decide(input);

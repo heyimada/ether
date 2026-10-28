@@ -35,6 +35,8 @@ export interface Review {
 export interface Thread {
   id: string;
   isResolved: boolean;
+  // Who resolved the thread; byBot tells the review App from a user with the same name.
+  resolvedBy: { login: string; byBot: boolean } | null;
   comment: { databaseId: number; body: string; path: string; line: number | null; byBot: boolean; login: string };
 }
 export interface CheckRun {
@@ -113,7 +115,7 @@ export function github(token: string) {
           `query($owner: String!, $name: String!, $n: Int!, $after: String) {
             repository(owner: $owner, name: $name) { pullRequest(number: $n) { reviewThreads(first: 100, after: $after) {
               pageInfo { hasNextPage endCursor }
-              nodes { id isResolved comments(first: 1) { nodes { databaseId body path line author { __typename login } } } }
+              nodes { id isResolved resolvedBy { __typename login } comments(first: 1) { nodes { databaseId body path line author { __typename login } } } }
             } } }
           }`,
           { owner, name, n, after },
@@ -123,7 +125,8 @@ export function github(token: string) {
           const c = t.comments.nodes[0];
           if (!c) continue;
           // GraphQL drops the "[bot]" suffix from App logins; __typename tells a Bot from a user with the same name.
-          out.push({ id: t.id, isResolved: t.isResolved, comment: { databaseId: c.databaseId, body: c.body, path: c.path, line: c.line, byBot: c.author?.__typename === "Bot", login: c.author?.login ?? "" } });
+          const resolvedBy = t.resolvedBy ? { login: t.resolvedBy.login, byBot: t.resolvedBy.__typename === "Bot" } : null;
+          out.push({ id: t.id, isResolved: t.isResolved, resolvedBy, comment: { databaseId: c.databaseId, body: c.body, path: c.path, line: c.line, byBot: c.author?.__typename === "Bot", login: c.author?.login ?? "" } });
         }
         after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
       } while (after);
@@ -151,4 +154,6 @@ export const isBot =(user: { login: string; type: string } | null) => !user || u
 // REST shows App logins as "name[bot]", GraphQL as "name".
 export const sameBot = (login: string, botLogin: string) => login.replace(/\[bot\]$/, "") === botLogin.replace(/\[bot\]$/, "");
 // Markers are only trusted from the App itself, so nobody else can plant "already reported" or "reviewed" state.
+// The App resolves a thread only after its voters agreed the finding is fixed; anyone else resolving it dismissed it.
+export const resolvedAsFixed = (t: Thread, botLogin: string) => t.isResolved && !!t.resolvedBy?.byBot && sameBot(t.resolvedBy.login, botLogin);
 export const isReviewBot = (user: { login: string; type: string } | null, botLogin: string) => user?.type === "Bot" && sameBot(user.login, botLogin);

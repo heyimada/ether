@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { eligibility, isLowRisk, isSensitive } from "./config";
+import { concurrency, eligibility, isLowRisk, isSensitive } from "./config";
 
 test("workflow files, auth and the lockfile are sensitive; app code and docs are not", () => {
   for (const p of [".github/workflows/ci.yml", "src/server/access.ts", "src/server/db/schema.ts", "drizzle/0001_x.sql", "bun.lock", "cli/Cargo.toml"]) expect(isSensitive(p)).toBe(true);
@@ -29,4 +29,9 @@ test("other code needs the model to rate it low", () => {
 
 test("an empty change is not eligible", () => {
   expect(eligibility([], "low").eligible).toBe(false);
+});
+
+test("concurrency falls back to 3 unless it's a positive integer", () => {
+  for (const raw of [undefined, "", "0", "-2", "abc", "1.5"]) expect(concurrency(raw)).toBe(3);
+  expect(concurrency("5")).toBe(5);
 });
