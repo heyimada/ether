@@ -1,4 +1,5 @@
 import { fixHead } from "./git";
+import type { Guard } from "./protection";
 
 export type Service = "git-upload-pack" | "git-receive-pack";
 
@@ -10,7 +11,6 @@ const noCache = {
   Expires: "Fri, 01 Jan 1980 00:00:00 GMT",
 };
 
-type Guard = { args: string[]; env: Record<string, string> };
 
 function spawnService(service: Service, repo: string, advertise: boolean, guard: Guard = { args: [], env: {} }) {
   const args = [...guard.args, service.slice(4), "--stateless-rpc"];

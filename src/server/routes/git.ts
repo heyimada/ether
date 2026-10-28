@@ -5,7 +5,7 @@ import { onPush } from "../ci";
 import { recordPush } from "../contrib";
 import { recordPushEvents } from "../events";
 import { NAME_RE, ensureWiki, listRefs, newAuthorEmails, repoExists, wikiPath } from "../git";
-import { receivePackGuard } from "../protection";
+import { ProtectionUnavailable, receivePackGuard, type Guard } from "../protection";
 import { advertiseRefs, basicCredentials, challenge, runService, type Service } from "../smart-http";
 
 const SERVICES = new Set<Service>(["git-upload-pack", "git-receive-pack"]);
@@ -36,12 +36,28 @@ async function authorize(req: Request, owner: string, repoParam: string, service
   return { ...repo, path: wikiPath(repo.path), viewer };
 }
 
+// The repository's branch rules for receive-pack, or a plain-text refusal git shows as "remote: …".
+function guardOrRefusal(repoId: number, hasBranches: boolean): Guard | Response {
+  try {
+    return receivePackGuard(repoId, hasBranches);
+  } catch (e) {
+    if (e instanceof ProtectionUnavailable) return new Response(`${e.message}\n`, { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    throw e;
+  }
+}
+
 export const gitRoutes = new Elysia()
   .get("/:owner/:repo/info/refs", async ({ request, params, query }) => {
     const service = query.service as Service;
     if (!SERVICES.has(service)) return new Response("Dumb HTTP is not supported\n", { status: 400 });
     const access = await authorize(request, params.owner, params.repo, service);
-    return access instanceof Response ? access : advertiseRefs(service, access.path);
+    if (access instanceof Response) return access;
+    // git only shows the reason for a refusal at this first step, so an unusable hook is reported here too.
+    if (service === "git-receive-pack" && !access.path.endsWith(".wiki.git")) {
+      const refused = guardOrRefusal(access.repo.id, (await listRefs(access.path)).some((r) => r.kind === "branch"));
+      if (refused instanceof Response) return refused;
+    }
+    return advertiseRefs(service, access.path);
   })
   .post("/:owner/:repo/git-upload-pack", { parse: "none" }, async ({ request, params }) => {
     const access = await authorize(request, params.owner, params.repo, "git-upload-pack");
@@ -51,6 +67,9 @@ export const gitRoutes = new Elysia()
     const access = await authorize(request, params.owner, params.repo, "git-receive-pack");
     if (access instanceof Response) return access;
     const before = await listRefs(access.path);
+    // Branch rules guard the repository's code, not its wiki.
+    const guard = access.path.endsWith(".wiki.git") ? undefined : guardOrRefusal(access.repo.id, before.some((r) => r.kind === "branch"));
+    if (guard instanceof Response) return guard;
     // Learn the pusher's commit emails from what the push brought in, and start CI.
     return runService("git-receive-pack", access.path, request, async () => {
       const after = await listRefs(access.path);
@@ -59,5 +78,5 @@ export const gitRoutes = new Elysia()
       if (access.path.endsWith(".wiki.git")) return;
       await recordPushEvents(access.repo.id, access.viewer.id, access.path, before, after);
       await onPush(access.repo.id, access.path, before, after, access.viewer.id);
-    }, access.path.endsWith(".wiki.git") ? undefined : receivePackGuard(access.repo.id));
+    }, guard);
   });

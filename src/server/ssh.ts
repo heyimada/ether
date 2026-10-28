@@ -10,8 +10,8 @@ import { recordPushEvents } from "./events";
 import { db } from "./db/client";
 import { deployKey, sshKey, user } from "./db/schema";
 import { NAME_RE, ensureWiki, fixHead, listRefs, newAuthorEmails, repoExists, wikiPath } from "./git";
+import { ProtectionUnavailable, receivePackGuard, type Guard } from "./protection";
 import { channelPump } from "./ssh-relay";
-import { receivePackGuard } from "./protection";
 
 // One persistent host key per data directory, so clients see a stable identity.
 function hostKey(): Buffer {
@@ -133,7 +133,13 @@ function onClient(client: Connection) {
 
         const before = service === "git-receive-pack" ? await listRefs(path) : [];
         // Branch rules guard the repository's code, not its wiki.
-        const guard = service === "git-receive-pack" && !isWiki ? receivePackGuard(access.repo.id) : { args: [], env: {} };
+        let guard: Guard = { args: [], env: {} };
+        try {
+          if (service === "git-receive-pack" && !isWiki) guard = receivePackGuard(access.repo.id, before.some((r) => r.kind === "branch"));
+        } catch (e) {
+          if (e instanceof ProtectionUnavailable) return deny(stream, e.message);
+          throw e;
+        }
         const proc = Bun.spawn(["git", ...guard.args, service.slice(4), path], {
           stdin: "pipe",
           stdout: "pipe",

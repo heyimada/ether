@@ -40,15 +40,35 @@ export function effectiveRule(rules: BranchRule[], branch: string): Omit<BranchR
 export type RefUpdate = { old: string; new: string; ref: string };
 const isZero = (sha: string) => /^0+$/.test(sha);
 
-// Why an update is refused, or null. `isAncestor` asks git whether old is contained in new.
-export async function refusal(rules: BranchRule[], u: RefUpdate, isAncestor: (old: string, next: string) => Promise<boolean>): Promise<string | null> {
+export type PushContext = {
+  // Whether old is contained in new, asked of git.
+  isAncestor: (old: string, next: string) => Promise<boolean>;
+  // The repository's branch names right now.
+  branches: () => Promise<string[]>;
+  // Ether has never seen a branch in this repository, so nothing created now can be a deleted one coming back.
+  freshRepo: boolean;
+};
+
+// Why an update is refused, or null.
+export async function refusal(rules: BranchRule[], u: RefUpdate, ctx: PushContext): Promise<string | null> {
   if (!u.ref.startsWith("refs/heads/")) return null;
   const branch = u.ref.slice("refs/heads/".length);
+  // On a case-insensitive filesystem refs/heads/MAIN is the file of refs/heads/main, so a name that
+  // differs from a branch only in case would write that branch past its rules.
+  const lower = branch.toLowerCase();
+  const clash = (await ctx.branches()).find((b) => b !== branch && b.toLowerCase() === lower);
+  if (clash) return `${branch} differs from the existing branch ${clash} only in case`;
+
   const rule = effectiveRule(rules, branch);
-  // Creating a branch is always allowed, so a protected repository can still receive its first push.
-  if (!rule || isZero(u.old)) return null;
+  if (!rule) return null;
+  if (isZero(u.old)) {
+    // Creating a branch is allowed, except where it could bring back a deleted branch that requires pull requests.
+    if (rule.requirePullRequest && rule.allowDeletion && !ctx.freshRepo)
+      return `${branch} is protected: it requires pull requests and may be deleted, so it can't be created by a push`;
+    return null;
+  }
   if (isZero(u.new)) return rule.allowDeletion ? null : `${branch} is protected and can't be deleted`;
   if (rule.requirePullRequest) return `${branch} is protected: changes have to go through a pull request`;
-  if (!rule.allowForcePush && !(await isAncestor(u.old, u.new))) return `${branch} is protected: force pushes aren't allowed`;
+  if (!rule.allowForcePush && !(await ctx.isAncestor(u.old, u.new))) return `${branch} is protected: force pushes aren't allowed`;
   return null;
 }

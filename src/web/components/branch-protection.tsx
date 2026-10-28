@@ -1,28 +1,118 @@
 import { useRouter } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
-import { del, post } from "../lib/api";
+import { del, patch, post } from "../lib/api";
 import { ErrorNote, Field, onSubmit, useAction } from "./ui";
 
 export type BranchRule = { id: number; pattern: string; requirePullRequest: boolean; allowForcePush: boolean; allowDeletion: boolean };
+type Settings = Pick<BranchRule, "requirePullRequest" | "allowForcePush" | "allowDeletion">;
 
 // What a rule does, in words, for the list.
-const summary = (r: BranchRule) =>
+const summary = (r: Settings) =>
   [r.requirePullRequest ? "pull requests only" : "direct pushes allowed", r.allowForcePush ? "force pushes allowed" : "no force pushes", r.allowDeletion ? "can be deleted" : "can't be deleted"].join(" · ");
+
+// The three settings, shared by the form that adds a rule and the one that edits it.
+function RuleOptions({ value, onChange }: { value: Settings; onChange: (v: Settings) => void }) {
+  return (
+    <>
+      <label className="radio">
+        <input type="checkbox" checked={value.requirePullRequest} onChange={(e) => onChange({ ...value, requirePullRequest: e.target.checked })} />
+        Require a pull request: no direct pushes
+      </label>
+      <span className="hint" style={{ margin: 0 }}>
+        Anyone with write access can still merge their own pull request, unless approving reviews are required under Pull requests.
+      </span>
+      <label className="radio">
+        <input type="checkbox" checked={value.allowForcePush} onChange={(e) => onChange({ ...value, allowForcePush: e.target.checked })} />
+        Allow force pushes
+      </label>
+      <label className="radio">
+        <input type="checkbox" checked={value.allowDeletion} onChange={(e) => onChange({ ...value, allowDeletion: e.target.checked })} />
+        Allow deleting matching branches
+      </label>
+      {value.allowDeletion && (
+        <span className="hint" style={{ margin: 0 }}>
+          {value.requirePullRequest
+            ? "A deleted branch can't be pushed again, since that would skip pull requests."
+            : "Deleting a branch and pushing it again replaces its history, so this also allows rewriting it."}
+        </span>
+      )}
+    </>
+  );
+}
+
+function RuleRow({ base, rule }: { base: string; rule: BranchRule }) {
+  const router = useRouter();
+  const [mode, setMode] = useState<"view" | "edit" | "remove">("view");
+  const [value, setValue] = useState<Settings>(rule);
+  const save = useAction(async () => {
+    await patch(`${base}/branch-protection/${rule.id}`, value);
+    setMode("view");
+    await router.invalidate();
+  });
+  const remove = useAction(async () => {
+    await del(`${base}/branch-protection/${rule.id}`);
+    await router.invalidate();
+  });
+  return (
+    <li style={{ flexWrap: "wrap" }} aria-label={`Rule ${rule.pattern}`}>
+      <ShieldCheck size={18} aria-hidden className="muted" />
+      <div style={{ minWidth: 0 }}>
+        <strong className="mono">{rule.pattern}</strong>
+        <div className="muted" style={{ fontSize: 12 }}>
+          {summary(rule)}
+        </div>
+      </div>
+      <span className="spacer" />
+      {mode === "view" && (
+        <div className="row">
+          <button className="small" aria-label={`Edit rule ${rule.pattern}`} onClick={() => (setValue(rule), setMode("edit"))}>
+            Edit
+          </button>
+          <button className="danger small" aria-label={`Remove rule ${rule.pattern}`} onClick={() => setMode("remove")}>
+            Remove
+          </button>
+        </div>
+      )}
+      {mode === "edit" && (
+        <form className="stack-sm" style={{ flexBasis: "100%" }} onSubmit={onSubmit(save.run)}>
+          <ErrorNote error={save.error} />
+          <RuleOptions value={value} onChange={setValue} />
+          <div className="row">
+            <button className="primary" disabled={save.pending}>
+              Save rule
+            </button>
+            <button type="button" onClick={() => setMode("view")}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+      {mode === "remove" && (
+        <div className="notice stack-sm" style={{ flexBasis: "100%" }} role="alertdialog" aria-label={`Confirm removing rule ${rule.pattern}`}>
+          <ErrorNote error={remove.error} />
+          <p style={{ margin: 0 }}>
+            Remove protection from <code>{rule.pattern}</code>? Pushes to matching branches will no longer be checked.
+          </p>
+          <div className="row">
+            <button className="danger" onClick={() => remove.run()} disabled={remove.pending}>
+              Remove protection
+            </button>
+            <button onClick={() => setMode("view")}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
 
 export function BranchProtection({ base, rules, defaultBranch }: { base: string; rules: BranchRule[]; defaultBranch: string }) {
   const router = useRouter();
   const [pattern, setPattern] = useState(rules.some((r) => r.pattern === defaultBranch) ? "" : defaultBranch);
-  const [requirePullRequest, setRequirePullRequest] = useState(true);
-  const [allowForcePush, setAllowForcePush] = useState(false);
-  const [allowDeletion, setAllowDeletion] = useState(false);
+  const [value, setValue] = useState<Settings>({ requirePullRequest: true, allowForcePush: false, allowDeletion: false });
   const add = useAction(async () => {
-    await post(`${base}/branch-protection`, { pattern, requirePullRequest, allowForcePush, allowDeletion });
+    await post(`${base}/branch-protection`, { pattern, ...value });
     setPattern("");
-    await router.invalidate();
-  });
-  const remove = useAction(async (id: number) => {
-    await del(`${base}/branch-protection/${id}`);
     await router.invalidate();
   });
   return (
@@ -32,25 +122,13 @@ export function BranchProtection({ base, rules, defaultBranch }: { base: string;
       </header>
       <div className="body stack-md">
         <p className="muted" style={{ margin: 0 }}>
-          Rules apply to every push over HTTPS and SSH, including yours and deploy keys'. Merging a pull request in Ether is always allowed.
+          Rules apply to every push over HTTPS and SSH, including yours and deploy keys'. Merging a pull request in Ether is always allowed. In a repository with
+          rules, branch names that differ from an existing branch only in case are refused.
         </p>
-        <ErrorNote error={remove.error} />
         {rules.length > 0 && (
           <ul className="list card" aria-label="Protected branches">
             {rules.map((r) => (
-              <li key={r.id}>
-                <ShieldCheck size={18} aria-hidden className="muted" />
-                <div style={{ minWidth: 0 }}>
-                  <strong className="mono">{r.pattern}</strong>
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    {summary(r)}
-                  </div>
-                </div>
-                <span className="spacer" />
-                <button className="danger small" aria-label={`Remove rule ${r.pattern}`} onClick={() => remove.run(r.id)}>
-                  Remove
-                </button>
-              </li>
+              <RuleRow key={r.id} base={base} rule={r} />
             ))}
           </ul>
         )}
@@ -59,18 +137,7 @@ export function BranchProtection({ base, rules, defaultBranch }: { base: string;
           <Field id="protect-pattern" label="Branch name or pattern" hint="For example main, release/* or hotfix/**. * stays within one path segment, ** spans several.">
             <input id="protect-pattern" className="mono" value={pattern} onChange={(e) => setPattern(e.target.value)} required maxLength={200} />
           </Field>
-          <label className="radio">
-            <input type="checkbox" checked={requirePullRequest} onChange={(e) => setRequirePullRequest(e.target.checked)} />
-            Require a pull request: no direct pushes
-          </label>
-          <label className="radio">
-            <input type="checkbox" checked={allowForcePush} onChange={(e) => setAllowForcePush(e.target.checked)} />
-            Allow force pushes
-          </label>
-          <label className="radio">
-            <input type="checkbox" checked={allowDeletion} onChange={(e) => setAllowDeletion(e.target.checked)} />
-            Allow deleting matching branches
-          </label>
+          <RuleOptions value={value} onChange={setValue} />
           <div>
             <button disabled={add.pending}>Protect branch</button>
           </div>
