@@ -8,7 +8,7 @@ import { applyAppearance, clearAppearance } from "../lib/accent";
 import { ApiError, api, type Me } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 
-export type Instance = { anonymousRead: boolean; ciEnabled: boolean; sshBase: string | null };
+export type Instance = { anonymousRead: boolean; ciEnabled: boolean; sshBase: string | null; sshHostKey: { fingerprint: string; publicKey: string } | null };
 
 // Every signed-in page lives under this pathless layout. It runs only in the browser so the
 // prerendered SPA shell never bakes in a signed-out session.

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Writable } from "node:stream";
 import { Server, utils, type Connection } from "ssh2";
 import { allows, repoAccess, type Viewer } from "./access";
 import { config } from "./config";
@@ -21,6 +22,21 @@ function hostKey(): Buffer {
   return readFileSync(file);
 }
 
+const fingerprintOf = (blob: Uint8Array) => `SHA256:${new Bun.CryptoHasher("sha256").update(blob).digest("base64").replace(/=+$/, "")}`;
+
+// What people compare against on their first connection (ssh-keygen -lf, known_hosts), or null when SSH is off.
+let hostKeyCache: { fingerprint: string; publicKey: string } | null = null;
+export function hostKeyInfo(): { fingerprint: string; publicKey: string } | null {
+  if (!config.sshPort) return null;
+  if (!hostKeyCache) {
+    const parsed = utils.parseKey(hostKey());
+    if (parsed instanceof Error || Array.isArray(parsed)) return null;
+    const blob = parsed.getPublicSSH();
+    hostKeyCache = { fingerprint: fingerprintOf(blob), publicKey: `${parsed.type} ${Buffer.from(blob).toString("base64")}` };
+  }
+  return hostKeyCache;
+}
+
 // Matched on the key data alone: RSA clients name the signature algorithm (rsa-sha2-256), not the key type.
 function keyOwner(data: Buffer): (Viewer & { keyId: number; keyText: string }) | null {
   const row = db
@@ -35,6 +51,9 @@ function keyOwner(data: Buffer): (Viewer & { keyId: number; keyText: string }) |
 
 // git-upload-pack '/owner/repo.git' (quotes and leading slash optional), as git sends it.
 const COMMAND_RE = /^(git-upload-pack|git-receive-pack) +'?\/?([^'/\s]+)\/([^'/\s]+?)'?$/;
+
+// git asks for protocol v2 by sending GIT_PROTOCOL (e.g. "version=2"); anything odd is dropped.
+const GIT_PROTOCOL_RE = /^[\w.=:-]{1,64}$/;
 
 function deny(stream: { stderr: { write: (s: string) => void }; exit: (c: number) => void; end: () => void }, message: string) {
   stream.stderr.write(`ether: ${message}\n`);
@@ -59,6 +78,12 @@ function onClient(client: Connection) {
   client.on("ready", () => {
     client.on("session", (accept) => {
       const session = accept();
+      let gitProtocol = "";
+      session.on("env", (ok, reject, info) => {
+        if (info.key !== "GIT_PROTOCOL" || !GIT_PROTOCOL_RE.test(info.val)) return reject?.();
+        gitProtocol = info.val;
+        ok?.();
+      });
       // Like GitHub: no shell, just a friendly hello.
       session.on("pty", (ok) => ok?.());
       session.on("shell", (ok) => {
@@ -86,16 +111,28 @@ function onClient(client: Connection) {
           stdin: "pipe",
           stdout: "pipe",
           stderr: "pipe",
-          env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" },
+          env: { ...process.env, GIT_PROTOCOL: gitProtocol, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" },
         });
+        stream.on("close", () => proc.kill());
+        // Both directions wait for the other side, so a slow peer can't make either end buffer a whole pack in memory.
+        // Not an async iterator: finishing one destroys the channel, which the response still needs.
         stream.on("data", (chunk: Buffer) => {
           proc.stdin.write(chunk);
-          proc.stdin.flush();
+          const flushed = proc.stdin.flush();
+          if (flushed instanceof Promise) {
+            stream.pause();
+            flushed.then(() => stream.resume(), () => proc.kill());
+          }
         });
         stream.on("end", () => proc.stdin.end());
-        stream.on("close", () => proc.kill());
-        const pump = async (from: ReadableStream<Uint8Array>, to: { write: (b: Uint8Array) => unknown }) => {
-          for await (const chunk of from) to.write(chunk);
+        const drained = (to: Writable) =>
+          new Promise<void>((resolve) => {
+            const done = () => (to.off("drain", done), stream.off("close", done), resolve());
+            to.on("drain", done);
+            stream.on("close", done);
+          });
+        const pump = async (from: ReadableStream<Uint8Array>, to: Writable) => {
+          for await (const chunk of from) if (!stream.destroyed && !to.write(chunk)) await drained(to);
         };
         await Promise.all([pump(proc.stdout, stream), pump(proc.stderr, stream.stderr)]);
         const code = await proc.exited;
@@ -130,6 +167,5 @@ export function parsePublicKey(text: string): { keyType: string; blob: string; f
   const parsed = utils.parseKey(text.trim());
   if (parsed instanceof Error || Array.isArray(parsed) || parsed.isPrivateKey()) throw new Error("That doesn't look like an SSH public key (it should start with ssh-ed25519, ssh-rsa or ecdsa-sha2-…)");
   const blob = parsed.getPublicSSH();
-  const digest = new Bun.CryptoHasher("sha256").update(blob).digest("base64").replace(/=+$/, "");
-  return { keyType: parsed.type, blob: Buffer.from(blob).toString("base64"), fingerprint: `SHA256:${digest}` };
+  return { keyType: parsed.type, blob: Buffer.from(blob).toString("base64"), fingerprint: fingerprintOf(blob) };
 }

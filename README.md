@@ -3,6 +3,7 @@
 A self-hosted alternative to GitHub Enterprise: code hosting, review and collaboration on a server you control. Run it on a VPS, a home server or your own machine behind a private network such as a Tailscale tailnet.
 
 - **Git over HTTPS** (smart HTTP, streamed in both directions), authenticated with personal access tokens.
+- **Git over SSH** with keys people add in **Settings**, protocol v2 and streamed with backpressure. Settings shows the server's host key fingerprint to check on the first connection.
 - **Public and private repositories.** Public means readable and cloneable by every account on the server; pushing always needs a role.
 - **Organizations** that own repositories, with owners, members and a base permission (read or write) for every org repository.
 - **Code browser**: files with their last commit, branches and tags (including names with `/`), history, diffs, and a branch/tag picker.
