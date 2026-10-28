@@ -80,6 +80,7 @@ cargo build
 
 ```sh
 bun run typecheck                 # needs src/web/routeTree.gen.ts, which `bun run build` or `dev:web` generates
+bun run test                      # unit tests next to the code (src/**/*.test.ts)
 bunx playwright install chromium  # once
 bun run test:e2e                  # builds, boots a throwaway server, drives git and Chromium
 bun run test:e2e -- e2e/git.spec.ts   # one file
@@ -98,7 +99,7 @@ New behavior needs an e2e test. Write it the way the existing specs read: one us
 1. Fork the repository and create a branch from the default branch.
 2. Keep one pull request to one change. Split unrelated fixes into separate pull requests.
 3. Fill in the pull request template. Link the issue with `Fixes #123` so it closes on merge.
-4. Make sure CI passes. It runs the build, typecheck, `cargo fmt`/`clippy`/`build` for `cli/`, and the full e2e suite. When the e2e suite fails, download the `e2e-report` artifact from the workflow run to see screenshots and the server log.
+4. Make sure CI passes. It runs the build, typecheck, unit tests, `cargo fmt`/`clippy`/`build` for `cli/`, and the full e2e suite. When the e2e suite fails, download the `e2e-report` artifact from the workflow run to see screenshots and the server log.
 5. Include a screenshot or short recording for UI changes, in light and dark theme if colors are involved.
 6. Update `README.md` when you change commands, environment variables, setup steps or user-facing behavior.
 
