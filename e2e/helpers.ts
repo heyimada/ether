@@ -9,8 +9,9 @@ import { ADMIN } from "./global-setup";
 export { ADMIN };
 export const baseURL = () => process.env.ETHER_URL!;
 
+// The process id keeps names apart across workers, which each count from 0 and can hit the same millisecond.
 let counter = 0;
-export const unique = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${counter++}`;
+export const unique = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${process.pid.toString(36)}-${counter++}`;
 
 export async function login(username: string, password: string): Promise<APIRequestContext> {
   const ctx = await request.newContext({ baseURL: baseURL() });
