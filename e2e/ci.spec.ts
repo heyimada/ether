@@ -56,6 +56,9 @@ test("CI runs workflows on push when enabled, shows logs, and gates merges on ch
   await page.goto(`${baseURL()}/site-admin`);
   await page.getByRole("checkbox", { name: /Run CI jobs/ }).check();
   await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+  // This test covers jobs on the host; e2e/ci-isolation.spec.ts covers containers.
+  await page.getByRole("radio", { name: /On this machine, as the user Ether runs as/ }).check();
+  await expect(page.getByRole("radio", { name: /On this machine/ })).toBeChecked();
   try {
     expect((await owner.ctx.patch(api, { data: { ciEnabled: true, requireChecks: true }, headers: headers() })).ok()).toBe(true);
 
@@ -110,7 +113,7 @@ test("CI runs workflows on push when enabled, shows logs, and gates merges on ch
     expect((await owner.ctx.post(`${api}/pulls/${bad.pull.number}/merge`, { data: {}, headers: headers() })).status()).toBe(409);
   } finally {
     const adminCtx = await loginAdmin();
-    await adminCtx.put("/api/admin/settings", { data: { ciEnabled: false }, headers: headers() });
+    await adminCtx.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
   }
   // Readers can't re-run anything.
   const reader = await createUser(admin);

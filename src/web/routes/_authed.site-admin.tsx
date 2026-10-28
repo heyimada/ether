@@ -14,19 +14,20 @@ export const Route = createFileRoute("/_authed/site-admin")({
     return { me };
   },
   loader: async () => {
-    const [invites, users, instance] = await Promise.all([
+    const [invites, users, instance, ci] = await Promise.all([
       api<{ invites: Invite[] }>("/api/invites"),
       api<{ users: UserRow[] }>("/api/users"),
-      api<{ anonymousRead: boolean; ciEnabled: boolean }>("/api/instance"),
+      api<{ anonymousRead: boolean; ciEnabled: boolean; ciIsolation: "container" | "host" }>("/api/instance"),
+      api<{ runtime: string | null }>("/api/admin/ci-runtime"),
     ]);
-    return { invites: invites.invites, users: users.users.filter((u) => !u.isOrg), instance };
+    return { invites: invites.invites, users: users.users.filter((u) => !u.isOrg), instance, runtime: ci.runtime };
   },
   component: Admin,
 });
 
 function Admin() {
   const router = useRouter();
-  const { invites, users, instance } = Route.useLoaderData();
+  const { invites, users, instance, runtime } = Route.useLoaderData();
   const [saved, setSaved] = useState("");
   const [allowVisitors, setAllowVisitors] = useState(instance.anonymousRead);
   const [allowCi, setAllowCi] = useState(instance.ciEnabled);
@@ -37,6 +38,20 @@ function Admin() {
       await put("/api/admin/settings", { ciEnabled });
     } catch (e) {
       setAllowCi(!ciEnabled);
+      throw e;
+    }
+    setSaved("Saved");
+    await router.invalidate();
+  });
+  const [isolation, setIsolationState] = useState(instance.ciIsolation);
+  const setIsolation = useAction(async (ciIsolation: "container" | "host") => {
+    setSaved("");
+    const before = isolation;
+    setIsolationState(ciIsolation);
+    try {
+      await put("/api/admin/settings", { ciIsolation });
+    } catch (e) {
+      setIsolationState(before);
       throw e;
     }
     setSaved("Saved");
@@ -84,11 +99,44 @@ function Admin() {
           <span>
             Run CI jobs on this server
             <span className="hint" style={{ display: "block" }}>
-              Repositories that turn CI on run the commands in their <code>.ether/ci.yml</code> on this machine, as the user Ether runs as. Only allow this
-              if you trust everyone with write access to those repositories.
+              Repositories that turn CI on run the commands in their <code>.ether/ci.yml</code> when someone pushes.
             </span>
           </span>
         </label>
+        {allowCi && (
+          <fieldset className="stack-sm" style={{ border: 0, padding: "0 0 0 28px", margin: 0 }}>
+            <legend className="muted" style={{ padding: 0 }}>
+              Where jobs run
+            </legend>
+            <ErrorNote error={setIsolation.error} />
+            <label className="radio" style={{ alignItems: "flex-start" }}>
+              <input type="radio" name="ci-isolation" checked={isolation === "container"} onChange={() => setIsolation.run("container")} disabled={setIsolation.pending} />
+              <span>
+                In a container per job (recommended)
+                <span className="hint" style={{ display: "block" }}>
+                  {runtime ? (
+                    <>
+                      Uses <code>{runtime}</code>. Jobs get a copy of the checkout and can't read this server's files. Repository secrets are only passed to
+                      these jobs.
+                    </>
+                  ) : (
+                    <>No container runtime found. Install Docker or Podman on this machine, or jobs will fail with a message saying so.</>
+                  )}
+                </span>
+              </span>
+            </label>
+            <label className="radio" style={{ alignItems: "flex-start" }}>
+              <input type="radio" name="ci-isolation" checked={isolation === "host"} onChange={() => setIsolation.run("host")} disabled={setIsolation.pending} />
+              <span>
+                On this machine, as the user Ether runs as (unsafe)
+                <span className="hint" style={{ display: "block" }}>
+                  Jobs can read Ether's data folder, including the database and the auth secret, so everyone with write access to a repository with CI
+                  controls the server. Jobs that use secrets are refused.
+                </span>
+              </span>
+            </label>
+          </fieldset>
+        )}
         {saved && (
           <span role="status" className="muted">
             {saved}

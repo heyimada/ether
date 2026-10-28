@@ -1,6 +1,7 @@
 import { Mutex } from "async-mutex";
 import { and, desc, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
+import { basename } from "node:path";
 import {
   HttpError,
   createAccessToken,
@@ -15,7 +16,8 @@ import {
 } from "../access";
 import { auth, placeholderEmail } from "../auth";
 import { USERNAME_RE } from "../auth-plugins";
-import { ciAllowed } from "../ci";
+import { ciAllowed, ciIsolation } from "../ci";
+import { containerRuntime } from "../ci-container";
 import { config } from "../config";
 import { db } from "../db/client";
 import { accessToken, instanceSetting, invite, profile, user, userPref } from "../db/schema";
@@ -54,6 +56,7 @@ export const accountRoutes = new Elysia()
   .get("/instance", () => ({
     anonymousRead: anonymousRead(),
     ciEnabled: ciAllowed(),
+    ciIsolation: ciIsolation(),
     // Base for ssh:// clone URLs, or null when git over SSH is off.
     sshBase: config.sshPort ? `ssh://git@${config.sshHost}${config.sshPort === 22 ? "" : `:${config.sshPort}`}` : null,
     sshHostKey: hostKeyInfo(),
@@ -61,14 +64,26 @@ export const accountRoutes = new Elysia()
   .put("/admin/settings", async ({ request, body }) => {
     await requireAdmin(request);
     const b = (body ?? {}) as Record<string, unknown>;
-    const keys = ["anonymousRead", "ciEnabled"].filter((k) => k in b);
-    if (keys.length === 0 || keys.some((k) => typeof b[k] !== "boolean")) throw new HttpError(400, "Settings are anonymousRead and ciEnabled, each true or false");
+    const valid: Record<string, (v: unknown) => boolean> = {
+      anonymousRead: (v) => typeof v === "boolean",
+      ciEnabled: (v) => typeof v === "boolean",
+      ciIsolation: (v) => v === "container" || v === "host",
+    };
+    const keys = Object.keys(valid).filter((k) => k in b);
+    if (keys.length === 0 || keys.some((k) => !valid[k](b[k])))
+      throw new HttpError(400, "Settings are anonymousRead and ciEnabled (true or false) and ciIsolation (container or host)");
     for (const key of keys)
       db.insert(instanceSetting)
         .values({ key, value: String(b[key]) })
         .onConflictDoUpdate({ target: instanceSetting.key, set: { value: String(b[key]) } })
         .run();
-    return { anonymousRead: anonymousRead(), ciEnabled: ciAllowed() };
+    return { anonymousRead: anonymousRead(), ciEnabled: ciAllowed(), ciIsolation: ciIsolation() };
+  })
+  // Which container CLI CI would use, so Admin can say why isolated jobs can't run yet.
+  .get("/admin/ci-runtime", async ({ request }) => {
+    await requireAdmin(request);
+    const runtime = containerRuntime();
+    return { runtime: runtime ? basename(runtime) : null };
   })
   .get("/me", async ({ request }) => {
     const viewer = await requireUser(request);

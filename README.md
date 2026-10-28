@@ -34,7 +34,9 @@ Development: run `bun run dev:server` and `bun run dev:web` together. The app is
 | `ETHER_PUBLIC_URL` | `http://HOST:PORT` | The URL people use to reach Ether |
 | `ETHER_SSH_PORT` | `2222` | Git over SSH on the same bind address; `off` disables it |
 | `ETHER_SSH_HOST` | host of `ETHER_PUBLIC_URL` | Host name shown in `ssh://` clone URLs |
-| `BETTER_AUTH_SECRET` | generated into `data/auth-secret` | Session signing secret |
+| `BETTER_AUTH_SECRET` | generated into `data/auth-secret` | Session signing secret; CI secrets are encrypted under a key derived from it |
+| `ETHER_CI_RUNTIME` | `docker`, else `podman` | Container CLI for CI jobs |
+| `ETHER_CI_IMAGE` | `oven/bun:1` | Image for CI jobs that don't name one |
 
 ## Example deployment: a Tailscale tailnet
 
@@ -56,24 +58,35 @@ Restore: stop Ether, then `ETHER_DATA=<empty folder> bun run ether restore <dir>
 
 ## CI
 
-Off until an admin ticks **Admin → Access → Run CI jobs on this server** and an owner turns it on in the repository's **Settings**. Jobs run on the Ether machine as the user Ether runs as, so only allow it for people you trust with that. Then commit `.ether/ci.yml`:
+Off until an admin ticks **Admin → Access → Run CI jobs on this server** and an owner turns it on in the repository's **Settings**. Then commit `.ether/ci.yml`:
 
 ```yaml
 jobs:
   test:
+    image: oven/bun:1.4.0          # optional; the server's default image otherwise
     steps:
       - name: Install
         run: bun install
       - name: Test
         run: bun test
         timeout-minutes: 15        # default 10, at most 60
-  lint:
+  deploy:
+    env:
+      DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}   # set under the repository's Settings → CI secrets
     steps:
-      - run: bunx tsc --noEmit
-        shell: bash                # bash (default when installed), sh, pwsh, powershell or cmd
+      - run: ./scripts/deploy.sh
+        shell: bash                # bash (default when installed) or sh; pwsh if the image has it
+        env:
+          TARGET: production       # plain values work too
 ```
 
-Every push to a branch runs the workflow of its new commit, one job at a time, in a fresh checkout. Steps get a minimal environment (`PATH`, `HOME`/`TEMP` and `CI`, `CI_REPOSITORY`, `CI_COMMIT_SHA`, `CI_REF`) without Ether's settings. They still run as the same OS user as Ether, so a workflow can read Ether's data folder, including the database and auth secret: turning CI on gives everyone with write access to that repository full control of the server. Runs and logs are under the repository's **CI** tab; pull requests show their head commit's checks, and **Require passing checks before merging** blocks merges until they pass.
+Every push to a branch runs the workflow of its new commit, one job at a time, from a fresh checkout. Steps get `CI`, `CI_REPOSITORY`, `CI_COMMIT_SHA`, `CI_REF` and the `env` they ask for, never Ether's own settings. Runs and logs are under the repository's **CI** tab; pull requests show their head commit's checks, and **Require passing checks before merging** blocks merges until they pass.
+
+**Where jobs run.** By default each job gets its own container, from Docker or Podman on the Ether machine (whichever is installed, or `ETHER_CI_RUNTIME`). The checkout is copied in, not mounted, so a job can't see Ether's data folder or anything else on the host. The container runs with `no-new-privileges`, without raw sockets, and capped at `ETHER_CI_MEMORY` (default `4g`), `ETHER_CI_CPUS` (`2`) and `ETHER_CI_PIDS` (`1024`) processes, and it is removed when the job ends. Jobs still have network access, for example to install packages. The default image is `ETHER_CI_IMAGE`, or `oven/bun:1`. Without a container runtime, jobs fail with a message saying so.
+
+An admin can instead choose **On this machine, as the user Ether runs as** (the behaviour before containers, and the only option without Docker or Podman, for example on Windows without Docker Desktop). Those jobs can read Ether's data folder, including the database and auth secret, so everyone with write access to a repository with CI controls the server. Jobs that use secrets are refused in this mode.
+
+**Secrets.** Owners add them under **Settings → CI secrets**. Values are encrypted in the database with a key derived from the auth secret (so a backup restores them along with it), can't be read back through the API or the UI, and are masked as `***` in logs. They reach a job only as the environment variables it names, and only in a container. Masking only prevents accidents: anyone who can push to the repository can write a workflow that prints a secret in another form, so only store what everyone with write access may know. If the auth secret changes (for example a new `BETTER_AUTH_SECRET`), jobs report that a secret can't be decrypted until it's set again.
 
 ## Command-line client
 
