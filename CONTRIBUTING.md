@@ -111,7 +111,7 @@ New behavior needs an e2e test. Write it the way the existing specs read: one us
 
 Pull requests from collaborators with write access also get an automated review, posted by the review GitHub App. Its code lives in `.github/review/`. Two reviews run on every push, one for bugs and one for security. Several agents look for problems, and a separate group checks each one. A finding is posted only when they agree it is real. Findings are inline comments tagged **Important**, **Nit** or **Pre-existing**. Style and cleanup remarks are never posted.
 
-Answer every finding. Either fix it, or resolve the thread with a short reply that says why it isn't a problem. When a later commit fixes a finding, the review resolves the thread itself. A finding resolved by a person instead means a maintainer has to approve the pull request. From the third round on, only the commits since the last review are checked.
+Answer every finding. Either fix it, or resolve the thread with a short reply that says why it isn't a problem. When a later commit fixes a finding, the review resolves the thread itself. A finding resolved by a person instead means a maintainer has to approve the pull request. From the third round on, only the commits since the last review are checked, and from the fourth round on only **Important** findings are posted.
 
 The **Review gate** check says whether the App approves the pull request. It approves only when all of these hold, and then it merges the pull request with auto-merge:
 
