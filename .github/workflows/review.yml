@@ -83,7 +83,8 @@ jobs:
           persist-credentials: false
       # A symlink could point the agents' file tools outside pr/. review.ts also refuses to run if one is left.
       - run: find pr -type l -delete
-      - uses: oven-sh/setup-bun@v2
+      # Pinned because later steps in this job hold the App key or the Claude token; Dependabot bumps it.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile --ignore-scripts
