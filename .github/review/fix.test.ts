@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fixPrompt, stagedChanges } from "./fix";
+import { fixPrompt, stagedChanges, trackedSymlinks } from "./fix";
 
 const raw = (...entries: [string, string, string, string][]) =>
   entries.map(([oldMode, newMode, status, path]) => `:${oldMode} ${newMode} ${"1".repeat(40)} ${"2".repeat(40)} ${status}\0${path}\0`).join("");
@@ -30,4 +30,9 @@ test("the prompt quotes every finding and the maintainer's request", () => {
   expect(p).toContain("[abc] src/a.ts:3");
   expect(p).toContain("<request>\nonly the first one\n</request>");
   expect(fixPrompt([], "")).not.toContain("<request>");
+});
+
+test("a commit's symlinks are found in its tree listing", () => {
+  expect(trackedSymlinks(`100644 blob ${"1".repeat(40)}\tsrc/a.ts\x00120000 blob ${"2".repeat(40)}\tdocs/link with space\0`)).toEqual(["docs/link with space"]);
+  expect(trackedSymlinks("")).toEqual([]);
 });

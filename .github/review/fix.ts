@@ -118,12 +118,19 @@ async function edit(sha: string) {
   // can't write .git/, and git runs with nothing in the checkout's config allowed to start a program.
   const git = (...args: string[]) => Bun.spawnSync(["git", "-C", PR_DIR, ...GIT_HARDENED, ...args]);
   git("add", "-A");
+  // fix.yml deleted the checkout's symlinks so the agent couldn't follow them. Those deletions aren't the agent's.
+  const symlinks = trackedSymlinks(git("ls-tree", "-r", "-z", sha).stdout.toString());
+  if (symlinks.length) Bun.spawnSync(["git", "-C", PR_DIR, ...GIT_HARDENED, "reset", "-q", sha, "--pathspec-from-file=-", "--pathspec-file-nul"], { stdin: Buffer.from(symlinks.join("\0")) });
   // Against the commit that was checked out, so nothing is lost if HEAD moved.
   const diff = git("diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", sha);
   if (!diff.success) throw new Error(`git diff failed: ${diff.stderr.toString()}`);
   await Bun.write(PATCH, diff.stdout);
   await Bun.write(RESULT, JSON.stringify(result));
 }
+
+// Paths a commit holds as symlinks. git ls-tree -r -z lines look like "120000 blob <sha>\tpath".
+export const trackedSymlinks = (staged: string) =>
+  staged.split("\0").flatMap((l) => (l.startsWith("120000 ") ? [l.slice(l.indexOf("\t") + 1)] : []));
 
 // The paths a staged change adds, modifies or deletes, or why it can't be committed. git diff --raw lines look like
 // ":100644 100644 <old> <new> M\tpath". Only regular files: the commit API can't set a mode or write a symlink.
