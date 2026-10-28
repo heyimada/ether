@@ -17,7 +17,8 @@ on:
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.head_sha }}
+  # Keyed on the head commit for both events, so the newest event for a commit cancels older runs that read staler state.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
   cancel-in-progress: true
 
 env:
