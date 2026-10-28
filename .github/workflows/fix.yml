@@ -1,0 +1,156 @@
+name: Fix
+
+# A "/fix" comment on a pull request asks an agent to fix the open review findings. Only works when both the commenter
+# and the pull request's author have write access and the branch is in this repository.
+#
+# issue_comment always runs this file from main, never the pull request's copy. The job that runs the pull request's
+# code (the agent may install it and run its tests) holds only a Claude token from the fix environment, no GitHub
+# token that can write. The job that holds the App token never runs that code: it checks the patch and commits it
+# through the API as the App. A commit by the App makes the merge gate ask for a person's approval.
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+env:
+  BUN_VERSION: 1.4.0
+
+jobs:
+  trust:
+    name: Trust
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/fix') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: review
+    permissions: {}
+    outputs:
+      trusted: ${{ steps.check.outputs.trusted }}
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      # Pinned because this step holds the App's private key; Dependabot bumps it.
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+          permission-pull-requests: read
+      - id: check
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ github.event.issue.number }}
+          BODY: ${{ github.event.comment.body }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          COMMENTER_TYPE: ${{ github.event.comment.user.type }}
+        run: |
+          trusted=false
+          sha=
+          writer() { case "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" --jq .permission)" in admin | maintain | write) return 0 ;; esac; return 1; }
+          if [[ "$BODY" =~ ^/fix([[:space:]]|$) ]] && [ "$COMMENTER_TYPE" = User ] && writer "$COMMENTER"; then
+            pull=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR")
+            author=$(jq -r .user.login <<<"$pull")
+            if [ "$(jq -r .state <<<"$pull")" = open ] && [ "$(jq -r .user.type <<<"$pull")" = User ] \
+              && [ "$(jq -r .head.repo.full_name <<<"$pull")" = "$GITHUB_REPOSITORY" ] && writer "$author"; then
+              trusted=true
+              sha=$(jq -r .head.sha <<<"$pull")
+            fi
+          fi
+          echo "trusted=$trusted" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  fix:
+    name: Fix
+    needs: trust
+    if: ${{ needs.trust.outputs.trusted == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: fix
+    # On the job, not the workflow: every comment starts this workflow, and a queued run is replaced by the next one.
+    concurrency:
+      group: fix-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.trust.outputs.sha }}
+          path: pr
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun .github/review/fix.ts findings --pr "$PR" > findings.json
+        env:
+          PR: ${{ github.event.issue.number }}
+          GITHUB_TOKEN: ${{ github.token }}
+      # No GitHub token in this step: the agent runs the pull request's code here.
+      - run: bun .github/review/fix.ts edit
+        env:
+          FIX_REQUEST: ${{ github.event.comment.body }}
+          # Its own secret, not the review's: the pull request's code can read it. Without it the agent can't log in.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.FIX_CLAUDE_CODE_OAUTH_TOKEN }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fix
+          path: |
+            fix.patch
+            fix.json
+          retention-days: 1
+
+  commit:
+    name: Commit
+    needs: [trust, fix]
+    # Also after a failed fix job, to say so on the pull request.
+    if: ${{ always() && needs.trust.outputs.trusted == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: review
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.trust.outputs.sha }}
+          path: pr
+          persist-credentials: false
+      - run: find pr -type l -delete
+      # Missing when the fix job failed; fix.ts reports that. The job that made it ran the pull request's code, which could
+      # have put anything in it, so it goes in its own directory where it can't replace fix.ts or anything else here.
+      - uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: fix
+          path: ${{ runner.temp }}/fix-artifact
+      # Pinned because later steps in this job hold the App key; Dependabot bumps it.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile --ignore-scripts
+      # Pinned because this step holds the App's private key; Dependabot bumps it.
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - run: bun .github/review/fix.ts commit --pr "$PR" --sha "$SHA" --from "$RUNNER_TEMP/fix-artifact"
+        env:
+          PR: ${{ github.event.issue.number }}
+          SHA: ${{ needs.trust.outputs.sha }}
+          FIX_BY: ${{ github.event.comment.user.login }}
+          FIX_BY_ID: ${{ github.event.comment.user.id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          REVIEW_APP_TOKEN: ${{ steps.app.outputs.token }}
+          REVIEW_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]

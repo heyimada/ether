@@ -113,11 +113,14 @@ Pull requests from collaborators with write access also get an automated review,
 
 Answer every finding. Either fix it, or resolve the thread with a short reply that says why it isn't a problem. When a later commit fixes a finding, the review resolves the thread itself. A finding resolved by a person instead means a maintainer has to approve the pull request. From the third round on, only the commits since the last review are checked, and from the fourth round on only **Important** findings are posted.
 
+To have an agent fix the open findings, comment `/fix` on the pull request. Anything after `/fix` is passed on to the agent, for example `/fix only the lifecycle finding`. This works only when you and the author both have write access and the branch is in this repository. The agent checks each finding, fixes the ones that are real, and may run the unit tests and typecheck. It never edits `.github/`. The App then pushes the change as one commit and comments what it did. The review runs again on that commit. Because an agent wrote it, a person has to approve the pull request before it merges, and the App won't auto-merge it.
+
 The **Review gate** check says whether the App approves the pull request. It approves only when all of these hold, and then it merges the pull request with auto-merge:
 
 - The author has write access to the repository. Bots never qualify.
 - The change is low risk: docs or design files, or a change the review rates as low risk. A feature or bug fix can qualify when it is contained, a revert fully undoes it, it keeps existing routes, CLI commands and protocols working, and tests in the pull request cover it, or it is a visual or copy change you can check by reading it. Workflow files, agent instructions (`CLAUDE.md`, `AGENTS.md`, `.claude/`), auth, access control, git and SSH handling, CI secrets, the database schema, migrations and dependencies never are. `.github/CODEOWNERS` lists them, and a maintainer other than the author has to approve those.
 - Both reviews finished for the latest commit, every finding is fixed (a finding resolved by a person doesn't count), and CI passed.
+- No commit in the pull request was written by `/fix`.
 
 Anything else needs a maintainer's approval as usual. That includes every pull request from a fork. Add the `no-automerge` label to keep the App from approving.
 

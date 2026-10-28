@@ -15,7 +15,7 @@ export const ROUND_CAP = 3;
 export const concurrency = (raw: string | undefined) => (raw && /^[1-9]\d*$/.test(raw) ? Number(raw) : 3);
 export const CONCURRENCY = concurrency(process.env.REVIEW_CONCURRENCY);
 
-export const MAX_TURNS = { finder: 60, voter: 30, isFixed: 20, eligibility: 30 };
+export const MAX_TURNS = { finder: 60, voter: 30, isFixed: 20, eligibility: 30, fix: 150 };
 
 export const LENS_GROUPS = {
   bugs: ["correctness", "lifecycle", "contracts"],
@@ -66,6 +66,10 @@ export const SENSITIVE = [
 
 // The required CI checks from branch protection, all run by GitHub Actions.
 export const REQUIRED_CHECKS = ["Build and typecheck", "CLI (Rust)", "End-to-end tests"];
+
+// In every commit /fix makes. The gate also looks for the App as author; either one is enough, so a forged line only
+// makes the gate stricter.
+export const FIX_TRAILER = "Written-by: ether-review /fix";
 
 export const GATE_CHECK = "Review gate";
 export const NO_AUTOMERGE_LABEL = "no-automerge";

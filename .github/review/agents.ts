@@ -86,6 +86,15 @@ export function denyReason(root: string, tool: string, input: Record<string, unk
   return null;
 }
 
+// Nothing from the job's environment but what Claude needs to log in.
+export function agentEnv(): Record<string, string> {
+  const env: Record<string, string> = { HOME: process.env.HOME ?? "", PATH: process.env.PATH ?? "", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" };
+  // Locally the login lives in the macOS keychain, which is looked up by USER; in CI the token comes from the secret.
+  if (process.env.USER) env.USER = process.env.USER;
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) env.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  return env;
+}
+
 async function run<T>(prompt: string, schema: Record<string, unknown>, maxTurns: number, cwd: string): Promise<AgentResult<T>> {
   const root = realpathSync(cwd);
   const sandbox: HookCallback = async (input) => {
@@ -93,10 +102,7 @@ async function run<T>(prompt: string, schema: Record<string, unknown>, maxTurns:
     const reason = denyReason(root, input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>);
     return reason ? { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } } : {};
   };
-  const env: Record<string, string> = { HOME: process.env.HOME ?? "", PATH: process.env.PATH ?? "", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" };
-  // Locally the login lives in the macOS keychain, which is looked up by USER; in CI the token comes from the secret.
-  if (process.env.USER) env.USER = process.env.USER;
-  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) env.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  const env = agentEnv();
 
   return limit(async () => {
     let costUsd = 0;
