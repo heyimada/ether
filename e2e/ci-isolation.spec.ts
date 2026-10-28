@@ -98,6 +98,14 @@ async function pushIsolationWorkflow(isolation: "container" | "host") {
           echo "token is $TOKEN"
           printf '%s\\n' "$DEPLOY_KEY" | wc -l | tr -d ' ' | sed 's/^/key lines: /'
           echo "$DEPLOY_KEY"
+  nonroot:
+    # Runs as user 101: the checkout has to be theirs, and variables can't depend on root-owned files.
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    env:
+      TOKEN: \${{ secrets.TOKEN }}
+    steps:
+      - name: Not root, but the checkout is writable and variables arrive
+        run: test "$(id -u)" != 0 && touch README.md written-by-step && test "$TOKEN" = "${TOKEN}" && echo "non-root ok"
   missing:
     image: alpine:3.20
     steps:
@@ -139,6 +147,8 @@ test("in a container, a job gets its checkout and secrets (masked in the log) bu
     expect(jobs.build.log).toContain("key lines: 3");
     expect(jobs.build.log).not.toContain(TOKEN);
     expect(jobs.build.log).not.toContain("QUFBQUJCQkJDQ0NDREREREVFRUU=");
+    expect(jobs.nonroot.status, jobs.nonroot.log).toBe("success");
+    expect(jobs.nonroot.log).toContain("non-root ok");
     expect(jobs.missing.status).toBe("failure");
     expect(jobs.missing.log).toContain("The secret NOT_SET isn't set");
     // Every job's container is gone afterwards.

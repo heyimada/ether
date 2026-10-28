@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, shellCommand, STEP_ENV_PATH } from "./ci-container";
+import { chownWorkspaceArgs, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, shellCommand } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
 import { parseWorkflow, WORKFLOW, type EnvValue, type Shell, type Step } from "./ci-workflow";
 import { db } from "./db/client";
@@ -130,8 +130,6 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
     db.update(ciJob).set({ log, ...(status ? { status } : {}) }).where(eq(ciJob.id, job.id)).run();
   db.update(ciJob).set({ status: "running", startedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
   const dir = mkdtempSync(join(tmpdir(), "ether-ci-"));
-  // Outside the checkout and readable only by Ether's user; holds a step's variables just long enough to copy them.
-  let envDir: string | null = null;
   const steps = JSON.parse(job.steps) as Step[];
   const isolation = ciIsolation();
   let box: { runtime: string; name: string } | null = null;
@@ -157,7 +155,6 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
       if (!runtime) return fail("No container runtime found: install Docker or Podman on the server, or let an admin run CI on the host under Admin → Access (unsafe).");
       const image = job.image ?? DEFAULT_IMAGE;
       box = { runtime, name: `ether-ci-${job.runId}-${job.id}-${randomBytes(4).toString("hex")}` };
-      envDir = mkdtempSync(join(tmpdir(), "ether-ci-env-"));
       if (running) running.container = box;
       append(`▶ Starting ${image} with ${basename(runtime)}\n`);
       save();
@@ -165,6 +162,11 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
       if ((await cli(runtime, createArgs(box.name, image), append, 15 * 60_000)) !== 0) return fail(`✖ Could not create a container from ${image}`);
       if ((await cli(runtime, ["cp", `${dir}/.`, `${box.name}:/workspace`], append, 10 * 60_000)) !== 0) return fail("✖ Could not copy the checkout into the container");
       if ((await cli(runtime, ["start", box.name], append, 60_000)) !== 0) return fail("✖ Could not start the container");
+      // `cp` leaves the checkout owned by root; an image that runs as another user needs it to be theirs.
+      const who = Bun.spawnSync([runtime, "exec", box.name, "sh", "-c", 'echo "$(id -u):$(id -g)"'], { stdout: "pipe", stderr: "pipe" });
+      const owner = new TextDecoder().decode(who.stdout).trim();
+      if (who.exitCode === 0 && /^\d+:\d+$/.test(owner) && owner !== "0:0" && (await cli(runtime, chownWorkspaceArgs(box.name, owner), append, 5 * 60_000)) !== 0)
+        append(`Could not hand /workspace to the image's user ${owner}; steps may not be able to write to it\n`);
       append("\n");
     }
 
@@ -177,13 +179,12 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
       let proc: ReturnType<typeof Bun.spawn>;
       try {
         if (box) {
-          // The job's variables travel as a file into the container; the CLI keeps Ether's own environment.
-          const file = join(envDir!, "step.env");
-          writeFileSync(file, envScript(vars), { mode: 0o644 });
-          const copied = await cli(box.runtime, ["cp", file, `${box.name}:${STEP_ENV_PATH}`], append, 60_000);
-          rmSync(file, { force: true });
-          if (copied !== 0) return fail(`✖ ${step.name}: could not pass its variables into the container`);
-          proc = Bun.spawn([box.runtime, ...execArgs(box.name, shellCommand(step.shell, step.run))], { stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+          // The job's variables go in on stdin; the CLI keeps Ether's own environment.
+          const script = envScript(vars);
+          const exec = Bun.spawn([box.runtime, ...execArgs(box.name, shellCommand(step.shell, step.run))], { stdout: "pipe", stderr: "pipe", stdin: "pipe" });
+          exec.stdin.write(script);
+          await exec.stdin.end();
+          proc = exec;
         } else proc = Bun.spawn(command(step.shell, step.run), { cwd: dir, env: { ...hostEnv(), ...vars }, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
       } catch (e) {
         return fail(`✖ ${step.name}: ${(e as Error).message}`);
@@ -223,7 +224,6 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
     if (running) running.container = null;
     db.update(ciJob).set({ log, status: currentStatus(job.runId) === "cancelled" ? "cancelled" : status === "success" ? "success" : "failure", finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
     rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
-    if (envDir) rmSync(envDir, { recursive: true, force: true });
   }
 }
 

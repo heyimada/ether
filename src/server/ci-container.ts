@@ -63,14 +63,14 @@ export function shellCommand(shell: string | null, run: string): string[] {
   }
 }
 
-// Where a step's variables are copied into the container. They never go through the CLI's own
-// environment, where a job could set DOCKER_HOST, LD_PRELOAD and the like for the host's CLI, nor
-// onto a command line, where `ps` would show them.
-export const STEP_ENV_PATH = "/tmp/.ether-step-env";
+// A step's variables reach the container on the exec's stdin, as a script sh evaluates before running the
+// step. They never go through the CLI's own environment, where a job could set DOCKER_HOST, LD_PRELOAD and
+// the like for the host's CLI, nor onto a command line (`ps`) or into a file, whose owner would have to
+// match the image's user.
 
 const shellQuote = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
 
-// A file sh can source to export the variables; values may span lines and contain anything but NUL.
+// A script sh can evaluate to export the variables; values may span lines and contain anything but NUL.
 export function envScript(vars: Record<string, string>): string {
   return Object.entries(vars)
     .map(([name, value]) => {
@@ -81,15 +81,20 @@ export function envScript(vars: Record<string, string>): string {
     .join("");
 }
 
-// Runs `command` in the container after loading (and deleting) the step's variables.
+// Runs `command` in the container after evaluating the variables script written to stdin; the step itself
+// gets an empty stdin, as on the host.
 export const execArgs = (container: string, command: string[]) => [
   "exec",
+  "--interactive",
   "--workdir",
   "/workspace",
   container,
   "sh",
   "-c",
-  `. ${STEP_ENV_PATH} && rm -f ${STEP_ENV_PATH} && exec "$@"`,
+  'eval "$(cat)" && exec "$@" </dev/null',
   "sh",
   ...command,
 ];
+
+// Hands the copied checkout (root-owned after `cp`) to the user the image runs as, so steps can write to it.
+export const chownWorkspaceArgs = (container: string, owner: string) => ["exec", "--user", "0", container, "chown", "-R", owner, "/workspace"];

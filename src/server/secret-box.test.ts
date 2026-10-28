@@ -37,6 +37,14 @@ test("multi-line secrets are masked whole and line by line; tiny values are left
   expect(run(new LogMasker(["abc"]), ["abc abc"])).toBe("abc abc");
 });
 
+test("a secret that starts with a shorter one is masked whole, however the chunks fall", () => {
+  const secrets = ["abcd", "abcdefgh"];
+  expect(run(new LogMasker(secrets), ["abcd", "efgh"])).toBe("***");
+  const text = "x abcdefgh y abcd z abcdefg\n";
+  for (let i = 0; i <= text.length; i++)
+    for (let j = i; j <= text.length; j++) expect(run(new LogMasker(secrets), [text.slice(0, i), text.slice(i, j), text.slice(j)])).toBe("x *** y *** z ***efg\n");
+});
+
 test("without secrets, output passes straight through", () => {
   const m = new LogMasker([]);
   expect(m.push("hello")).toBe("hello");

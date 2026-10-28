@@ -29,13 +29,21 @@ export class LogMasker {
     return text;
   }
 
-  // Masked text that is safe to show now.
+  // Masked text that is safe to show now. What's held back stays unmasked: masking it early could hide
+  // the start of a longer secret (one that begins with a shorter one) and let the rest of it through.
   push(chunk: string): string {
     if (this.values.length === 0) return chunk;
-    const masked = this.mask(this.pending + chunk);
-    const cut = Math.max(0, masked.length - this.hold);
-    this.pending = masked.slice(cut);
-    return masked.slice(0, cut);
+    const text = this.pending + chunk;
+    // Hold back enough to finish any secret that might be starting, and never cut through a whole one.
+    let cut = Math.max(0, text.length - this.hold);
+    for (let moved = true; moved; ) {
+      moved = false;
+      for (const v of this.values)
+        for (let at = text.indexOf(v); at !== -1 && at < cut; at = text.indexOf(v, at + 1))
+          if (at + v.length > cut) (cut = at), (moved = true);
+    }
+    this.pending = text.slice(cut);
+    return this.mask(text.slice(0, cut));
   }
 
   // Whatever is still held back, once the stream has ended.
