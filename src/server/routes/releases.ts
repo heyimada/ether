@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
 import { config } from "../config";
@@ -8,6 +8,7 @@ import { db } from "../db/client";
 import { release, releaseAsset, user } from "../db/schema";
 import { record } from "../events";
 import * as git from "../git";
+import { BodyTooLarge, writeBody } from "../upload";
 
 const MAX_ASSET = 500 * 1024 * 1024;
 const ASSET_RE = /^[A-Za-z0-9_][A-Za-z0-9._+-]{0,127}$/;
@@ -107,9 +108,11 @@ export const releaseRoutes = new Elysia()
     const row = existing ?? db.insert(releaseAsset).values({ releaseId: r.id, name: params.name, size: 0 }).returning().get();
     mkdirSync(releaseDir(r.id), { recursive: true });
     const file = join(releaseDir(r.id), String(row.id));
-    await Bun.write(file, new Response(request.body));
-    const size = statSync(file).size;
-    if (size > MAX_ASSET) {
+    let size: number;
+    try {
+      size = await writeBody(request.body, file, MAX_ASSET);
+    } catch (e) {
+      if (!(e instanceof BodyTooLarge)) throw e;
       rmSync(file, { force: true });
       db.delete(releaseAsset).where(eq(releaseAsset.id, row.id)).run();
       throw new HttpError(413, "Assets can be at most 500 MB");
