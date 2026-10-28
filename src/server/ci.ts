@@ -66,10 +66,15 @@ const removeContainer = (runtime: string, name: string) => Bun.spawn([runtime, "
 let running: { runId: number; proc: ReturnType<typeof Bun.spawn> | null; container: { runtime: string; name: string } | null } | null = null;
 let draining = false;
 
+// The startup sweep of leftover containers; nothing may start a job until it's done (see resumeQueue).
+let sweep: Promise<void> = Promise.resolve();
+
 async function drain() {
   if (draining) return;
   draining = true;
   try {
+    // The sweep selects by label, which a job started now would share, so it has to finish first.
+    await sweep;
     for (;;) {
       const next = db.select().from(ciRun).where(eq(ciRun.status, "queued")).orderBy(asc(ciRun.id)).get();
       if (!next) break;
@@ -283,7 +288,8 @@ async function removeLeftoverContainers() {
 export function resumeQueue() {
   db.update(ciRun).set({ status: "error", message: "Ether restarted while this run was in progress", finishedAt: new Date() }).where(eq(ciRun.status, "running")).run();
   db.update(ciJob).set({ status: "cancelled" }).where(eq(ciJob.status, "running")).run();
-  // Leftovers have unique names, so queued jobs needn't wait for them to go.
-  void removeLeftoverContainers().catch((e) => console.error("Removing leftover CI containers failed:", e));
+  // In the background so a slow daemon doesn't hold up the server's start; drain() waits for it, also
+  // when a push queues a run meanwhile, since the sweep would match that job's container too.
+  sweep = removeLeftoverContainers().catch((e) => console.error("Removing leftover CI containers failed:", e));
   void drain();
 }

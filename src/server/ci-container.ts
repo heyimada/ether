@@ -108,18 +108,29 @@ export const chownWorkspaceArgs = (container: string, owner: string) => ["exec",
 
 // A container CLI call whose output goes to `append` (the job's log); resolves with its exit code. Never
 // blocks the event loop, always drains both pipes (a chatty image can't stall it) and is killed after `timeoutMs`.
+// A child of the killed process can keep the pipes open, so a second later reading stops regardless.
 export async function cli(runtime: string, args: string[], append: (s: string) => void, timeoutMs: number): Promise<number> {
   const proc = Bun.spawn([runtime, ...args], { stdout: "pipe", stderr: "pipe", stdin: "ignore" });
-  const timer = setTimeout(() => proc.kill(), timeoutMs);
-  const pump = async (s: ReadableStream<Uint8Array>) => {
+  const readers = [proc.stdout, proc.stderr].map((s) => (s as ReadableStream<Uint8Array>).getReader());
+  let giveUp: ReturnType<typeof setTimeout> | undefined;
+  const timer = setTimeout(() => {
+    proc.kill();
+    giveUp = setTimeout(() => readers.forEach((r) => void r.cancel().catch(() => {})), 1000);
+  }, timeoutMs);
+  const pump = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
     const decoder = new TextDecoder();
-    for await (const chunk of s) append(decoder.decode(chunk, { stream: true }));
+    for (;;) {
+      const { done, value } = await reader.read().catch(() => ({ done: true, value: undefined }));
+      if (done) return;
+      append(decoder.decode(value, { stream: true }));
+    }
   };
   try {
-    await Promise.all([pump(proc.stdout as ReadableStream<Uint8Array>), pump(proc.stderr as ReadableStream<Uint8Array>)]);
+    await Promise.all(readers.map(pump));
     return await proc.exited;
   } finally {
     clearTimeout(timer);
+    clearTimeout(giveUp);
   }
 }
 

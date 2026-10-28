@@ -71,12 +71,13 @@ test("steps default to bash when the image has it, and Windows shells are refuse
   expect(() => shellCommand("powershell", "x")).toThrow();
 });
 
-// sh stands in for docker here: what matters is how the call treats a command it can't trust.
+// sh stands in for docker here: what matters is how the call treats a command it can't trust. The commands
+// keep a child alive on purpose (`; :` stops sh from exec'ing it), like a runtime whose helper outlives it.
 test("a container call that never returns is killed at its timeout without blocking the event loop", async () => {
   let ticks = 0;
   const timer = setInterval(() => ticks++, 20);
   const started = Date.now();
-  const res = await collect("sh", ["-c", "sleep 30"], 300);
+  const res = await collect("sh", ["-c", "sleep 30; :"], 300);
   clearInterval(timer);
   expect(Date.now() - started).toBeLessThan(5000);
   expect(res.code).not.toBe(0);
@@ -84,7 +85,7 @@ test("a container call that never returns is killed at its timeout without block
 });
 
 test("endless output is drained and capped instead of stalling the call", async () => {
-  const res = await collect("sh", ["-c", "yes ether"], 500, 1000);
+  const res = await collect("sh", ["-c", "yes ether; :"], 500, 1000);
   expect(res.output.length).toBe(1000);
   expect(res.code).not.toBe(0);
   expect(await collect("sh", ["-c", "echo 101:101; echo noise >&2"], 5000)).toEqual({ code: 0, output: expect.stringContaining("101:101") });
