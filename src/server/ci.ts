@@ -121,6 +121,12 @@ function admit(job: typeof ciJob.$inferSelect, env: Environment, run: typeof ciR
   const review = d?.reviewedAt ? { approved: d.status !== "rejected", at: d.reviewedAt } : null;
   const g = gate(rulesOf(env), run.ref, review, run.createdAt, new Date());
   if (g.action === "run") return true;
+  if (g.action === "skip") {
+    // Nothing was deployed, so there is no deployment to keep either.
+    db.update(ciJob).set({ status: "skipped", log: `${job.log}Skipped: ${g.reason} (${env.name}).\n`, startedAt: job.startedAt ?? new Date(), finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
+    db.delete(deployment).where(eq(deployment.jobId, job.id)).run();
+    return false;
+  }
   if (g.action === "reject") {
     const log = `${job.log}✖ Not deployed to ${env.name}: ${g.reason}.\n`;
     db.update(ciJob).set({ status: "failure", log, startedAt: job.startedAt ?? new Date(), finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
@@ -148,7 +154,7 @@ async function settle(runId: number, path: string) {
   }
   if (jobs.some((j) => j.status === "queued")) return void db.update(ciRun).set({ status: "queued" }).where(eq(ciRun.id, runId)).run();
   if (jobs.some((j) => j.status === "waiting")) return void db.update(ciRun).set({ status: "waiting" }).where(eq(ciRun.id, runId)).run();
-  const ok = jobs.every((j) => j.status === "success");
+  const ok = jobs.every((j) => j.status === "success" || j.status === "skipped");
   db.update(ciRun).set({ status: ok ? "success" : "failure", finishedAt: new Date() }).where(eq(ciRun.id, runId)).run();
   if (!ok) await reportFailure(run, path, "failure");
 }
@@ -174,11 +180,9 @@ const waitingFor = (repoId: number, environmentName: string) =>
 
 // After an environment's rules change, its waiting deploy jobs are checked again: without reviewers or a
 // timer they go ahead, and with new ones they wait for those instead of for people who may no longer review.
+// Approved jobs waiting on a timer are included, so a shorter, longer or removed timer applies to them too.
 export function reconsiderEnvironment(repoId: number, environmentName: string) {
-  for (const job of waitingFor(repoId, environmentName)) {
-    const d = deploymentOfJob(job.id);
-    if (!d?.reviewedAt) requeue(job.id);
-  }
+  for (const job of waitingFor(repoId, environmentName)) requeue(job.id);
 }
 
 // Before an environment is deleted: its waiting deploy jobs fail instead of waiting for good.
@@ -196,13 +200,15 @@ const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
 // Puts a waiting job (and its run) back in the queue.
 function requeue(jobId: number) {
+  clearTimeout(timers.get(jobId));
   timers.delete(jobId);
   const job = db.select().from(ciJob).where(eq(ciJob.id, jobId)).get();
   // Only a run that is still going can take the job back; an errored or cancelled one is over.
   const runStatus = job ? currentStatus(job.runId) : undefined;
   if (!job || job.status !== "waiting" || (runStatus !== "waiting" && runStatus !== "running")) return;
   db.update(ciJob).set({ status: "queued", notBefore: null }).where(eq(ciJob.id, jobId)).run();
-  db.update(ciRun).set({ status: "queued" }).where(and(eq(ciRun.id, job.runId), inArray(ciRun.status, ["waiting", "running"]))).run();
+  // A run that is executing keeps its status; settle() finds the queued job when it finishes and queues the run.
+  db.update(ciRun).set({ status: "queued" }).where(and(eq(ciRun.id, job.runId), eq(ciRun.status, "waiting"))).run();
   void drain();
 }
 
@@ -429,6 +435,16 @@ export function cancel(runId: number) {
 // The newest run for a commit, which is what pull requests show as their checks.
 export const latestRun = (repoId: number, sha: string) =>
   db.select().from(ciRun).where(and(eq(ciRun.repoId, repoId), eq(ciRun.sha, sha))).orderBy(desc(ciRun.id)).get() ?? null;
+
+// A run's result as a pull request's checks: its jobs without the deploy jobs. A deployment waiting for a
+// review, skipped or failed says nothing about whether the change is good to merge.
+export function checkStatus(run: typeof ciRun.$inferSelect): typeof ciRun.$inferSelect.status {
+  if (run.status === "cancelled" || run.status === "error") return run.status;
+  const jobs = db.select({ status: ciJob.status, environment: ciJob.environment }).from(ciJob).where(eq(ciJob.runId, run.id)).all().filter((j) => !j.environment);
+  if (jobs.some((j) => j.status === "failure" || j.status === "error")) return "failure";
+  if (jobs.some((j) => j.status === "queued" || j.status === "running")) return run.status === "queued" ? "queued" : "running";
+  return "success";
+}
 
 // Runs interrupted by a restart can't resume mid-step; queued ones simply continue.
 // Containers of this server's jobs that a crash or restart interrupted; another Ether's on the same daemon stay.

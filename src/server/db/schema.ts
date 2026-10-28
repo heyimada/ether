@@ -500,7 +500,7 @@ export const ciJob = sqliteTable("ci_job", {
   url: text("url"),
   // While a deploy job waits for its environment's wait timer: when it may start.
   notBefore: integer("not_before", { mode: "timestamp_ms" }),
-  status: text("status", { enum: ["queued", "waiting", "running", "success", "failure", "cancelled", "error"] }).notNull(),
+  status: text("status", { enum: ["queued", "waiting", "running", "success", "failure", "cancelled", "error", "skipped"] }).notNull(),
   log: text("log").notNull().default(""),
   startedAt: integer("started_at", { mode: "timestamp_ms" }),
   finishedAt: integer("finished_at", { mode: "timestamp_ms" }),

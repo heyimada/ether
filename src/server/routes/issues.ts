@@ -6,7 +6,7 @@ import { HttpError, allows, readerOrVisitor, requireRepo, requireUser, type Repo
 import { db } from "../db/client";
 import { comment, issue, issueAssignee, issueLabel, label, repo, user } from "../db/schema";
 import * as git from "../git";
-import { latestRun } from "../ci";
+import { checkStatus, latestRun } from "../ci";
 import { deployedAt } from "../deploy";
 import { excerpt, record } from "../events";
 import { reviewSummary } from "./reviews";
@@ -149,7 +149,7 @@ async function headChecks(a: RepoAccess, row: NonNullable<IssueRow>) {
   if (!row.issue.headRef) return null;
   const sha = await git.resolveCommit(a.path, `refs/heads/${row.issue.headRef}`);
   const run = sha ? latestRun(a.repo.id, sha) : null;
-  return run ? { id: run.id, status: run.status } : null;
+  return run ? { id: run.id, status: checkStatus(run) } : null;
 }
 
 // Environments currently running the pull request's head commit.

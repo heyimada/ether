@@ -6,6 +6,8 @@ export type Review = { approved: boolean; at: Date } | null;
 
 export type Gate =
   | { action: "run" }
+  // The branch may not deploy here: the job doesn't run, and that's not a failure of the run.
+  | { action: "skip"; reason: string }
   | { action: "reject"; reason: string }
   | { action: "await-review" }
   | { action: "wait-until"; at: Date };
@@ -13,7 +15,7 @@ export type Gate =
 // Order as on GitHub: the branch has to be allowed, then a reviewer has to approve, then the wait timer runs
 // (from the approval, or from when the job was queued when nobody has to approve).
 export function gate(rules: EnvironmentRules, ref: string, review: Review, queuedAt: Date, now: Date): Gate {
-  if (rules.branches.length && !rules.branches.some((p) => matches(p, ref))) return { action: "reject", reason: `${ref} isn't allowed to deploy here` };
+  if (rules.branches.length && !rules.branches.some((p) => matches(p, ref))) return { action: "skip", reason: `${ref} isn't allowed to deploy here` };
   if (review && !review.approved) return { action: "reject", reason: "the deployment was rejected" };
   if (rules.reviewers > 0 && !review) return { action: "await-review" };
   if (rules.waitMinutes > 0) {

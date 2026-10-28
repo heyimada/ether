@@ -111,12 +111,12 @@ jobs:
 
 An environment is created the first time a job names it. Under **Settings → Environments** owners can give it rules, all optional:
 
-- **Branches that may deploy**: names or patterns like `main` or `release/*`, matched like protected branches. A job from any other branch fails without running.
+- **Branches that may deploy**: names or patterns like `main` or `release/*`, matched like protected branches. A job from any other branch is skipped, which doesn't fail its run.
 - **Required reviewers**: up to six people with write access. The job waits until one of them clicks **Approve and deploy** on the CI run, or **Reject**, which fails it. Nobody else can answer, the owner included.
 - **Wait timer**: minutes the job waits before it starts, counted from the approval (or from the push when no approval is needed).
 - **Secrets**: like CI secrets, but only for jobs deploying to this environment, where they replace a repository secret of the same name.
 
-A waiting job steps out of the CI queue, so other runs go on, and the run shows as **Waiting** until it continues or is cancelled. Steps get `CI_ENVIRONMENT` with the environment's name. The repository home lists each environment with the commit it currently runs; a pull request whose head commit runs somewhere says **Deployed to …**. `GET /api/repos/:owner/:repo/deployments?environment=…` returns the history.
+A waiting job steps out of the CI queue, so other runs go on, and the run shows as **Waiting** until it continues or is cancelled. Deploy jobs don't count as a pull request's checks: one that waits, is skipped or fails doesn't block **Require passing checks before merging**. Steps get `CI_ENVIRONMENT` with the environment's name. The repository home lists each environment with the commit it currently runs; a pull request whose head commit runs somewhere says **Deployed to …**. `GET /api/repos/:owner/:repo/deployments?environment=…` returns the history.
 
 Reviewers and wait timers decide whether a deployment *starts*, not what it does. Anyone who can push can change the workflow, so keep the credentials that reach production in production's environment secrets: then only a job that passed its rules gets them.
 

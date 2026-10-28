@@ -106,22 +106,38 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     await expect(side.getByRole("listitem", { name: "Environment staging" })).toContainText(v1.slice(0, 7));
     await info.attach("repo-deployments", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 
-    // A pull request from a feature branch: staging takes it, production refuses the branch outright.
+    // A pull request from a feature branch: staging takes it, production skips the branch, and with
+    // required checks the pull request can still merge, since deployments aren't checks.
+    expect((await owner.ctx.patch(api, { data: { requireChecks: true }, headers: headers() })).ok()).toBe(true);
     gitOk(src, ["checkout", "-q", "-b", "feature"]);
     writeFileSync(join(src, "app.txt"), "v2\n");
     gitOk(src, ["commit", "-qam", "v2"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "feature"], auth);
     const v2 = gitOk(src, ["rev-parse", "HEAD"]).trim();
     ({ run, jobs } = await settled(owner.ctx, api, v2, ["success", "failure"]));
-    expect(run.status).toBe("failure");
+    expect(run.status).toBe("success");
     expect(jobs.staging.status).toBe("success");
-    expect(jobs.production.status).toBe("failure");
+    expect(jobs.production.status).toBe("skipped");
     expect(jobs.production.log).toContain("feature isn't allowed to deploy here");
-    expect(jobs.production.deployment!.status).toBe("rejected");
+    expect(jobs.production.deployment).toBeNull();
     const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "v2", body: "", base: "main", head: "feature" }, headers: headers() })).json();
     await page.goto(`${baseURL()}/${owner.username}/${repo}/pull/${pull.number}`);
     await expect(page.getByRole("link", { name: "Deployed to staging" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Deployed to production" })).toHaveCount(0);
+    await expect(page.getByText("All checks have passed")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Merge pull request" })).toBeEnabled();
+
+    // A deploy job waiting for its review doesn't hold the pull request's checks either.
+    await owner.ctx.put(`${api}/environments/staging`, { data: { reviewers: [reviewer.username] }, headers: headers() });
+    writeFileSync(join(src, "app.txt"), "v2b\n");
+    gitOk(src, ["commit", "-qam", "v2b"]);
+    gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "feature"], auth);
+    const v2b = gitOk(src, ["rev-parse", "HEAD"]).trim();
+    ({ run, jobs } = await settled(owner.ctx, api, v2b));
+    expect(run.status).toBe("waiting");
+    expect((await (await owner.ctx.get(`${api}/pulls/${pull.number}`)).json()).checks.status).toBe("success");
+    expect((await owner.ctx.post(`${api}/ci/runs/${run.id}/cancel`, { headers: headers() })).ok()).toBe(true);
+    await owner.ctx.put(`${api}/environments/staging`, { data: { reviewers: [] }, headers: headers() });
 
     // A reviewer can turn a deployment down, which fails the run; a waiting run can also be cancelled.
     gitOk(src, ["checkout", "-q", "main"]);
@@ -153,7 +169,8 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     expect(production.active.sha).toBe(v1);
     expect(production.reviewers).toEqual([reviewer.username]);
     const { deployments } = await (await reader.ctx.get(`${api}/deployments?environment=production`)).json();
-    expect(deployments.map((d: { status: string }) => d.status)).toEqual(["cancelled", "rejected", "rejected", "success"]);
+    // The skipped feature-branch run left no deployment behind.
+    expect(deployments.map((d: { status: string }) => d.status)).toEqual(["cancelled", "rejected", "success"]);
 
     // Owners see the rules in Settings, and environment secrets are owner-only.
     await page.context().clearCookies();

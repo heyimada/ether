@@ -9,13 +9,13 @@ test("an environment without rules lets any branch deploy right away", () => {
   expect(gate(none, "feature/x", null, queued, queued)).toEqual({ action: "run" });
 });
 
-test("only allowed branches may deploy, matched like branch protection", () => {
+test("only allowed branches deploy; others are skipped, matched like branch protection", () => {
   const rules = { ...none, branches: ["main", "release/*"] };
   expect(gate(rules, "main", null, queued, queued).action).toBe("run");
   expect(gate(rules, "release/1.2", null, queued, queued).action).toBe("run");
-  expect(gate(rules, "release/1/x", null, queued, queued)).toEqual({ action: "reject", reason: "release/1/x isn't allowed to deploy here" });
-  // A disallowed branch is turned down before anyone is asked to approve it.
-  expect(gate({ ...rules, reviewers: 2 }, "feature", null, queued, queued).action).toBe("reject");
+  expect(gate(rules, "release/1/x", null, queued, queued)).toEqual({ action: "skip", reason: "release/1/x isn't allowed to deploy here" });
+  // A disallowed branch is skipped before anyone is asked to approve it.
+  expect(gate({ ...rules, reviewers: 2 }, "feature", null, queued, queued).action).toBe("skip");
 });
 
 test("with reviewers, a deployment waits for an approval, and a rejection turns it down", () => {
