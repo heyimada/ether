@@ -1,5 +1,7 @@
 # Ether
 
+[![CI](https://github.com/heyimada/ether/actions/workflows/ci.yml/badge.svg)](https://github.com/heyimada/ether/actions/workflows/ci.yml)
+
 A self-hosted alternative to GitHub Enterprise: code hosting, review and collaboration on a server you control. Run it on a VPS, a home server or your own machine behind a private network such as a Tailscale tailnet.
 
 - **Git over HTTPS** (smart HTTP, streamed in both directions), authenticated with personal access tokens.
@@ -91,4 +93,12 @@ Inside a clone the repository is taken from `origin`; elsewhere pass `-R OWNER/R
 
 ## Tests
 
-`bun run test:e2e` builds the app, boots a real server on a random port against a throwaway data directory, and drives the git CLI and Chromium. Each run writes a timestamped report to `e2e-report/<timestamp>/`, containing an HTML report with screenshots, `results.json` and `server.log`.
+`bun run test:e2e` builds the app, boots a real server on a random port against a throwaway data directory, and drives the git CLI and Chromium. Each run writes a timestamped report to `e2e-report/<timestamp>/`, containing an HTML report with screenshots, `results.json` and `server.log`. Install the browser once with `bunx playwright install chromium`.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the development setup, tests and how reviews work. Please follow the [Code of Conduct](CODE_OF_CONDUCT.md), and report security problems privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE)

@@ -4,3 +4,4 @@ data/
 e2e-report/
 src/web/routeTree.gen.ts
 *.log
+.DS_Store

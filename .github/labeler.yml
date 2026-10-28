@@ -1,0 +1,18 @@
+server:
+  - changed-files:
+      - any-glob-to-any-file: ["src/server/**", "drizzle/**", "drizzle.config.ts"]
+web:
+  - changed-files:
+      - any-glob-to-any-file: ["src/web/**", "vite.config.ts"]
+cli:
+  - changed-files:
+      - any-glob-to-any-file: "cli/**"
+e2e:
+  - changed-files:
+      - any-glob-to-any-file: ["e2e/**", "playwright.config.ts"]
+ci:
+  - changed-files:
+      - any-glob-to-any-file: ".github/**"
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.md", "design/**"]

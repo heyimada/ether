@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest a new feature or an improvement.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ether is scoped for a small group of trusted people on a server they control. Describe the problem you have before the solution you have in mind, so we can find the fix that fits.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What you're trying to do and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+      description: How it could work. Screenshots or mockups from other tools are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Workarounds you use now, or other ways to solve it.
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to implement this myself, with some guidance.
