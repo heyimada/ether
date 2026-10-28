@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { containerRuntime, createArgs, DEFAULT_IMAGE, execArgs, shellCommand } from "./ci-container";
+import { containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, shellCommand, STEP_ENV_PATH } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
 import { parseWorkflow, WORKFLOW, type EnvValue, type Shell, type Step } from "./ci-workflow";
 import { db } from "./db/client";
@@ -130,6 +130,8 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
     db.update(ciJob).set({ log, ...(status ? { status } : {}) }).where(eq(ciJob.id, job.id)).run();
   db.update(ciJob).set({ status: "running", startedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
   const dir = mkdtempSync(join(tmpdir(), "ether-ci-"));
+  // Outside the checkout and readable only by Ether's user; holds a step's variables just long enough to copy them.
+  let envDir: string | null = null;
   const steps = JSON.parse(job.steps) as Step[];
   const isolation = ciIsolation();
   let box: { runtime: string; name: string } | null = null;
@@ -155,6 +157,7 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
       if (!runtime) return fail("No container runtime found: install Docker or Podman on the server, or let an admin run CI on the host under Admin → Access (unsafe).");
       const image = job.image ?? DEFAULT_IMAGE;
       box = { runtime, name: `ether-ci-${job.runId}-${job.id}-${randomBytes(4).toString("hex")}` };
+      envDir = mkdtempSync(join(tmpdir(), "ether-ci-env-"));
       if (running) running.container = box;
       append(`▶ Starting ${image} with ${basename(runtime)}\n`);
       save();
@@ -173,10 +176,15 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
       const vars = { ...ciVars(ctx), ...resolveEnv(step.env, secrets) };
       let proc: ReturnType<typeof Bun.spawn>;
       try {
-        proc = box
-          ? // The CLI gets Ether's environment for its own settings (DOCKER_HOST and the like) but passes only `vars` on.
-            Bun.spawn([box.runtime, ...execArgs(box.name, Object.keys(vars), shellCommand(step.shell, step.run))], { env: { ...process.env, ...vars }, stdout: "pipe", stderr: "pipe", stdin: "ignore" })
-          : Bun.spawn(command(step.shell, step.run), { cwd: dir, env: { ...hostEnv(), ...vars }, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+        if (box) {
+          // The job's variables travel as a file into the container; the CLI keeps Ether's own environment.
+          const file = join(envDir!, "step.env");
+          writeFileSync(file, envScript(vars), { mode: 0o644 });
+          const copied = await cli(box.runtime, ["cp", file, `${box.name}:${STEP_ENV_PATH}`], append, 60_000);
+          rmSync(file, { force: true });
+          if (copied !== 0) return fail(`✖ ${step.name}: could not pass its variables into the container`);
+          proc = Bun.spawn([box.runtime, ...execArgs(box.name, shellCommand(step.shell, step.run))], { stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+        } else proc = Bun.spawn(command(step.shell, step.run), { cwd: dir, env: { ...hostEnv(), ...vars }, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
       } catch (e) {
         return fail(`✖ ${step.name}: ${(e as Error).message}`);
       }
@@ -215,6 +223,7 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
     if (running) running.container = null;
     db.update(ciJob).set({ log, status: currentStatus(job.runId) === "cancelled" ? "cancelled" : status === "success" ? "success" : "failure", finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
     rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+    if (envDir) rmSync(envDir, { recursive: true, force: true });
   }
 }
 

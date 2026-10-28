@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { createArgs, execArgs, IMAGE_RE, shellCommand } from "./ci-container";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createArgs, envScript, execArgs, IMAGE_RE, shellCommand } from "./ci-container";
 
 test("containers are created locked down and idle, without mounting anything from the host", () => {
   const args = createArgs("ether-ci-1-2", "oven/bun:1");
@@ -17,10 +21,29 @@ test("image names can't smuggle in flags or odd characters", () => {
   }
 });
 
-test("variables are passed by name only, never with their values", () => {
-  const args = execArgs("c1", ["CI", "DEPLOY_KEY"], ["sh", "-e", "-c", "echo hi"]);
-  expect(args).toEqual(["exec", "--workdir", "/workspace", "--env", "CI", "--env", "DEPLOY_KEY", "c1", "sh", "-e", "-c", "echo hi"]);
-  expect(args.join(" ")).not.toContain("=");
+test("job variables never reach the CLI: exec carries no values and no --env", () => {
+  const args = execArgs("c1", ["sh", "-e", "-c", "echo hi"]);
+  expect(args).not.toContain("--env");
+  expect(args.slice(0, 4)).toEqual(["exec", "--workdir", "/workspace", "c1"]);
+  expect(args.slice(-4)).toEqual(["sh", "-e", "-c", "echo hi"]);
+});
+
+test("the variables file round-trips any value through a real shell, including quotes, $(…) and newlines", () => {
+  const vars = { PLAIN: "x", QUOTES: `it's "quoted" \\ back`, SUBST: "$(touch /tmp/pwned) `id` $HOME", MULTI: "line one\nline two\n", EMPTY: "", DOCKER_HOST: "ssh://evil" };
+  const dir = mkdtempSync(join(tmpdir(), "ether-env-test-"));
+  const file = join(dir, "env");
+  writeFileSync(file, envScript(vars));
+  try {
+    for (const [name, value] of Object.entries(vars)) {
+      const out = spawnSync("sh", ["-c", `. "$0" && printf %s "$${name}"`, file], { encoding: "utf8", env: {} });
+      expect(out.stdout).toBe(value);
+    }
+    expect(existsSync("/tmp/pwned")).toBe(false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  expect(() => envScript({ "BAD NAME": "x" })).toThrow();
+  expect(() => envScript({ NUL: "a\0b" })).toThrow("NUL");
 });
 
 test("steps default to bash when the image has it, and Windows shells are refused", () => {

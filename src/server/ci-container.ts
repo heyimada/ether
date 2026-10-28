@@ -63,6 +63,33 @@ export function shellCommand(shell: string | null, run: string): string[] {
   }
 }
 
-// Variables are passed by name only: the CLI copies each value from its own environment, so values
-// (secrets included) never appear on a command line, in `ps` or in a file, and may span lines.
-export const execArgs = (container: string, envNames: string[], command: string[]) => ["exec", "--workdir", "/workspace", ...envNames.flatMap((n) => ["--env", n]), container, ...command];
+// Where a step's variables are copied into the container. They never go through the CLI's own
+// environment, where a job could set DOCKER_HOST, LD_PRELOAD and the like for the host's CLI, nor
+// onto a command line, where `ps` would show them.
+export const STEP_ENV_PATH = "/tmp/.ether-step-env";
+
+const shellQuote = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
+
+// A file sh can source to export the variables; values may span lines and contain anything but NUL.
+export function envScript(vars: Record<string, string>): string {
+  return Object.entries(vars)
+    .map(([name, value]) => {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`"${name}" isn't a valid variable name`);
+      if (value.includes("\0")) throw new Error(`${name} contains a NUL character, which environment variables can't hold`);
+      return `export ${name}=${shellQuote(value)}\n`;
+    })
+    .join("");
+}
+
+// Runs `command` in the container after loading (and deleting) the step's variables.
+export const execArgs = (container: string, command: string[]) => [
+  "exec",
+  "--workdir",
+  "/workspace",
+  container,
+  "sh",
+  "-c",
+  `. ${STEP_ENV_PATH} && rm -f ${STEP_ENV_PATH} && exec "$@"`,
+  "sh",
+  ...command,
+];

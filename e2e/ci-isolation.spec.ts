@@ -83,11 +83,15 @@ async function pushIsolationWorkflow(isolation: "container" | "host") {
       TOKEN: \${{ secrets.TOKEN }}
       DEPLOY_KEY: \${{ secrets.DEPLOY_KEY }}
       HOST_DB: "${hostDb}"
+      # Only for the job: the host's container CLI must not pick it up, or it would talk to another daemon.
+      DOCKER_HOST: tcp://127.0.0.1:9
     steps:
       - name: Checkout is here
         run: test -f README.md && test "$CI_REPOSITORY" = "${owner.username}/${repo}" && echo "checkout ok"
       - name: Host files are not
         run: test ! -e "$HOST_DB" && test -z "$ETHER_DATA" && echo "host hidden"
+      - name: Job variables stay in the job
+        run: test "$DOCKER_HOST" = "tcp://127.0.0.1:9" && test ! -e /tmp/.ether-step-env && echo "env contained"
       - name: Secrets arrive and are masked
         run: |
           test "$TOKEN" = "${TOKEN}"
@@ -130,6 +134,7 @@ test("in a container, a job gets its checkout and secrets (masked in the log) bu
     expect(jobs.build.log).toContain(`Starting alpine:3.20 with ${runtime}`);
     expect(jobs.build.log).toContain("checkout ok");
     expect(jobs.build.log).toContain("host hidden");
+    expect(jobs.build.log).toContain("env contained");
     expect(jobs.build.log).toContain("token is ***");
     expect(jobs.build.log).toContain("key lines: 3");
     expect(jobs.build.log).not.toContain(TOKEN);
