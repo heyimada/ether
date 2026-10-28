@@ -27,6 +27,7 @@ import {
   type Finding,
   type Posted,
   type ReviewState,
+  fixedMarker,
 } from "./findings";
 import { github, isReviewBot, readToken, resolvedAsFixed, type GitHub, type PullFile, type ReviewComment } from "./github";
 
@@ -109,7 +110,7 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
       const reason = fixed[0].reason;
       resolved.push({ file: posted.file, title: posted.title, reason });
       if (!write) return;
-      await write.reply(prNumber, thread.comment.databaseId, guard(`Fixed as of ${short(head)}: ${sanitize(reason, 1000)}`));
+      await write.reply(prNumber, thread.comment.databaseId, guard(`Fixed as of ${short(head)}: ${sanitize(reason, 1000)}\n\n${fixedMarker(head)}`));
       await write.resolveThread(thread.id);
     }),
   );

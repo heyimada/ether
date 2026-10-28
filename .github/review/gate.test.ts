@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { fixedMarker } from "./findings";
 import { ciState, decide, type GateInput } from "./gate";
 import { isReviewBot, resolvedAsFixed, type CheckRun, type Thread } from "./github";
 
@@ -92,15 +93,17 @@ test("findings resolved by a person instead of the App send the change to a huma
   expect(blockedBy({ dismissedFindings: 1 })).toContain("needs human approval: 1 finding was resolved without the review confirming a fix");
 });
 
-test("only the App resolving a thread counts as fixed", () => {
-  const thread = (resolvedBy: Thread["resolvedBy"], isResolved = true): Thread => ({
+test("only a resolved thread with the App's marked Fixed reply counts as fixed", () => {
+  const fixed = `Fixed as of abc1234: the guard is back.\n\n${fixedMarker("abc")}`;
+  const thread = (replies: Thread["replies"], isResolved = true): Thread => ({
     id: "t",
     isResolved,
-    resolvedBy,
+    replies,
     comment: { databaseId: 1, body: "", path: "a.ts", line: 1, byBot: true, login: "ether-review" },
   });
-  expect(resolvedAsFixed(thread({ login: "ether-review", byBot: true }), "ether-review[bot]")).toBe(true);
-  expect(resolvedAsFixed(thread({ login: "ether-review", byBot: false }), "ether-review[bot]")).toBe(false);
-  expect(resolvedAsFixed(thread({ login: "JustKatze", byBot: false }), "ether-review[bot]")).toBe(false);
-  expect(resolvedAsFixed(thread(null, false), "ether-review[bot]")).toBe(false);
+  expect(resolvedAsFixed(thread([{ body: fixed, byBot: true, login: "ether-review" }]), "ether-review[bot]")).toBe(true);
+  expect(resolvedAsFixed(thread([{ body: fixed, byBot: false, login: "ether-review" }]), "ether-review[bot]")).toBe(false);
+  expect(resolvedAsFixed(thread([{ body: fixed, byBot: false, login: "JustKatze" }]), "ether-review[bot]")).toBe(false);
+  expect(resolvedAsFixed(thread([{ body: "Fixed as of abc1234: trust me.", byBot: true, login: "ether-review" }]), "ether-review[bot]")).toBe(false);
+  expect(resolvedAsFixed(thread([{ body: fixed, byBot: true, login: "ether-review" }], false), "ether-review[bot]")).toBe(false);
 });

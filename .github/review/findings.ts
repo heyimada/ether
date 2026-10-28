@@ -41,6 +41,7 @@ export interface SummaryMarker {
 
 const FINDING_TAG = "ether-review";
 const SUMMARY_TAG = "ether-review-summary";
+const FIXED_TAG = "ether-review-fixed";
 
 const normalizeTitle = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -62,6 +63,11 @@ function parse(tag: string, body: string): unknown {
 
 export const findingMarker = (m: FindingMarker) => serialize(FINDING_TAG, m);
 export const summaryMarker = (m: SummaryMarker) => serialize(SUMMARY_TAG, m);
+
+// On the App's "Fixed" reply. GraphQL's resolvedBy only returns users, so this is how a thread the App resolved is told
+// apart from one a person resolved.
+export const fixedMarker = (sha: string) => serialize(FIXED_TAG, { sha });
+export const isFixedReply = (body: string) => typeof (parse(FIXED_TAG, body) as { sha?: unknown } | null)?.sha === "string";
 
 export function parseFindingMarker(body: string): FindingMarker | null {
   const m = parse(FINDING_TAG, body) as Partial<FindingMarker> | null;
