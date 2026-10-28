@@ -4,3 +4,4 @@ data/
 e2e-report/
 *.log
 .DS_Store
+pr/
