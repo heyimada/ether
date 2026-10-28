@@ -10,7 +10,8 @@ import { recordPushEvents } from "./events";
 import { db } from "./db/client";
 import { deployKey, sshKey, user } from "./db/schema";
 import { NAME_RE, ensureWiki, fixHead, listRefs, newAuthorEmails, repoExists, wikiPath } from "./git";
-import { channelPump } from "./ssh-relay";
+import { ProtectionUnavailable, receivePackGuard, type Guard } from "./protection";
+import { channelPump, hangUps } from "./ssh-relay";
 
 // One persistent host key per data directory, so clients see a stable identity.
 function hostKey(): Buffer {
@@ -131,13 +132,21 @@ function onClient(client: Connection) {
         const path = isWiki ? await ensureWiki(access.path) : access.path;
 
         const before = service === "git-receive-pack" ? await listRefs(path) : [];
-        const proc = Bun.spawn(["git", service.slice(4), path], {
+        // Branch rules guard the repository's code, not its wiki.
+        let guard: Guard = { args: [], env: {} };
+        try {
+          if (service === "git-receive-pack" && !isWiki) guard = receivePackGuard(access.repo.id, before.some((r) => r.kind === "branch"));
+        } catch (e) {
+          if (e instanceof ProtectionUnavailable) return deny(stream, e.message);
+          throw e;
+        }
+        const proc = Bun.spawn(["git", ...guard.args, service.slice(4), path], {
           stdin: "pipe",
           stdout: "pipe",
           stderr: "pipe",
-          env: { ...process.env, GIT_PROTOCOL: gitProtocol, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" },
+          env: { ...process.env, ...guard.env, GIT_PROTOCOL: gitProtocol, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" },
         });
-        const relay = channelPump([stream, client], () => proc.kill());
+        const relay = channelPump(hangUps(stream, client), () => proc.kill());
         // Both directions wait for the other side, so a slow peer can't make either end buffer a whole pack in memory.
         // Not an async iterator: finishing one destroys the channel, which the response still needs.
         stream.on("data", (chunk: Buffer) => {

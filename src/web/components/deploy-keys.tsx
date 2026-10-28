@@ -65,7 +65,7 @@ export function DeployKeys({ base, keys, sshBase }: { base: string; keys: Deploy
           </Field>
           <label className="radio">
             <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} />
-            Allow write access (it can push to every branch)
+            Allow write access (it can push to any branch that protection rules allow)
           </label>
           <div>
             <button disabled={add.pending}>Add deploy key</button>
