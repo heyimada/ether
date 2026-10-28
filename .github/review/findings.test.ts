@@ -205,11 +205,17 @@ test("a suggestion is posted verbatim in a fence its own backticks can't close",
   expect(findingBody(finding({ suggestion: { endLine: 10, code: "\n" } }), "s1")).toContain("```suggestion\n\n```");
 });
 
-test("an open code fence in model text is closed so it can't swallow what follows", () => {
+test("an open code fence in model text is closed so it can't swallow the marker", () => {
   expect(closeFence("see\n```ts\nconst x = 1;")).toBe("see\n```ts\nconst x = 1;\n```");
   expect(closeFence("````\n```\nx")).toBe("````\n```\nx\n````");
   expect(closeFence("~~~\nx")).toBe("~~~\nx\n~~~");
   for (const closed of ["```ts\nx\n```", "no fences", "inline ```code``` only", "````\n```\n````"]) expect(closeFence(closed)).toBe(closed);
-  const body = findingBody(finding({ failure: "cut off in\n```ts\nfoo(", suggestion: { endLine: 10, code: "x\n" } }), "s1");
-  expect(body).toContain("foo(\n```\n\n```suggestion\nx\n```");
+  expect(findingBody(finding({ failure: "cut off in\n```ts\nfoo(" }), "s1")).toContain("foo(\n```\n\n<!--");
+});
+
+test("a suggestion comes before the failure, so nothing the failure opens can swallow it", () => {
+  for (const failure of ["```ts\nfoo(", "<pre>\nfoo(", "<script>"]) {
+    const f = finding({ failure, suggestion: { endLine: 10, code: "x\n" } });
+    expect(findingBody(f, "s1")).toStartWith(`**Important** (correctness): ${f.title}\n\n\`\`\`suggestion\nx\n\`\`\`\n\n${failure}`);
+  }
 });

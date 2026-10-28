@@ -186,7 +186,7 @@ function suggestionBlock(code: string): string {
   return `${fence}suggestion\n${code ? `${code.replace(/\n$/, "")}\n` : ""}${fence}`;
 }
 
-// Model text can leave a code fence open, or be cut inside one, and an open fence would swallow the suggestion after it.
+// Model text can leave a code fence open, or be cut inside one, and an open fence would show the marker after it as text.
 export function closeFence(text: string): string {
   let open: string | null = null;
   for (const line of text.split("\n")) {
@@ -201,8 +201,9 @@ export function closeFence(text: string): string {
 export function findingBody(f: Finding, sha: string): string {
   return [
     `**${LABEL[f.severity]}** (${f.lens}): ${sanitize(f.title.replace(/\s+/g, " "), 200)}`,
-    closeFence(sanitize(f.failure)),
+    // Right after the title, which starts with "**" and so can't open a block: nothing in the failure can swallow it.
     ...(f.suggestion ? [suggestionBlock(f.suggestion.code)] : []),
+    closeFence(sanitize(f.failure)),
     findingMarker({ fp: f.fingerprint, sha, lens: f.lens, severity: f.severity }),
   ].join("\n\n");
 }
