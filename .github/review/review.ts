@@ -205,7 +205,9 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
     );
     return;
   }
-  if (posted.length) await write.createReview(prNumber, { commit_id: head, body: reviewBody, comments: inline });
+  // Only Important findings request changes; the gate dismisses the request once no finding is open. Report-only never blocks.
+  const event = !REPORT_ONLY && posted.some((f) => f.severity === "important") ? "REQUEST_CHANGES" : "COMMENT";
+  if (posted.length) await write.createReview(prNumber, { commit_id: head, body: reviewBody, comments: inline, event });
   if (summaryComment) await write.updateIssueComment(summaryComment.id, summary);
   else await write.createIssueComment(prNumber, summary);
   if (state === "errored") console.log(`::warning::The ${group} review errored; see the log above.`);
