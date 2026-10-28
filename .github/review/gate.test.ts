@@ -106,4 +106,5 @@ test("only a resolved thread with the App's marked Fixed reply counts as fixed",
   expect(resolvedAsFixed(thread([{ body: fixed, byBot: false, login: "JustKatze" }]), "ether-review[bot]")).toBe(false);
   expect(resolvedAsFixed(thread([{ body: "Fixed as of abc1234: trust me.", byBot: true, login: "ether-review" }]), "ether-review[bot]")).toBe(false);
   expect(resolvedAsFixed(thread([{ body: fixed, byBot: true, login: "ether-review" }], false), "ether-review[bot]")).toBe(false);
+  expect(resolvedAsFixed(thread([{ body: fixed, byBot: true, login: "ether-review" }, { body: "Not fixed, resolving anyway.", byBot: false, login: "JustKatze" }]), "ether-review[bot]")).toBe(false);
 });

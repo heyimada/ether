@@ -155,7 +155,11 @@ export const isBot =(user: { login: string; type: string } | null) => !user || u
 // REST shows App logins as "name[bot]", GraphQL as "name".
 export const sameBot = (login: string, botLogin: string) => login.replace(/\[bot\]$/, "") === botLogin.replace(/\[bot\]$/, "");
 // Markers are only trusted from the App itself, so nobody else can plant "already reported" or "reviewed" state.
-// The App resolves a thread only after its voters agreed the finding is fixed, and marks its reply. Any other resolved
-// thread was dismissed by a person.
-export const resolvedAsFixed = (t: Thread, botLogin: string) => t.isResolved && t.replies.some((r) => r.byBot && sameBot(r.login, botLogin) && isFixedReply(r.body));
+// The App resolves a thread only after its voters agreed the finding is fixed, and marks its reply. That reply has to be
+// the thread's last word: anything said after it means someone reopened the question, so the thread counts as dismissed.
+// An unresolve and re-resolve with no comment leaves no trace in the API, so that one stays undetected.
+export function resolvedAsFixed(t: Thread, botLogin: string): boolean {
+  const last = t.replies.at(-1);
+  return t.isResolved && !!last && last.byBot && sameBot(last.login, botLogin) && isFixedReply(last.body);
+}
 export const isReviewBot = (user: { login: string; type: string } | null, botLogin: string) => user?.type === "Bot" && sameBot(user.login, botLogin);
