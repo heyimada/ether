@@ -1,0 +1,102 @@
+name: Review
+
+# Bug and security review by the engine in .github/review/, posted by the review GitHub App. Report-only for now.
+#
+# pull_request_target, so the engine and the secrets come from main and a pull request can't change its own reviewer.
+# The pull request's code is checked out into pr/ as data: it is never installed, built or run, and the review agents
+# can only read files there. Only collaborators with write access get an AI review; review-gate.yml sends everyone
+# else to a human.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: 1.4.0
+
+jobs:
+  trust:
+    name: Trust
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: review
+    permissions: {}
+    outputs:
+      trusted: ${{ steps.check.outputs.trusted }}
+    steps:
+      # The permission lookup goes through the App, whose token is verified to read it; GITHUB_TOKEN with no
+      # permissions isn't verified to.
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.REVIEW_APP_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+          permission-pull-requests: read
+      # The author's live permission, not who pushed last. Bots and forks are never trusted.
+      - id: check
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          trusted=false
+          if [ "$AUTHOR_TYPE" = User ] && [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
+            # No fallback: if the lookup fails, the job fails visibly instead of quietly skipping every review.
+            permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$AUTHOR/permission" --jq .permission)
+            case "$permission" in admin | maintain | write) trusted=true ;; esac
+          fi
+          echo "trusted=$trusted" >> "$GITHUB_OUTPUT"
+
+  review:
+    name: ${{ matrix.lens }}
+    needs: trust
+    if: ${{ needs.trust.outputs.trusted == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: review
+    permissions:
+      contents: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        lens: [bugs, security]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+          persist-credentials: false
+      # A symlink could point the agents' file tools outside pr/. review.ts also refuses to run if one is left.
+      - run: find pr -type l -delete
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile --ignore-scripts
+      # Pinned because this step holds the App's private key; Dependabot bumps it.
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.REVIEW_APP_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-pull-requests: write
+      - run: bun .github/review/review.ts --pr "$PR" --lens "$LENS"
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          LENS: ${{ matrix.lens }}
+          GITHUB_TOKEN: ${{ github.token }}
+          REVIEW_APP_TOKEN: ${{ steps.app.outputs.token }}
+          REVIEW_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

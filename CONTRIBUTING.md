@@ -84,7 +84,7 @@ cargo build
 
 ```sh
 bun run typecheck
-bun run test                      # unit tests next to the code (src/**/*.test.ts)
+bun run test                      # unit tests next to the code (src/ and .github/review/)
 bunx playwright install chromium  # once
 bun run test:e2e                  # builds, boots a throwaway server, drives git and Chromium
 bun run test:e2e -- e2e/git.spec.ts   # one file
@@ -106,6 +106,14 @@ New behavior needs an e2e test. Write it the way the existing specs read: one us
 4. Make sure CI passes. It runs the build, typecheck, unit tests, `cargo fmt`/`clippy`/`build` for `cli/`, and the full e2e suite. When the e2e suite fails, download the `e2e-report` artifact from the workflow run to see screenshots and the server log.
 5. Include a screenshot or short recording for UI changes, in light and dark theme if colors are involved.
 6. Update `README.md` when you change commands, environment variables, setup steps or user-facing behavior.
+
+### Automated review
+
+Pull requests from collaborators with write access also get an automated review, posted by the review GitHub App. Its code lives in `.github/review/`. Two reviews run on every push, one for bugs and one for security. Several agents look for problems, and a separate group checks each one. A finding is posted only when they agree it is real. Findings are inline comments tagged **Important**, **Nit** or **Pre-existing**. Style and cleanup remarks are never posted.
+
+Answer every finding. Either fix it, or resolve the thread with a short reply that says why it isn't a problem. When a later commit fixes a finding, the review resolves the thread itself. A finding resolved by a person instead means a maintainer has to approve the pull request. From the third round on, only the commits since the last review are checked.
+
+For now the review is report-only. It never approves or blocks a pull request. The **Review gate** check says whether the App would approve it. Pull requests from forks, bots and authors without write access get no AI review and always need a human approval.
 
 A maintainer reviews the pull request and may ask for changes. Push follow-up commits to the same branch instead of opening a new pull request. If a pull request goes quiet for a while, a polite ping in the thread is welcome.
 

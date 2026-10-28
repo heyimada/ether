@@ -12,5 +12,5 @@
     "types": ["bun", "node"],
     "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
-  "include": ["src", "e2e", "*.ts"]
+  "include": ["src", "e2e", ".github/review", "*.ts"]
 }
