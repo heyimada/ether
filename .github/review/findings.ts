@@ -123,10 +123,33 @@ export function containsSecret(text: string, secrets: (string | undefined)[]): b
 
 // Model text comes from reading untrusted code: it must not open a marker or ping people.
 export const sanitize = (text: string, max = 4000) =>
-  (text.length > max ? `${text.slice(0, max)}…` : text).replaceAll("<!--", "&lt;!--").replaceAll("-->", "--&gt;").replace(/@(?=[A-Za-z0-9])/g, "@​");
+  (text.length > max ? `${text.slice(0, max)}…` : text).replaceAll("<!--", "&lt;!--").replaceAll("-->", "--&gt;").replace(/@(?=[A-Za-z0-9])/g, "@\u200b");
 
 const LABEL: Record<Severity, string> = { important: "Important", preexisting: "Pre-existing", nit: "Nit" };
 
-export function findingBody(f: Finding, sha: string): string {
-  return `**${LABEL[f.severity]}** (${f.lens}): ${sanitize(f.title, 200)}\n\n${sanitize(f.failure)}\n\n${findingMarker({ fp: f.fingerprint, sha, lens: f.lens, severity: f.severity })}`;
+// Findings without a diff line to attach to go into the review body, so they carry their location.
+export function findingBody(f: Finding, sha: string, withLocation = false): string {
+  const where = withLocation ? `\`${f.file}:${f.line}\` ` : "";
+  return `${where}**${LABEL[f.severity]}** (${f.lens}): ${sanitize(f.title, 200)}\n\n${sanitize(f.failure)}\n\n${findingMarker({ fp: f.fingerprint, sha, lens: f.lens, severity: f.severity })}`;
+}
+
+export interface Posted {
+  marker: FindingMarker;
+  title: string;
+  file: string;
+}
+
+// The findings a bot comment or review body posted earlier, with the title and file each was rendered with.
+export function postedFindings(body: string, file: string | null = null): Posted[] {
+  const out: Posted[] = [];
+  let start = 0;
+  for (const m of body.matchAll(new RegExp(`<!-- ${FINDING_TAG} \\{.*?\\} -->`, "g"))) {
+    const marker = parseFindingMarker(m[0]);
+    const chunk = body.slice(start, m.index);
+    start = m.index + m[0].length;
+    if (!marker) continue;
+    const head = chunk.match(/(?:`([^`\n]+):\d+` )?\*\*[A-Za-z-]+\*\* \([a-z]+\): (.*)/);
+    out.push({ marker, title: head?.[2] ?? "", file: file ?? head?.[1] ?? "" });
+  }
+  return out;
 }

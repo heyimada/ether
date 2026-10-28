@@ -10,6 +10,7 @@ import {
   parseFindingMarker,
   parseFindingMarkers,
   parseSummaryMarker,
+  postedFindings,
   sanitize,
   summaryMarker,
   tally,
@@ -51,6 +52,17 @@ test("a review body with several findings yields every marker", () => {
   const a = { fp: "a", sha: "s", lens: "correctness" as const, severity: "important" as const };
   const b = { ...a, fp: "b" };
   expect(parseFindingMarkers(`one ${findingMarker(a)}\n\ntwo ${findingMarker(b)}`)).toEqual([a, b]);
+});
+
+test("posted findings are read back with their title and file", () => {
+  const a = finding({ title: "First bug", file: "src/a.ts", line: 3 });
+  const b = finding({ title: "Second bug", file: "src/b.ts", line: 7, severity: "nit" });
+  const body = `Header\n\n${findingBody(a, "s1", true)}\n\n${findingBody(b, "s1", true)}`;
+  expect(postedFindings(body).map((p) => [p.marker.fp, p.title, p.file])).toEqual([
+    [a.fingerprint, "First bug", "src/a.ts"],
+    [b.fingerprint, "Second bug", "src/b.ts"],
+  ]);
+  expect(postedFindings(findingBody(a, "s1"), "src/inline.ts")[0]).toMatchObject({ title: "First bug", file: "src/inline.ts" });
 });
 
 test("the fingerprint ignores case and punctuation in the title, but not the file or lens", () => {
