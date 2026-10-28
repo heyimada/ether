@@ -60,7 +60,8 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
     if (containsSecret(text, secrets)) throw new Error("refusing to post: outgoing text contains a token");
     return text;
   };
-  const log = (msg: string) => console.error(`[${group}] ${msg}`);
+  // One line per message: model text in it could otherwise start a line with "::" and run a workflow command.
+  const log = (msg: string) => console.error(`[${group}] ${msg.replace(/[\r\n]+/g, " ")}`);
 
   const pull = await read.pull(prNumber);
   const head = pull.head.sha;
@@ -227,7 +228,7 @@ if (import.meta.main) {
   try {
     await review(pr, lens, values["dry-run"]!);
   } catch (e) {
-    console.error(`[${lens}] failed: ${(e as Error).message}`);
+    console.error(`[${lens}] failed: ${(e as Error).message.replace(/[\r\n]+/g, " ")}`);
     process.exit(1);
   }
 }
