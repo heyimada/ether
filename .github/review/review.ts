@@ -181,9 +181,11 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   const eligibility = await eligibilityRun;
   const state: ReviewState = errors.length ? "errored" : reviewable.length ? "done" : "not-applicable";
 
-  const inline: ReviewComment[] = posted.map((f) => {
-    const span = f.suggestion && f.suggestion.endLine > f.line ? { start_line: f.line, start_side: "RIGHT" as const, line: f.suggestion.endLine } : { line: f.line };
-    return { path: f.file, ...span, side: "RIGHT", body: guard(findingBody(f, head)) };
+  const inline: ReviewComment[] = posted.map(({ suggestion, ...f }) => {
+    // Suggestion code is file text verbatim, so a token-shaped fixture in it drops the suggestion, not the whole review.
+    const s = suggestion && !containsSecret(suggestion.code, secrets) ? suggestion : undefined;
+    const span = s && s.endLine > f.line ? { start_line: f.line, start_side: "RIGHT" as const, line: s.endLine } : { line: f.line };
+    return { path: f.file, ...span, side: "RIGHT", body: guard(findingBody(s ? { ...f, suggestion: s } : f, head)) };
   });
   const reviewBody = guard(`Automated ${group} review, round ${round} at ${short(head)}${sinceSha ? ` (changes since ${short(sinceSha)})` : ""}.`);
   const counts = (["important", "preexisting", "nit"] as const).map((s) => [s, posted.filter((f) => f.severity === s).length] as const).filter(([, n]) => n);

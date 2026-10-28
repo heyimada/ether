@@ -186,10 +186,22 @@ function suggestionBlock(code: string): string {
   return `${fence}suggestion\n${code ? `${code.replace(/\n$/, "")}\n` : ""}${fence}`;
 }
 
+// Model text can leave a code fence open, or be cut inside one, and an open fence would swallow the suggestion after it.
+export function closeFence(text: string): string {
+  let open: string | null = null;
+  for (const line of text.split("\n")) {
+    const m = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (!m) continue;
+    if (!open) open = m[1][0] === "`" && m[2].includes("`") ? null : m[1];
+    else if (m[1][0] === open[0] && m[1].length >= open.length && !m[2].trim()) open = null;
+  }
+  return open ? `${text}\n${open}` : text;
+}
+
 export function findingBody(f: Finding, sha: string): string {
   return [
     `**${LABEL[f.severity]}** (${f.lens}): ${sanitize(f.title.replace(/\s+/g, " "), 200)}`,
-    sanitize(f.failure),
+    closeFence(sanitize(f.failure)),
     ...(f.suggestion ? [suggestionBlock(f.suggestion.code)] : []),
     findingMarker({ fp: f.fingerprint, sha, lens: f.lens, severity: f.severity }),
   ].join("\n\n");

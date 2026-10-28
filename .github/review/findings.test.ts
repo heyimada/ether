@@ -5,6 +5,7 @@ import {
   changedPaths,
   COMPARE_FILE_LIMIT,
   commentableLines,
+  closeFence,
   containsSecret,
   dedupe,
   findingBody,
@@ -202,4 +203,13 @@ test("a suggestion is posted verbatim in a fence its own backticks can't close",
   expect(findingBody(finding({ suggestion: { endLine: 10, code: "" } }), "s1")).toContain("```suggestion\n```");
   expect(findingBody(finding({ suggestion: { endLine: 10, code: "x\n" } }), "s1")).toContain("```suggestion\nx\n```");
   expect(findingBody(finding({ suggestion: { endLine: 10, code: "\n" } }), "s1")).toContain("```suggestion\n\n```");
+});
+
+test("an open code fence in model text is closed so it can't swallow what follows", () => {
+  expect(closeFence("see\n```ts\nconst x = 1;")).toBe("see\n```ts\nconst x = 1;\n```");
+  expect(closeFence("````\n```\nx")).toBe("````\n```\nx\n````");
+  expect(closeFence("~~~\nx")).toBe("~~~\nx\n~~~");
+  for (const closed of ["```ts\nx\n```", "no fences", "inline ```code``` only", "````\n```\n````"]) expect(closeFence(closed)).toBe(closed);
+  const body = findingBody(finding({ failure: "cut off in\n```ts\nfoo(", suggestion: { endLine: 10, code: "x\n" } }), "s1");
+  expect(body).toContain("foo(\n```\n\n```suggestion\nx\n```");
 });
