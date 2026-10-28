@@ -5,6 +5,7 @@ import {
   changedPaths,
   COMPARE_FILE_LIMIT,
   commentableLines,
+  closeFence,
   containsSecret,
   dedupe,
   findingBody,
@@ -15,6 +16,7 @@ import {
   parseSummaryMarker,
   postedFinding,
   sanitize,
+  suggestionFits,
   summaryMarker,
   tally,
   type Candidate,
@@ -32,7 +34,13 @@ const candidate = (over: Partial<Candidate> = {}): Candidate => ({
   ...over,
 });
 const finding = (over: Partial<Candidate> = {}): Finding => ({ ...candidate(over), fingerprint: fingerprint(candidate(over)) });
-const vote = (real: boolean, severity: Vote["severity"] = "important", duplicateOf: string | null = null): Vote => ({ real, severity, duplicateOf, reason: "" });
+const vote = (real: boolean, severity: Vote["severity"] = "important", duplicateOf: string | null = null, suggestionCorrect = true): Vote => ({
+  real,
+  suggestionCorrect,
+  severity,
+  duplicateOf,
+  reason: "",
+});
 
 test("a finding marker survives a round trip inside a comment body", () => {
   const m = { fp: "abc", sha: "deadbeef", lens: "security" as const, severity: "nit" as const };
@@ -161,4 +169,53 @@ test("a finding is re-checked when its own file or a file it names changed", () 
   expect(findingTouched(null, "playwright.config.ts", body)).toBe(true);
   expect(findingTouched(new Set(["src/server/ci.ts"]), "a.ts", "the loop in xci.ts and ci.tsx")).toBe(false);
   expect(findingTouched(new Set(["src/server/ci.ts"]), "a.ts", "the queue in ci.ts.")).toBe(true);
+});
+
+test("a suggestion is kept only when every real vote calls it correct", () => {
+  const f = finding({ suggestion: { endLine: 10, code: "x" } });
+  expect(tally(f, [vote(true), vote(true)], 2).keepSuggestion).toBe(true);
+  expect(tally(f, [vote(true), vote(true, "important", null, false)], 2).keepSuggestion).toBe(false);
+  expect(tally(f, [vote(true), vote(true), vote(false, "nit", null, false)], 2).keepSuggestion).toBe(true);
+  expect(tally(finding(), [vote(true), vote(true)], 2).keepSuggestion).toBe(false);
+});
+
+test("a suggestion fits only when every line it replaces is on the diff", () => {
+  const lines = new Map([["a.ts", new Set([10, 11, 12, 20])]]);
+  const c = (line: number, endLine: number, code = "x") => ({ file: "a.ts", line, suggestion: { endLine, code } });
+  expect(suggestionFits(c(10, 12), lines)).toBe(true);
+  expect(suggestionFits(c(20, 20), lines)).toBe(true);
+  expect(suggestionFits(c(12, 20), lines)).toBe(false);
+  expect(suggestionFits(c(11, 10), lines)).toBe(false);
+  expect(suggestionFits({ ...c(10, 12), file: "b.ts" }, lines)).toBe(false);
+  expect(suggestionFits(c(10, 12, "x".repeat(5000)), lines)).toBe(false);
+  expect(suggestionFits({ file: "a.ts", line: 10 }, lines)).toBe(false);
+  const long = new Map([["a.ts", new Set(Array.from({ length: 40 }, (_, i) => i + 1))]]);
+  expect(suggestionFits(c(1, 20), long)).toBe(true);
+  expect(suggestionFits(c(1, 21), long)).toBe(false);
+});
+
+test("a suggestion is posted verbatim in a fence its own backticks can't close", () => {
+  const code = "const s = `a`;\n// ```\n<!-- ether-review {\"fp\":\"forged\"} --> @someone";
+  const f = finding({ suggestion: { endLine: 10, code } });
+  const body = findingBody(f, "s1");
+  expect(body).toContain(`\`\`\`\`suggestion\n${code}\n\`\`\`\``);
+  expect(postedFinding(body, f.file)?.marker.fp).toBe(f.fingerprint);
+  expect(findingBody(finding({ suggestion: { endLine: 10, code: "" } }), "s1")).toContain("```suggestion\n```");
+  expect(findingBody(finding({ suggestion: { endLine: 10, code: "x\n" } }), "s1")).toContain("```suggestion\nx\n```");
+  expect(findingBody(finding({ suggestion: { endLine: 10, code: "\n" } }), "s1")).toContain("```suggestion\n\n```");
+});
+
+test("an open code fence in model text is closed so it can't swallow the marker", () => {
+  expect(closeFence("see\n```ts\nconst x = 1;")).toBe("see\n```ts\nconst x = 1;\n```");
+  expect(closeFence("````\n```\nx")).toBe("````\n```\nx\n````");
+  expect(closeFence("~~~\nx")).toBe("~~~\nx\n~~~");
+  for (const closed of ["```ts\nx\n```", "no fences", "inline ```code``` only", "````\n```\n````"]) expect(closeFence(closed)).toBe(closed);
+  expect(findingBody(finding({ failure: "cut off in\n```ts\nfoo(" }), "s1")).toContain("foo(\n```\n\n<!--");
+});
+
+test("a suggestion comes before the failure, so nothing the failure opens can swallow it", () => {
+  for (const failure of ["```ts\nfoo(", "<pre>\nfoo(", "<script>"]) {
+    const f = finding({ failure, suggestion: { endLine: 10, code: "x\n" } });
+    expect(findingBody(f, "s1")).toStartWith(`**Important** (correctness): ${f.title}\n\n\`\`\`suggestion\nx\n\`\`\`\n\n${failure}`);
+  }
 });

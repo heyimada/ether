@@ -2,7 +2,7 @@ import { query, type HookCallback } from "@anthropic-ai/claude-agent-sdk";
 import { readdirSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { CONCURRENCY, LENS_GROUPS, MAX_TURNS, MODEL, type Lens, type LensGroup } from "./config";
-import { SEVERITIES, type Candidate, type Finding, type Vote } from "./findings";
+import { MAX_SUGGESTION_LINES, SEVERITIES, type Candidate, type Finding, type Vote } from "./findings";
 
 // Every agent gets the same sandbox: read-only tools, no settings, memory or session files from this machine, an
 // environment with nothing but the Claude login, and a hook that keeps every path inside the PR checkout.
@@ -182,8 +182,17 @@ const findingsSchema = (lenses: readonly Lens[]) => ({
           kind: { type: "string", enum: ["bug", "vulnerability", "style", "cleanup", "diagnostic"] },
           title: { type: "string", description: "One line that names the bug class" },
           failure: { type: "string", description: "Concrete inputs or state, and the wrong outcome they lead to" },
+          suggestion: {
+            type: ["object", "null"],
+            description: "A replacement for lines line through endLine of file that fully fixes the bug, or null",
+            properties: {
+              endLine: { type: "integer", description: "Last line replaced, in the new version of the file" },
+              code: { type: "string", description: "The exact new text of those lines, with indentation; empty deletes them" },
+            },
+            required: ["endLine", "code"],
+          },
         },
-        required: ["file", "line", "lens", "severity", "kind", "title", "failure"],
+        required: ["file", "line", "lens", "severity", "kind", "title", "failure", "suggestion"],
       },
     },
   },
@@ -199,13 +208,19 @@ export async function runFinder(group: LensGroup, ctx: Context): Promise<AgentRe
 Do not report style, naming, refactoring or cleanup ideas, missing comments or logging, test coverage wishes, or anything the typecheck, unit tests, cargo clippy or the e2e suite would already catch (mark such items kind "style", "cleanup" or "diagnostic" if you list them at all).
 Severity: "important" for a bug this change introduces or touches that should be fixed before merging; "nit" for a real but minor bug; "preexisting" for a real bug in code this change doesn't modify.
 file must be a file in the diff and line a line the diff shows in the new version (an added or context line). For a bug in code outside the diff, use the closest diff line that leads to it; findings anywhere else are dropped.
+When the whole fix is a small edit to at most ${MAX_SUGGESTION_LINES} consecutive diff lines of that one file, starting at line, give it as suggestion: endLine and the exact replacement text. The author can commit it in one click, so it must be complete and correct as is: right indentation, no placeholders, nothing else in the file left to change. Otherwise, or when you are unsure, set suggestion to null.
 These findings were already posted on this pull request. Do not report them again, even reworded:\n${priorList(ctx)}
 Return an empty list if you find nothing real.`,
   ].join("\n\n");
-  const res = await run<{ findings: (Candidate & { kind: string })[] }>(prompt, findingsSchema(lenses), MAX_TURNS.finder, ctx.cwd);
+  const res = await run<{ findings: (Omit<Candidate, "suggestion"> & { kind: string; suggestion: Candidate["suggestion"] | null })[] }>(
+    prompt,
+    findingsSchema(lenses),
+    MAX_TURNS.finder,
+    ctx.cwd,
+  );
   if (!res.ok) return res;
   const kept = res.value.findings.filter((f) => (f.kind === "bug" || f.kind === "vulnerability") && lenses.includes(f.lens as never) && Number.isInteger(f.line));
-  return { ...res, value: kept.map(({ kind, ...f }) => ({ ...f, file: f.file.replace(/^\.?\//, "") })) };
+  return { ...res, value: kept.map(({ kind, suggestion, ...f }) => ({ ...f, file: f.file.replace(/^\.?\//, ""), ...(suggestion ? { suggestion } : {}) })) };
 }
 
 export async function runVoter(f: Finding, earlier: Finding[], ctx: Context): Promise<AgentResult<Vote>> {
@@ -213,6 +228,9 @@ export async function runVoter(f: Finding, earlier: Finding[], ctx: Context): Pr
     intro(ctx),
     `Another reviewer reported this finding. Decide independently whether it is a real bug by reading the code. Be skeptical: it is real only if the described failure actually happens with this code.`,
     quote("finding", `[${f.fingerprint}] ${f.file}:${f.line} (${f.lens}, ${f.severity})\n${f.title}\n\n${f.failure}`),
+    f.suggestion
+      ? `It comes with a suggested fix that replaces lines ${f.line} through ${f.suggestion.endLine} of ${f.file}. The author may commit it in one click. Set suggestionCorrect to true only if, applied exactly as written, it fixes the bug, keeps the code compiling, and changes nothing else.\n${quote("suggestion", f.suggestion.code)}`
+      : "There is no suggested fix; set suggestionCorrect to false.",
     `It is a duplicate if it describes the same problem as one of these, even in other words; then set duplicateOf to that id.\nAlready posted:\n${priorList(ctx)}\nReported earlier in this round:\n${earlier.length ? earlier.map((e) => `- [${e.fingerprint}] ${e.file}:${e.line}: ${e.title}`).join("\n") : "(none)"}`,
     `Style, naming, cleanup, logging and test-coverage remarks are never real bugs. Severity: "important" for a bug this change introduces or touches that should be fixed before merging, "nit" for a real but minor bug, "preexisting" for a real bug in code the change doesn't modify.`,
   ].join("\n\n");
@@ -222,11 +240,12 @@ export async function runVoter(f: Finding, earlier: Finding[], ctx: Context): Pr
       type: "object",
       properties: {
         real: { type: "boolean" },
+        suggestionCorrect: { type: "boolean" },
         severity: { type: "string", enum: SEVERITIES },
         duplicateOf: { type: ["string", "null"] },
         reason: { type: "string" },
       },
-      required: ["real", "severity", "duplicateOf", "reason"],
+      required: ["real", "suggestionCorrect", "severity", "duplicateOf", "reason"],
     },
     MAX_TURNS.voter,
     ctx.cwd,

@@ -4,6 +4,11 @@ import type { EligibilityVerdict, Lens, LensGroup } from "./config";
 export type Severity = "important" | "nit" | "preexisting";
 export const SEVERITIES: Severity[] = ["important", "preexisting", "nit"];
 
+// Replaces lines line..endLine of the finding's file, posted as a GitHub suggestion the author can commit in one click.
+export interface Suggestion {
+  endLine: number;
+  code: string;
+}
 // What a finder reports. file/line are on the RIGHT side of the PR diff.
 export interface Candidate {
   file: string;
@@ -12,12 +17,15 @@ export interface Candidate {
   severity: Severity;
   title: string;
   failure: string;
+  suggestion?: Suggestion;
 }
 export interface Finding extends Candidate {
   fingerprint: string;
 }
 export interface Vote {
   real: boolean;
+  // Whether the suggestion, if there is one, fixes the bug and breaks nothing.
+  suggestionCorrect: boolean;
   severity: Severity;
   duplicateOf: string | null;
   reason: string;
@@ -111,14 +119,16 @@ export function dedupe(candidates: Candidate[], prior: Set<string>): Finding[] {
   return [...out.values()];
 }
 
-export function tally(finding: Finding, votes: Vote[], needed: number): { post: boolean; severity: Severity } {
+// A suggestion is only posted when every voter that calls the finding real also calls the suggestion correct.
+export function tally(finding: Finding, votes: Vote[], needed: number): { post: boolean; severity: Severity; keepSuggestion: boolean } {
   const real = votes.filter((v) => v.real && !v.duplicateOf);
-  if (real.length < needed) return { post: false, severity: finding.severity };
+  if (real.length < needed) return { post: false, severity: finding.severity, keepSuggestion: false };
+  const keepSuggestion = !!finding.suggestion && real.every((v) => v.suggestionCorrect);
   const counts = new Map<Severity, number>();
   for (const v of real) counts.set(v.severity, (counts.get(v.severity) ?? 0) + 1);
   const top = Math.max(...counts.values());
   const tied = SEVERITIES.filter((s) => counts.get(s) === top);
-  return { post: true, severity: tied.includes(finding.severity) ? finding.severity : tied[0] };
+  return { post: true, severity: tied.includes(finding.severity) ? finding.severity : tied[0], keepSuggestion };
 }
 
 export const bySeverity = (a: Finding, b: Finding) =>
@@ -155,8 +165,47 @@ const LABEL: Record<Severity, string> = { important: "Important", preexisting: "
 export const onDiffLine = (c: Pick<Candidate, "file" | "line">, lines: Map<string, Set<number>>) =>
   Number.isInteger(c.line) && c.line > 0 && (lines.get(c.file)?.has(c.line) ?? false);
 
+export const MAX_SUGGESTION_LINES = 20;
+const MAX_SUGGESTION_CHARS = 3000;
+
+// A suggestion has to replace lines the comment can span: every one of them on the diff, so GitHub accepts the range.
+// Anything else is dropped and the finding is posted without it.
+export function suggestionFits(c: Pick<Candidate, "file" | "line" | "suggestion">, lines: Map<string, Set<number>>): boolean {
+  const s = c.suggestion;
+  if (!s || !Number.isInteger(s.endLine) || s.endLine < c.line || s.endLine - c.line >= MAX_SUGGESTION_LINES) return false;
+  if (typeof s.code !== "string" || s.code.length > MAX_SUGGESTION_CHARS) return false;
+  const shown = lines.get(c.file);
+  for (let l = c.line; l <= s.endLine; l++) if (!shown?.has(l)) return false;
+  return true;
+}
+
+// The code goes in verbatim, so it can't be sanitized like prose. A fence longer than any backtick run in it keeps it
+// from closing the block early; mentions and HTML comments inside a code block don't render.
+function suggestionBlock(code: string): string {
+  const fence = "`".repeat(Math.max(3, ...[...code.matchAll(/`+/g)].map((m) => m[0].length + 1)));
+  return `${fence}suggestion\n${code ? `${code.replace(/\n$/, "")}\n` : ""}${fence}`;
+}
+
+// Model text can leave a code fence open, or be cut inside one, and an open fence would show the marker after it as text.
+export function closeFence(text: string): string {
+  let open: string | null = null;
+  for (const line of text.split("\n")) {
+    const m = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (!m) continue;
+    if (!open) open = m[1][0] === "`" && m[2].includes("`") ? null : m[1];
+    else if (m[1][0] === open[0] && m[1].length >= open.length && !m[2].trim()) open = null;
+  }
+  return open ? `${text}\n${open}` : text;
+}
+
 export function findingBody(f: Finding, sha: string): string {
-  return `**${LABEL[f.severity]}** (${f.lens}): ${sanitize(f.title.replace(/\s+/g, " "), 200)}\n\n${sanitize(f.failure)}\n\n${findingMarker({ fp: f.fingerprint, sha, lens: f.lens, severity: f.severity })}`;
+  return [
+    `**${LABEL[f.severity]}** (${f.lens}): ${sanitize(f.title.replace(/\s+/g, " "), 200)}`,
+    // Right after the title, which starts with "**" and so can't open a block: nothing in the failure can swallow it.
+    ...(f.suggestion ? [suggestionBlock(f.suggestion.code)] : []),
+    closeFence(sanitize(f.failure)),
+    findingMarker({ fp: f.fingerprint, sha, lens: f.lens, severity: f.severity }),
+  ].join("\n\n");
 }
 
 export interface Posted {

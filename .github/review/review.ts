@@ -22,6 +22,7 @@ import {
   parseSummaryMarker,
   postedFinding,
   sanitize,
+  suggestionFits,
   summaryMarker,
   tally,
   type Finding,
@@ -157,7 +158,10 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
     const all = found.flatMap((r) => (r.ok ? r.value : []));
     const located = all.filter((c) => onDiffLine(c, lines));
     candidates = all.length;
-    const findings = dedupe(located, new Set(prior.map((p) => p.marker.fp)));
+    const findings = dedupe(
+      located.map(({ suggestion, ...c }) => (suggestion && suggestionFits({ ...c, suggestion }, lines) ? { ...c, suggestion } : c)),
+      new Set(prior.map((p) => p.marker.fp)),
+    );
     log(`${plural(all.length, "candidate")}, ${located.length} on a diff line, ${findings.length} after exact dedupe`);
 
     const patches = new Map(files.map((f) => [f.filename, f.patch ?? ""]));
@@ -167,7 +171,9 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
         const votes = await Promise.all(Array.from({ length: DEPTH.voters }, () => runVoter(f, findings.slice(0, i), voterCtx).then(spend)));
         for (const v of votes) if (!v.ok) errors.push(`voter ${f.fingerprint}: ${v.error}`);
         const result = tally(f, votes.flatMap((v) => (v.ok ? [v.value] : [])), DEPTH.votesToPost);
-        return result.post ? { ...f, severity: result.severity } : null;
+        if (!result.post) return null;
+        const { suggestion, ...rest } = f;
+        return { ...rest, severity: result.severity, ...(result.keepSuggestion ? { suggestion } : {}) };
       }),
     );
     posted = voted.filter((f) => f !== null).filter((f) => round <= ROUND_CAP || f.severity === "important").sort(bySeverity);
@@ -175,7 +181,12 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   const eligibility = await eligibilityRun;
   const state: ReviewState = errors.length ? "errored" : reviewable.length ? "done" : "not-applicable";
 
-  const inline: ReviewComment[] = posted.map((f) => ({ path: f.file, line: f.line, side: "RIGHT", body: guard(findingBody(f, head)) }));
+  const inline: ReviewComment[] = posted.map(({ suggestion, ...f }) => {
+    // Suggestion code is file text verbatim, so a token-shaped fixture in it drops the suggestion, not the whole review.
+    const s = suggestion && !containsSecret(suggestion.code, secrets) ? suggestion : undefined;
+    const span = s && s.endLine > f.line ? { start_line: f.line, start_side: "RIGHT" as const, line: s.endLine } : { line: f.line };
+    return { path: f.file, ...span, side: "RIGHT", body: guard(findingBody(s ? { ...f, suggestion: s } : f, head)) };
+  });
   const reviewBody = guard(`Automated ${group} review, round ${round} at ${short(head)}${sinceSha ? ` (changes since ${short(sinceSha)})` : ""}.`);
   const counts = (["important", "preexisting", "nit"] as const).map((s) => [s, posted.filter((f) => f.severity === s).length] as const).filter(([, n]) => n);
   const summary = guard(
@@ -186,7 +197,7 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
       state === "errored" ? "Part of the review failed, so this commit needs a human review. The workflow log has the details." : "",
       state === "not-applicable" ? "Nothing to review in this commit." : "",
       round > ROUND_CAP ? `This pull request is past ${ROUND_CAP} review rounds, so only important findings are posted now.${posted.length ? " If findings keep coming, consider a different approach." : ""}` : "",
-      posted.length ? "Answer each finding: fix it, or resolve the thread with a reason." : "",
+      posted.length ? "Answer each finding: fix it (a finding with a suggested change can be committed from its comment), or resolve the thread with a reason." : "",
       REPORT_ONLY ? "Report-only: this review doesn't approve or block merging yet." : "",
       summaryMarker({ lens: group, round, reviewedSha: head, state, ...(eligibility ? { eligibility } : {}) }),
     ].filter(Boolean).join("\n\n"),
