@@ -217,9 +217,16 @@ fn print_json(v: &Value) -> Result<()> {
 }
 
 fn git(args: &[&str]) -> Result<String> {
-    let out = Command::new("git").args(args).output().context("running git")?;
+    let out = Command::new("git")
+        .args(args)
+        .output()
+        .context("running git")?;
     if !out.status.success() {
-        bail!("git {} failed: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim());
+        bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
@@ -230,15 +237,21 @@ fn resolve_repo(explicit: &Option<String>, host: &str) -> Result<(String, String
     let full = match explicit {
         Some(r) => r.clone(),
         None => {
-            let url = git(&["remote", "get-url", "origin"]).context("not in a clone of an Ether repository; pass -R OWNER/REPO")?;
+            let url = git(&["remote", "get-url", "origin"])
+                .context("not in a clone of an Ether repository; pass -R OWNER/REPO")?;
             let rest = url
                 .strip_prefix(host)
                 .with_context(|| format!("origin ({url}) is not on {host}; pass -R OWNER/REPO"))?;
-            rest.trim_start_matches('/').trim_end_matches('/').trim_end_matches(".git").to_string()
+            rest.trim_start_matches('/')
+                .trim_end_matches('/')
+                .trim_end_matches(".git")
+                .to_string()
         }
     };
     match full.split_once('/') {
-        Some((o, r)) if !o.is_empty() && !r.is_empty() && !r.contains('/') => Ok((o.to_string(), r.to_string())),
+        Some((o, r)) if !o.is_empty() && !r.is_empty() && !r.contains('/') => {
+            Ok((o.to_string(), r.to_string()))
+        }
         _ => bail!("expected OWNER/REPO, got {full}"),
     }
 }
@@ -249,9 +262,16 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Repo(cmd) => repo(cmd),
         Cmd::Issue(cmd) => issue(cmd),
         Cmd::Pr(cmd) => pr(cmd),
-        Cmd::Api { path, method, input } => {
+        Cmd::Api {
+            path,
+            method,
+            input,
+        } => {
             let c = client()?;
-            let body = input.map(|s| serde_json::from_str::<Value>(&s)).transpose().context("--input must be JSON")?;
+            let body = input
+                .map(|s| serde_json::from_str::<Value>(&s))
+                .transpose()
+                .context("--input must be JSON")?;
             let method = Method::from_bytes(method.to_uppercase().as_bytes())?;
             print_json(&c.request(method, &path, body.as_ref())?)
         }
@@ -260,7 +280,11 @@ fn run(cli: Cli) -> Result<()> {
 
 fn auth(cmd: AuthCmd) -> Result<()> {
     match cmd {
-        AuthCmd::Login { host, with_token, token } => {
+        AuthCmd::Login {
+            host,
+            with_token,
+            token,
+        } => {
             let host = normalize_host(&host);
             let token = match (with_token, token) {
                 (true, _) => {
@@ -274,10 +298,21 @@ fn auth(cmd: AuthCmd) -> Result<()> {
             if token.is_empty() {
                 bail!("no token given");
             }
-            let me = Client::new(&host, &token)?.get("/api/me").context("that token was not accepted")?;
-            let user = me["user"]["username"].as_str().context("unexpected response from /api/me")?.to_string();
+            let me = Client::new(&host, &token)?
+                .get("/api/me")
+                .context("that token was not accepted")?;
+            let user = me["user"]["username"]
+                .as_str()
+                .context("unexpected response from /api/me")?
+                .to_string();
             let mut cfg = Config::load()?;
-            cfg.hosts.insert(host.clone(), Host { user: user.clone(), token });
+            cfg.hosts.insert(
+                host.clone(),
+                Host {
+                    user: user.clone(),
+                    token,
+                },
+            );
             cfg.default = Some(host.clone());
             cfg.save()?;
             println!("Logged in to {host} as {user}");
@@ -285,8 +320,13 @@ fn auth(cmd: AuthCmd) -> Result<()> {
         }
         AuthCmd::Status => {
             let (host, entry) = Config::load()?.current()?;
-            let me = Client::new(&host, &entry.token)?.get("/api/me").context("the saved token no longer works; log in again")?;
-            println!("{host}: logged in as {}", me["user"]["username"].as_str().unwrap_or(&entry.user));
+            let me = Client::new(&host, &entry.token)?
+                .get("/api/me")
+                .context("the saved token no longer works; log in again")?;
+            println!(
+                "{host}: logged in as {}",
+                me["user"]["username"].as_str().unwrap_or(&entry.user)
+            );
             Ok(())
         }
         AuthCmd::Logout => {
@@ -315,7 +355,14 @@ fn auth(cmd: AuthCmd) -> Result<()> {
             if operation != "get" {
                 return Ok(());
             }
-            let wanted = format!("{}://{}", fields.get("protocol").map(String::as_str).unwrap_or("https"), fields.get("host").map(String::as_str).unwrap_or(""));
+            let wanted = format!(
+                "{}://{}",
+                fields
+                    .get("protocol")
+                    .map(String::as_str)
+                    .unwrap_or("https"),
+                fields.get("host").map(String::as_str).unwrap_or("")
+            );
             let cfg = Config::load()?;
             if let Some(entry) = cfg.hosts.get(&normalize_host(&wanted)) {
                 println!("username={}\npassword={}", entry.user, entry.token);
@@ -328,18 +375,30 @@ fn auth(cmd: AuthCmd) -> Result<()> {
 fn repo(cmd: RepoCmd) -> Result<()> {
     let c = client()?;
     match cmd {
-        RepoCmd::Create { name, description, public, org } => {
+        RepoCmd::Create {
+            name,
+            description,
+            public,
+            org,
+        } => {
             let mut body = json!({ "name": name, "description": description, "visibility": if public { "public" } else { "private" } });
             if let Some(o) = org {
                 body["owner"] = json!(o);
             }
             let res = c.post("/api/repos", body)?;
-            let (owner, name) = (res["repo"]["owner"].as_str().unwrap_or(""), res["repo"]["name"].as_str().unwrap_or(""));
+            let (owner, name) = (
+                res["repo"]["owner"].as_str().unwrap_or(""),
+                res["repo"]["name"].as_str().unwrap_or(""),
+            );
             println!("Created {owner}/{name}\n{}/{owner}/{name}", c.host);
             Ok(())
         }
         RepoCmd::List => {
-            for r in c.get("/api/repos")?["repos"].as_array().cloned().unwrap_or_default() {
+            for r in c.get("/api/repos")?["repos"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+            {
                 println!(
                     "{}/{}\t{}\t{}",
                     r["owner"].as_str().unwrap_or(""),
@@ -361,7 +420,10 @@ fn repo(cmd: RepoCmd) -> Result<()> {
             if let Some(d) = info["description"].as_str().filter(|d| !d.is_empty()) {
                 println!("{d}");
             }
-            println!("Default branch: {}", info["defaultBranch"].as_str().unwrap_or(""));
+            println!(
+                "Default branch: {}",
+                info["defaultBranch"].as_str().unwrap_or("")
+            );
             println!("Stars: {}", v["stars"]);
             println!("Clone: {}/{o}/{r}.git", c.host);
             Ok(())
@@ -369,18 +431,35 @@ fn repo(cmd: RepoCmd) -> Result<()> {
         RepoCmd::Clone { repo, dir } => {
             let (o, r) = resolve_repo(&Some(repo), &c.host)?;
             let url = format!("{}/{}/{}.git", c.host, o, r);
-            let exe = std::env::current_exe()?.to_string_lossy().replace('\\', "/");
+            let exe = std::env::current_exe()?
+                .to_string_lossy()
+                .replace('\\', "/");
             let helper = format!("!'{exe}' auth git-credential");
             let target = dir.unwrap_or_else(|| r.clone());
             // An empty helper first resets any global helpers so they don't prompt.
             let status = Command::new("git")
-                .args(["-c", "credential.helper=", "-c", &format!("credential.helper={helper}"), "clone", &url, &target])
+                .args([
+                    "-c",
+                    "credential.helper=",
+                    "-c",
+                    &format!("credential.helper={helper}"),
+                    "clone",
+                    &url,
+                    &target,
+                ])
                 .status()?;
             if !status.success() {
                 bail!("git clone failed");
             }
             git(&["-C", &target, "config", "--add", "credential.helper", ""])?;
-            git(&["-C", &target, "config", "--add", "credential.helper", &helper])?;
+            git(&[
+                "-C",
+                &target,
+                "config",
+                "--add",
+                "credential.helper",
+                &helper,
+            ])?;
             println!("Cloned {o}/{r} into {target}; git push and pull use your ether login.");
             Ok(())
         }
@@ -403,9 +482,19 @@ fn print_item_line(i: &Value) {
 
 fn print_conversation(v: &Value, key: &str) {
     let i = &v[key];
-    println!("{} #{}  [{}]", i["title"].as_str().unwrap_or(""), i["number"], i["state"].as_str().unwrap_or(""));
+    println!(
+        "{} #{}  [{}]",
+        i["title"].as_str().unwrap_or(""),
+        i["number"],
+        i["state"].as_str().unwrap_or("")
+    );
     if key == "pull" {
-        println!("{} wants to merge {} into {}", i["author"].as_str().unwrap_or(""), i["head"].as_str().unwrap_or(""), i["base"].as_str().unwrap_or(""));
+        println!(
+            "{} wants to merge {} into {}",
+            i["author"].as_str().unwrap_or(""),
+            i["head"].as_str().unwrap_or(""),
+            i["base"].as_str().unwrap_or("")
+        );
     } else {
         println!("opened by {}", i["author"].as_str().unwrap_or(""));
     }
@@ -413,7 +502,11 @@ fn print_conversation(v: &Value, key: &str) {
         println!("\n{b}");
     }
     for c in v["comments"].as_array().cloned().unwrap_or_default() {
-        println!("\n— {}:\n{}", c["author"].as_str().unwrap_or(""), c["body"].as_str().unwrap_or(""));
+        println!(
+            "\n— {}:\n{}",
+            c["author"].as_str().unwrap_or(""),
+            c["body"].as_str().unwrap_or("")
+        );
     }
 }
 
@@ -422,7 +515,11 @@ fn issue(cmd: IssueCmd) -> Result<()> {
     match cmd {
         IssueCmd::List { r, state, json } => {
             let (o, n) = resolve_repo(&r.repo, &c.host)?;
-            let v = c.get(&format!("{}/issues?state={}", repo_api(&o, &n), seg(&state)))?;
+            let v = c.get(&format!(
+                "{}/issues?state={}",
+                repo_api(&o, &n),
+                seg(&state)
+            ))?;
             if json {
                 return print_json(&v);
             }
@@ -433,7 +530,10 @@ fn issue(cmd: IssueCmd) -> Result<()> {
         }
         IssueCmd::Create { r, title, body } => {
             let (o, n) = resolve_repo(&r.repo, &c.host)?;
-            let v = c.post(&format!("{}/issues", repo_api(&o, &n)), json!({ "title": title, "body": body }))?;
+            let v = c.post(
+                &format!("{}/issues", repo_api(&o, &n)),
+                json!({ "title": title, "body": body }),
+            )?;
             let num = &v["issue"]["number"];
             println!("Created issue #{num}\n{}/{o}/{n}/issues/{num}", c.host);
             Ok(())
@@ -449,7 +549,10 @@ fn issue(cmd: IssueCmd) -> Result<()> {
         }
         IssueCmd::Comment { number, r, body } => {
             let (o, n) = resolve_repo(&r.repo, &c.host)?;
-            c.post(&format!("{}/issues/{number}/comments", repo_api(&o, &n)), json!({ "body": body }))?;
+            c.post(
+                &format!("{}/issues/{number}/comments", repo_api(&o, &n)),
+                json!({ "body": body }),
+            )?;
             println!("Commented on #{number}");
             Ok(())
         }
@@ -460,8 +563,18 @@ fn issue(cmd: IssueCmd) -> Result<()> {
 
 fn set_state(c: &Client, r: &RepoArg, number: u64, state: &str) -> Result<()> {
     let (o, n) = resolve_repo(&r.repo, &c.host)?;
-    c.patch(&format!("{}/issues/{number}", repo_api(&o, &n)), json!({ "state": state }))?;
-    println!("{} #{number}", if state == "closed" { "Closed" } else { "Reopened" });
+    c.patch(
+        &format!("{}/issues/{number}", repo_api(&o, &n)),
+        json!({ "state": state }),
+    )?;
+    println!(
+        "{} #{number}",
+        if state == "closed" {
+            "Closed"
+        } else {
+            "Reopened"
+        }
+    );
     Ok(())
 }
 
@@ -479,19 +592,36 @@ fn pr(cmd: PrCmd) -> Result<()> {
             }
             Ok(())
         }
-        PrCmd::Create { r, title, body, base, head } => {
+        PrCmd::Create {
+            r,
+            title,
+            body,
+            base,
+            head,
+        } => {
             let (o, n) = resolve_repo(&r.repo, &c.host)?;
             let head = match head {
                 Some(h) => h,
-                None => git(&["rev-parse", "--abbrev-ref", "HEAD"]).context("pass --head BRANCH")?,
+                None => {
+                    git(&["rev-parse", "--abbrev-ref", "HEAD"]).context("pass --head BRANCH")?
+                }
             };
             let base = match base {
                 Some(b) => b,
-                None => c.get(&repo_api(&o, &n))?["repo"]["defaultBranch"].as_str().unwrap_or("main").to_string(),
+                None => c.get(&repo_api(&o, &n))?["repo"]["defaultBranch"]
+                    .as_str()
+                    .unwrap_or("main")
+                    .to_string(),
             };
-            let v = c.post(&format!("{}/pulls", repo_api(&o, &n)), json!({ "title": title, "body": body, "base": base, "head": head }))?;
+            let v = c.post(
+                &format!("{}/pulls", repo_api(&o, &n)),
+                json!({ "title": title, "body": body, "base": base, "head": head }),
+            )?;
             let num = &v["pull"]["number"];
-            println!("Created pull request #{num} ({head} into {base})\n{}/{o}/{n}/pull/{num}", c.host);
+            println!(
+                "Created pull request #{num} ({head} into {base})\n{}/{o}/{n}/pull/{num}",
+                c.host
+            );
             Ok(())
         }
         PrCmd::View { number, r, json } => {
@@ -502,20 +632,32 @@ fn pr(cmd: PrCmd) -> Result<()> {
             }
             print_conversation(&v, "pull");
             if v["pull"]["state"] == "open" {
-                println!("\n{}", if v["mergeable"] == true { "Can be merged." } else { "Has conflicts; can't be merged yet." });
+                println!(
+                    "\n{}",
+                    if v["mergeable"] == true {
+                        "Can be merged."
+                    } else {
+                        "Has conflicts; can't be merged yet."
+                    }
+                );
             }
             Ok(())
         }
         PrCmd::Merge { number, r } => {
             let (o, n) = resolve_repo(&r.repo, &c.host)?;
-            c.post(&format!("{}/pulls/{number}/merge", repo_api(&o, &n)), json!({}))?;
+            c.post(
+                &format!("{}/pulls/{number}/merge", repo_api(&o, &n)),
+                json!({}),
+            )?;
             println!("Merged #{number}");
             Ok(())
         }
         PrCmd::Checkout { number, r } => {
             let (o, n) = resolve_repo(&r.repo, &c.host)?;
             let v = c.get(&format!("{}/pulls/{number}", repo_api(&o, &n)))?;
-            let head = v["pull"]["head"].as_str().context("pull request has no head branch")?;
+            let head = v["pull"]["head"]
+                .as_str()
+                .context("pull request has no head branch")?;
             git(&["fetch", "origin", &format!("{head}:{head}")])?;
             git(&["checkout", head])?;
             println!("Switched to {head}");
