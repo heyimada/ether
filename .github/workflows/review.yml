@@ -66,6 +66,9 @@ jobs:
       pull-requests: read
     strategy:
       fail-fast: false
+      # One after the other, so the security review sees what the bugs review posted and its voters can drop the same
+      # problem reworded. Two parallel reviews posted the same bug twice.
+      max-parallel: 1
       matrix:
         lens: [bugs, security]
     steps:

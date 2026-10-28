@@ -30,7 +30,7 @@ import {
   fixedMarker,
   changedPaths,
 } from "./findings";
-import { github, isReviewBot, otherLensLines, readToken, resolvedAsFixed, type GitHub, type PullFile, type ReviewComment } from "./github";
+import { github, isReviewBot, readToken, resolvedAsFixed, type GitHub, type PullFile, type ReviewComment } from "./github";
 
 const DIFF_BUDGET = 150_000;
 const ELIGIBILITY_DIFF_BUDGET = 60_000;
@@ -74,14 +74,16 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   if (prev && prev.reviewedSha === head && prev.state !== "errored" && !dryRun) return log(`already reviewed ${short(head)}`);
   const round = !prev ? 1 : prev.reviewedSha === head ? prev.round : prev.round + 1;
 
-  const botThreads = threads
+  const allBotThreads = threads
     .filter((t) => isReviewBot({ login: t.comment.login, type: t.comment.byBot ? "Bot" : "User" }, BOT_LOGIN))
     .flatMap((t) => {
       const posted = postedFinding(t.comment.body, t.comment.path);
-      return posted && lenses.includes(posted.marker.lens) ? [{ thread: t, posted }] : [];
+      return posted ? [{ thread: t, posted }] : [];
     });
-  // Findings the App resolved as fixed may come back if the fix regresses, so only the others count as already reported.
-  const prior: Posted[] = botThreads.filter((t) => !resolvedAsFixed(t.thread, BOT_LOGIN)).map((t) => t.posted);
+  const botThreads = allBotThreads.filter((t) => lenses.includes(t.posted.marker.lens));
+  // Every lens's findings count as already reported, so the same problem isn't posted twice under different lenses. Findings
+  // the App resolved as fixed may come back if the fix regresses, so those don't count.
+  const prior: Posted[] = allBotThreads.filter((t) => !resolvedAsFixed(t.thread, BOT_LOGIN)).map((t) => t.posted);
   const errors: string[] = [];
   // The path hook can't see what a glob matches, so a symlink anywhere in the checkout stops the agents (review.yml deletes them first).
   const symlink = findSymlink(PR_DIR);
@@ -174,13 +176,6 @@ async function review(prNumber: number, group: LensGroup, dryRun: boolean) {
   const eligibility = await eligibilityRun;
   const state: ReviewState = errors.length ? "errored" : reviewable.length ? "done" : "not-applicable";
 
-  // The other lens group runs in parallel and may already have posted the same problem at the same line for this commit.
-  if (posted.length && write) {
-    const taken = otherLensLines(await read.threads(prNumber), lenses, head, BOT_LOGIN);
-    const before = posted.length;
-    posted = posted.filter((f) => !taken.has(`${f.file}:${f.line}`));
-    if (posted.length < before) log(`${before - posted.length} finding(s) already posted by the other review at the same line`);
-  }
   const inline: ReviewComment[] = posted.map((f) => ({ path: f.file, line: f.line, side: "RIGHT", body: guard(findingBody(f, head)) }));
   const reviewBody = guard(`Automated ${group} review, round ${round} at ${short(head)}${sinceSha ? ` (changes since ${short(sinceSha)})` : ""}.`);
   const counts = (["important", "preexisting", "nit"] as const).map((s) => [s, posted.filter((f) => f.severity === s).length] as const).filter(([, n]) => n);

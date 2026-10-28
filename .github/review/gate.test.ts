@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { findingMarker, fixedMarker } from "./findings";
+import { fixedMarker } from "./findings";
 import { ciState, decide, type GateInput } from "./gate";
-import { isReviewBot, otherLensLines, resolvedAsFixed, type CheckRun, type Thread } from "./github";
+import { isReviewBot, resolvedAsFixed, type CheckRun, type Thread } from "./github";
 
 const HEAD = "a".repeat(40);
 const done = (lens: "bugs" | "security", over = {}) => ({ lens, round: 1, reviewedSha: HEAD, state: "done" as const, ...over });
@@ -107,21 +107,4 @@ test("only a resolved thread with the App's marked Fixed reply counts as fixed",
   expect(resolvedAsFixed(thread([{ body: "Fixed as of abc1234: trust me.", byBot: true, login: "ether-review" }]), "ether-review[bot]")).toBe(false);
   expect(resolvedAsFixed(thread([{ body: fixed, byBot: true, login: "ether-review" }], false), "ether-review[bot]")).toBe(false);
   expect(resolvedAsFixed(thread([{ body: fixed, byBot: true, login: "ether-review" }, { body: "Not fixed, resolving anyway.", byBot: false, login: "JustKatze" }]), "ether-review[bot]")).toBe(false);
-});
-
-test("only the other lens group's findings for this commit block the same line", () => {
-  const head = "h".repeat(40);
-  const finding = (lens: string, sha: string, line: number | null, byBot = true): Thread => ({
-    id: "t",
-    isResolved: false,
-    replies: [],
-    comment: { databaseId: 1, body: `**Important** (${lens}): x\n\n${findingMarker({ fp: "f", sha, lens: lens as never, severity: "important" })}`, path: "src/a.ts", line, byBot, login: "ether-review" },
-  });
-  const lines = otherLensLines(
-    [finding("security", head, 10), finding("correctness", head, 20), finding("security", "old", 30), finding("security", head, 40, false), finding("security", head, null)],
-    ["correctness", "lifecycle", "contracts"],
-    head,
-    "ether-review[bot]",
-  );
-  expect([...lines]).toEqual(["src/a.ts:10"]);
 });
