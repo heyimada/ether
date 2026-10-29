@@ -1,8 +1,16 @@
-// Parsing .ether/ci.yml into jobs and steps. Pure, so it can be tested without a database.
+// Parsing workflow files into triggers, jobs and steps. Pure, so it can be tested without a database.
 import { parse as parseYaml } from "yaml";
 import { IMAGE_RE } from "./ci-container";
+import { LEGACY_TRIGGERS, parseOn, type Triggers } from "./ci-triggers";
 
+// Workflows live in .ether/workflows/*.yml, each with its own `on:`. The older single .ether/ci.yml still
+// works and runs on every push to a branch unless it says otherwise.
 export const WORKFLOW = ".ether/ci.yml";
+export const WORKFLOW_DIR = ".ether/workflows";
+export const MAX_WORKFLOWS = 20;
+export const isWorkflowFile = (name: string) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.ya?ml$/.test(name);
+// The name a workflow goes by when it doesn't give one.
+export const defaultWorkflowName = (path: string) => (path === WORKFLOW ? "CI" : path.slice(path.lastIndexOf("/") + 1).replace(/\.ya?ml$/, ""));
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$/;
 const SHELLS = ["bash", "sh", "pwsh", "powershell", "cmd"] as const;
 export type Shell = (typeof SHELLS)[number];
@@ -34,7 +42,6 @@ function parseEnv(raw: unknown, where: string): Record<string, EnvValue> {
   return out;
 }
 
-// Validates the workflow and normalises it into jobs of steps; throws a readable message.
 export const ENVIRONMENT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 // `environment: production` or `environment: { name: production, url: https://… }`, as on GitHub.
@@ -48,16 +55,27 @@ function parseEnvironment(raw: unknown, job: string): { name: string; url: strin
 }
 
 export type ParsedJob = { name: string; image: string | null; environment: { name: string; url: string | null } | null; steps: Step[] };
+export type ParsedWorkflow = { name: string; on: Triggers; jobs: ParsedJob[] };
 
-export function parseWorkflow(text: string): ParsedJob[] {
+// Validates the workflow and normalises it into its name, triggers and jobs of steps; throws a readable message.
+export function parseWorkflow(text: string, path = WORKFLOW): ParsedWorkflow {
   let doc: unknown;
   try {
     doc = parseYaml(text);
   } catch (e) {
-    throw new Error(`${WORKFLOW} is not valid YAML: ${(e as Error).message.split("\n")[0]}`);
+    throw new Error(`${path} is not valid YAML: ${(e as Error).message.split("\n")[0]}`);
   }
-  const jobs = (doc as { jobs?: unknown } | null)?.jobs;
-  if (!jobs || typeof jobs !== "object" || Array.isArray(jobs)) throw new Error(`${WORKFLOW} needs a "jobs" map`);
+  const { jobs, name, on } = (doc ?? {}) as { jobs?: unknown; name?: unknown; on?: unknown };
+  if (name !== undefined && (typeof name !== "string" || !name.trim() || name.length > 100)) throw new Error(`${path}: name must be text of up to 100 characters`);
+  // Only the older file may leave out `on:`; a new one that forgot it shouldn't run on every push by surprise.
+  if (on === undefined && path !== WORKFLOW) throw new Error(`${path} needs "on" to say when it runs, e.g. on: push`);
+  let triggers: Triggers;
+  try {
+    triggers = on === undefined ? LEGACY_TRIGGERS : parseOn(on);
+  } catch (e) {
+    throw new Error(`${path}: ${(e as Error).message}`);
+  }
+  if (!jobs || typeof jobs !== "object" || Array.isArray(jobs)) throw new Error(`${path} needs a "jobs" map`);
   const out = Object.entries(jobs as Record<string, unknown>).map(([name, job]) => {
     if (!NAME_RE.test(name)) throw new Error(`Job name "${name}" must be letters, digits, spaces, '.', '_' or '-'`);
     const { steps, image, env, environment } = (job ?? {}) as { steps?: unknown; image?: unknown; env?: unknown; environment?: unknown };
@@ -83,6 +101,6 @@ export function parseWorkflow(text: string): ParsedJob[] {
       }),
     };
   });
-  if (out.length === 0 || out.length > 20) throw new Error(`${WORKFLOW} needs between 1 and 20 jobs`);
-  return out;
+  if (out.length === 0 || out.length > 20) throw new Error(`${path} needs between 1 and 20 jobs`);
+  return { name: typeof name === "string" ? name.trim() : defaultWorkflowName(path), on: triggers, jobs: out };
 }

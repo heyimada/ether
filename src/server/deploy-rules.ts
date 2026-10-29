@@ -14,7 +14,9 @@ export type Gate =
 
 // Order as on GitHub: the branch has to be allowed, then a reviewer has to approve, then the wait timer runs
 // (from the approval, or from when the job was queued when nobody has to approve).
-export function gate(rules: EnvironmentRules, ref: string, review: Review, queuedAt: Date, now: Date): Gate {
+export function gate(rules: EnvironmentRules, ref: string, review: Review, queuedAt: Date, now: Date, refType: "branch" | "tag" = "branch"): Gate {
+  // The patterns name branches, so a tag (which could share a branch's name) only deploys where any ref may.
+  if (rules.branches.length && refType === "tag") return { action: "skip", reason: `tags aren't allowed to deploy here, only ${rules.branches.join(", ")}` };
   if (rules.branches.length && !rules.branches.some((p) => matches(p, ref))) return { action: "skip", reason: `${ref} isn't allowed to deploy here` };
   if (review && !review.approved) return { action: "reject", reason: "the deployment was rejected" };
   if (rules.reviewers > 0 && !review) return { action: "await-review" };

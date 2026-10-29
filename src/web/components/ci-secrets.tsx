@@ -44,7 +44,7 @@ export function CiSecrets({
       <div className="body stack-md">
         {intro ?? (
           <p className="text-muted m-0">
-            Use them in <code>.ether/ci.yml</code> as <code>{"env: { DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }} }"}</code> on a job or step. Values are encrypted on the
+            Use them in a workflow as <code>{"env: { DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }} }"}</code> on a job or step. Values are encrypted on the
             server, never shown again, and masked in logs. Anyone who can push here can still read them through a workflow, so only add what everyone with write
             access may know.
           </p>

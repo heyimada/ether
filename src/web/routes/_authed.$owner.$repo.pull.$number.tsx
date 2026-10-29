@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { DiffView } from "../components/content";
 import { Conversation, IssueHeader } from "../components/conversation";
-import { CiBadge, ciDone, type CiStatus } from "../components/ci";
+import { CiBadge, ciDone, EVENT_LABEL, type CiEvent, type CiStatus } from "../components/ci";
 import { IssueSidebar } from "../components/labels";
 import { ReviewList, ReviewPanel, ReviewersSection, type ReviewData } from "../components/reviews";
 import { ErrorNote, TabBar, useAction } from "../components/ui";
@@ -10,7 +10,7 @@ import { api, post, repoApi, shortSha, type Comment, type Commit, type Issue } f
 type PullData = ReviewData & {
   pull: Issue;
   requireChecks: boolean;
-  checks: { id: number; status: CiStatus } | null;
+  checks: { status: CiStatus; runs: { id: number; workflow: string; event: CiEvent; status: CiStatus }[] } | null;
   deployments: { environment: string; url: string | null; runId: number }[];
   comments: Comment[];
   role: "owner" | "write" | "read";
@@ -134,17 +134,24 @@ function MergeBox({ data }: { data: PullData }) {
       {data.reviewDecision === "changes_requested" && <p className="m-0 mb-3 text-danger">Changes were requested in a review.</p>}
       {data.reviewDecision === "approved" && <p className="m-0 mb-3 text-open">Approved in review.</p>}
       {data.checks && (
-        <p className="m-0 mb-3">
-          <CiBadge status={data.checks.status} />{" "}
-          <Link to="/$owner/$repo/ci/$id" params={{ owner: info.repo.owner, repo: info.repo.name, id: String(data.checks.id) }}>
-            {data.checks.status === "success"
-              ? "All checks have passed"
-              : ciDone(data.checks.status)
-                ? "Some checks failed"
-                : "Checks are still running"}
-          </Link>
-          {needsChecks && " · merging requires passing checks"}
-        </p>
+        <div className="m-0 mb-3 stack-sm">
+          <p className="m-0">
+            <CiBadge status={data.checks.status} />{" "}
+            <strong>{data.checks.status === "success" ? "All checks have passed" : ciDone(data.checks.status) ? "Some checks failed" : "Checks are still running"}</strong>
+            {needsChecks && " · merging requires passing checks"}
+          </p>
+          <ul className="m-0 p-0 list-none stack-sm" aria-label="Checks">
+            {data.checks.runs.map((r) => (
+              <li key={r.id}>
+                <CiBadge status={r.status} />{" "}
+                <Link to="/$owner/$repo/ci/$id" params={{ owner: info.repo.owner, repo: info.repo.name, id: String(r.id) }}>
+                  {r.workflow}
+                </Link>{" "}
+                <span className="text-muted">({EVENT_LABEL[r.event]})</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {data.deployments.map((d) => (
         <p key={d.environment} className="m-0 mb-3">

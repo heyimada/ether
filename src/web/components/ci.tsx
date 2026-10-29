@@ -27,3 +27,6 @@ export function CiBadge({ status }: { status: CiStatus }) {
 
 // Waiting runs (a deployment waits for a reviewer or a timer) aren't done, but may stay that way for a long time.
 export const ciDone = (s: CiStatus) => s !== "queued" && s !== "running" && s !== "waiting";
+
+export type CiEvent = "push" | "pull_request" | "workflow_dispatch";
+export const EVENT_LABEL: Record<CiEvent, string> = { push: "push", pull_request: "pull request", workflow_dispatch: "manual" };

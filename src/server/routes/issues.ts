@@ -6,7 +6,7 @@ import { HttpError, allows, readerOrVisitor, requireRepo, requireUser, type Repo
 import { db } from "../db/client";
 import { comment, issue, issueAssignee, issueLabel, label, repo, user } from "../db/schema";
 import * as git from "../git";
-import { checkStatus, latestRun } from "../ci";
+import { commitChecks, onPullRequest, onPush } from "../ci";
 import { deployedAt } from "../deploy";
 import { excerpt, record } from "../events";
 import { reviewSummary } from "./reviews";
@@ -144,12 +144,11 @@ function listIssues(a: RepoAccess, isPull: boolean, q: Record<string, string | u
   return { items: presentAll(rows), open, closed };
 }
 
-// The CI run for the pull request's head commit, if any.
+// The checks of the pull request's head commit, one per workflow and event, if any ran.
 async function headChecks(a: RepoAccess, row: NonNullable<IssueRow>) {
   if (!row.issue.headRef) return null;
   const sha = await git.resolveCommit(a.path, `refs/heads/${row.issue.headRef}`);
-  const run = sha ? latestRun(a.repo.id, sha) : null;
-  return run ? { id: run.id, status: checkStatus(run) } : null;
+  return sha ? commitChecks(a.repo.id, sha) : null;
 }
 
 // Environments currently running the pull request's head commit.
@@ -212,8 +211,10 @@ export const issueRoutes = new Elysia()
     if (Object.keys(set).length) db.update(issue).set(set).where(eq(issue.id, row.issue.id)).run();
     if (set.state && set.state !== row.issue.state) {
       const ref = { number: row.issue.number, title: set.title ?? row.issue.title };
-      if (row.issue.isPull)
+      if (row.issue.isPull) {
         record(a.repo.id, viewer.id, set.state === "closed" ? "pull_closed" : "pull_reopened", { ...ref, base: row.issue.baseRef, head: row.issue.headRef });
+        if (set.state === "open") await onPullRequest(a.repo.id, a.path, row.issue.number, "reopened", viewer.id).catch(() => {});
+      }
       else record(a.repo.id, viewer.id, set.state === "closed" ? "issue_closed" : "issue_reopened", ref);
     }
     return { ok: true };
@@ -247,6 +248,7 @@ export const issueRoutes = new Elysia()
       if (!(await git.resolveCommit(a.path, `refs/heads/${branch}`))) throw new HttpError(400, `No branch named ${branch}`);
     const number = insertIssue(a, viewer, { title, body: str(b?.body, 65536), isPull: true, baseRef: base, headRef: head });
     record(a.repo.id, viewer.id, "pull_opened", { number, title, base, head });
+    await onPullRequest(a.repo.id, a.path, number, "opened", viewer.id).catch(() => {});
     return { pull: { number } };
   })
   .get("/repos/:owner/:repo/pulls/:number", async ({ request, params }) => {
@@ -279,6 +281,7 @@ export const issueRoutes = new Elysia()
         const checks = await headChecks(a, row);
         if (checks && checks.status !== "success") throw new HttpError(409, "Merging requires passing checks");
       }
+      const before = await git.resolveCommit(a.path, `refs/heads/${row.issue.baseRef}`);
       const result = await git.mergeBranches(
         a.path,
         row.issue.baseRef!,
@@ -292,6 +295,9 @@ export const issueRoutes = new Elysia()
       }
       db.update(issue).set({ state: "merged", mergeCommit: result.sha, mergedBy: viewer.id }).where(eq(issue.id, row.issue.id)).run();
       record(a.repo.id, viewer.id, "pull_merged", { number: row.issue.number, title: row.issue.title, base: row.issue.baseRef, head: row.issue.headRef });
+      // Merging moves the base branch like a push would, so its push workflows run on the merge commit.
+      const moved = (sha: string | null) => (sha ? [{ name: row.issue.baseRef!, kind: "branch" as const, sha }] : []);
+      void onPush(a.repo.id, a.path, moved(before), moved(result.sha), viewer.id).catch(() => {});
       return { ok: true, sha: result.sha };
     });
   });

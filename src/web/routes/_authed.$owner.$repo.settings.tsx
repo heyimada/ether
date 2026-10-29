@@ -113,7 +113,7 @@ function RepoSettings() {
         <ErrorNote error={ciToggle.error} />
         <label className="radio">
           <input type="checkbox" checked={ci.enabled} onChange={(e) => ciToggle.run({ ciEnabled: e.target.checked })} disabled={ciToggle.pending || (!instance.ciEnabled && !ci.enabled)} />
-          Run <code>.ether/ci.yml</code> on every push
+          Run workflows from <code>.ether/workflows/</code>
         </label>
         {!instance.ciEnabled && <span className="hint m-0">An admin has to allow CI on this server first.</span>}
         <label className="radio">

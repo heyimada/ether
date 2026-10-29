@@ -5,17 +5,19 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { chownWorkspaceArgs, cli, collect, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, instanceLabel, shellCommand } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
-import { parseWorkflow, WORKFLOW, type EnvValue, type Shell, type Step } from "./ci-workflow";
+import { inputEnvName, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
+import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type EnvValue, type ParsedWorkflow, type Shell, type Step } from "./ci-workflow";
 import { config } from "./config";
 import { db } from "./db/client";
-import { ciJob, ciRun, deployment, instanceSetting, repo, user } from "./db/schema";
+import { ciJob, ciRun, deployment, instanceSetting, issue, repo, user } from "./db/schema";
 import { cancelDeployments, deploymentOfJob, ensureEnvironment, environmentOfJob, reviewerIds, rulesOf, setDeployment, type Environment } from "./deploy";
 import { gate } from "./deploy-rules";
 import { record } from "./events";
 import * as git from "./git";
 import { LogMasker } from "./log-mask";
 
-// CI runs workflows from .ether/ci.yml, so it is opt-in twice: an admin allows it for the server,
+// CI runs workflows from .ether/workflows/*.yml (and the older .ether/ci.yml) when what their `on:`
+// names happens: a push, a pull request or someone starting one by hand. It is opt-in twice: an admin allows it for the server,
 // and an owner turns it on per repository. Jobs run one at a time from a fresh checkout. By default
 // each job runs in its own container (see ci-container.ts) and sees nothing of the server; an admin
 // can instead let jobs run on the host as Ether's own user, which gives every writer the server.
@@ -47,7 +49,26 @@ function command(shell: Shell | null, run: string): string[] {
   }
 }
 
-const ciVars = (r: { owner: string; name: string; sha: string; ref: string }) => ({ CI: "true", CI_REPOSITORY: `${r.owner}/${r.name}`, CI_COMMIT_SHA: r.sha, CI_REF: r.ref });
+type Run = typeof ciRun.$inferSelect;
+
+// What every step of a run is told about it; a manual run's inputs come as CI_INPUT_<NAME>.
+function ciVars(run: Run, owner: string, name: string): Record<string, string> {
+  const inputs = Object.entries(JSON.parse(run.inputs) as Record<string, string>).map(([k, v]) => [inputEnvName(k), v]);
+  return {
+    CI: "true",
+    CI_REPOSITORY: `${owner}/${name}`,
+    CI_COMMIT_SHA: run.sha,
+    CI_REF: run.ref,
+    CI_REF_TYPE: run.refType,
+    CI_EVENT: run.event,
+    CI_WORKFLOW: run.workflowName,
+    ...(run.pullNumber !== null ? { CI_PULL_REQUEST: String(run.pullNumber), CI_BASE_REF: pullBase(run) ?? "" } : {}),
+    ...Object.fromEntries(inputs),
+  };
+}
+
+const pullBase = (run: Run) =>
+  run.pullNumber === null ? null : (db.select({ base: issue.baseRef }).from(issue).where(and(eq(issue.repoId, run.repoId), eq(issue.number, run.pullNumber))).get()?.base ?? null);
 
 // On the host, only what tools need to work: no ETHER_* settings, auth secret or tokens.
 function hostEnv() {
@@ -95,7 +116,7 @@ async function execute(run: typeof ciRun.$inferSelect) {
   const path = git.repoPath(r.owner!, r.repo.name);
   running = { runId: run.id, proc: null, container: null };
   db.update(ciRun).set({ status: "running", startedAt: run.startedAt ?? new Date() }).where(eq(ciRun.id, run.id)).run();
-  const ctx = { owner: r.owner!, name: r.repo.name, sha: run.sha, ref: run.ref };
+  const ctx = { sha: run.sha, vars: ciVars(run, r.owner!, r.repo.name) };
   // A run comes back here after a deploy job was approved or its timer ran out; jobs that already
   // finished, or still wait, are left alone.
   for (const job of db.select().from(ciJob).where(and(eq(ciJob.runId, run.id), eq(ciJob.status, "queued"))).orderBy(asc(ciJob.id)).all()) {
@@ -119,7 +140,7 @@ async function execute(run: typeof ciRun.$inferSelect) {
 function admit(job: typeof ciJob.$inferSelect, env: Environment, run: typeof ciRun.$inferSelect): boolean {
   const d = deploymentOfJob(job.id);
   const review = d?.reviewedAt ? { approved: d.status !== "rejected", at: d.reviewedAt } : null;
-  const g = gate(rulesOf(env), run.ref, review, run.createdAt, new Date());
+  const g = gate(rulesOf(env), run.ref, review, run.createdAt, new Date(), run.refType);
   if (g.action === "run") return true;
   if (g.action === "skip") {
     // Nothing was deployed, so there is no deployment to keep either.
@@ -259,7 +280,7 @@ async function reportFailure(run: { id: number; repoId: number; sha: string; ref
 
 const currentStatus = (runId: number) => db.select({ s: ciRun.status }).from(ciRun).where(eq(ciRun.id, runId)).get()?.s;
 
-async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPath: string, ctx: { owner: string; name: string; sha: string; ref: string }, env: Environment | null) {
+async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPath: string, ctx: { sha: string; vars: Record<string, string> }, env: Environment | null) {
   // A deploy job already says whether it waited and who approved it.
   let log = job.log ?? "";
   const append = (s: string) => {
@@ -322,7 +343,7 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
       append(masked(`▶ ${step.name}\n`));
       save();
       const started = Date.now();
-      const vars = { ...ciVars(ctx), ...(env ? { CI_ENVIRONMENT: env.name } : {}), ...resolveEnv(step.env, secrets) };
+      const vars = { ...ctx.vars, ...(env ? { CI_ENVIRONMENT: env.name } : {}), ...resolveEnv(step.env, secrets) };
       let proc: ReturnType<typeof Bun.spawn>;
       try {
         if (box) {
@@ -376,46 +397,160 @@ async function executeJob(job: typeof ciJob.$inferSelect, repoId: number, repoPa
 
 // ---------- triggers ----------
 
-// Queues a run for one commit if CI is allowed and the commit has a workflow.
-export async function enqueue(repoId: number, repoPath: string, sha: string, ref: string, actorId: string | null = null): Promise<number | null> {
-  const r = db.select().from(repo).where(eq(repo.id, repoId)).get();
-  if (!r?.ciEnabled || !ciAllowed()) return null;
-  const file = await git.readBlob(repoPath, sha, WORKFLOW).catch(() => null);
-  if (!file?.content) return null;
-  let jobs: ReturnType<typeof parseWorkflow>;
-  try {
-    jobs = parseWorkflow(file.content);
-  } catch (e) {
-    const id = db.insert(ciRun).values({ repoId, sha, ref, actorId, status: "error", message: (e as Error).message, finishedAt: new Date() }).returning({ id: ciRun.id }).get().id;
-    await reportFailure({ id, repoId, sha, ref, actorId }, repoPath, "error");
-    return id;
-  }
+const ciOn = (repoId: number) => !!db.select({ on: repo.ciEnabled }).from(repo).where(eq(repo.id, repoId)).get()?.on && ciAllowed();
+
+type WorkflowFile = { path: string; content: string };
+
+// A commit's workflows: .ether/ci.yml and the first MAX_WORKFLOWS files in .ether/workflows (not its subfolders, as on GitHub).
+export async function workflowFiles(repoPath: string, sha: string): Promise<WorkflowFile[]> {
+  const entries = (await git.readTree(repoPath, sha, WORKFLOW_DIR).catch(() => null)) ?? [];
+  const paths = [WORKFLOW, ...entries.filter((e) => e.type === "blob" && isWorkflowFile(e.name)).map((e) => e.path).slice(0, MAX_WORKFLOWS)];
+  const files = await Promise.all(paths.map(async (path) => ({ path, content: (await git.readBlob(repoPath, sha, path).catch(() => null))?.content })));
+  return files.filter((f): f is WorkflowFile => typeof f.content === "string" && f.content.length > 0);
+}
+
+export const isWorkflowPath = (path: string) => path === WORKFLOW || (path.startsWith(`${WORKFLOW_DIR}/`) && isWorkflowFile(path.slice(WORKFLOW_DIR.length + 1)));
+
+type RunMeta = { ref: string; refType: Run["refType"]; event: Run["event"]; pullNumber: number | null; inputs: Record<string, string> };
+
+function createRun(repoId: number, sha: string, actorId: string | null, path: string, wf: ParsedWorkflow, meta: RunMeta): number {
   // Environments a job names are created on first use.
-  const envs = new Map(jobs.flatMap((j) => (j.environment ? [[j.environment.name, ensureEnvironment(repoId, j.environment.name)] as const] : [])));
-  const id = db.transaction((tx) => {
-    const run = tx.insert(ciRun).values({ repoId, sha, ref, actorId, status: "queued" }).returning({ id: ciRun.id }).get();
-    for (const j of jobs) {
+  const envs = new Map(wf.jobs.flatMap((j) => (j.environment ? [[j.environment.name, ensureEnvironment(repoId, j.environment.name)] as const] : [])));
+  return db.transaction((tx) => {
+    const run = tx
+      .insert(ciRun)
+      .values({ repoId, sha, actorId, status: "queued", workflowPath: path, workflowName: wf.name, ...meta, inputs: JSON.stringify(meta.inputs) })
+      .returning({ id: ciRun.id })
+      .get();
+    for (const j of wf.jobs) {
       const job = tx
         .insert(ciJob)
         .values({ runId: run.id, name: j.name, image: j.image, environment: j.environment?.name ?? null, url: j.environment?.url ?? null, steps: JSON.stringify(j.steps), status: "queued" as const })
         .returning({ id: ciJob.id })
         .get();
       if (j.environment)
-        tx.insert(deployment).values({ repoId, environmentId: envs.get(j.environment.name)!.id, runId: run.id, jobId: job.id, sha, ref, actorId, status: "queued", url: j.environment.url }).run();
+        tx.insert(deployment).values({ repoId, environmentId: envs.get(j.environment.name)!.id, runId: run.id, jobId: job.id, sha, ref: meta.ref, actorId, status: "queued", url: j.environment.url }).run();
     }
     return run.id;
   });
+}
+
+// A workflow file that doesn't parse becomes a run that errored, so its author sees why nothing ran.
+async function erroredRun(repoId: number, repoPath: string, sha: string, actorId: string | null, path: string, message: string, meta: RunMeta) {
+  const values = { repoId, sha, actorId, status: "error" as const, message, finishedAt: new Date(), workflowPath: path, workflowName: defaultWorkflowName(path), ...meta, inputs: JSON.stringify(meta.inputs) };
+  const id = db.insert(ciRun).values(values).returning({ id: ciRun.id }).get().id;
+  await reportFailure({ id, repoId, sha, ref: meta.ref, actorId }, repoPath, "error");
+  return id;
+}
+
+// Starts each of the commit's workflows whose `on:` takes this trigger. A file that doesn't parse is
+// reported on pushes only: it can't say which events it wanted, and a pull request would repeat the push's error.
+async function startWorkflows(repoId: number, repoPath: string, sha: string, trigger: Trigger, meta: RunMeta, actorId: string | null): Promise<number[]> {
+  if (!ciOn(repoId)) return [];
+  const ids: number[] = [];
+  for (const file of await workflowFiles(repoPath, sha)) {
+    let wf: ParsedWorkflow;
+    try {
+      wf = parseWorkflow(file.content, file.path);
+    } catch (e) {
+      if (trigger.event === "push") ids.push(await erroredRun(repoId, repoPath, sha, actorId, file.path, (e as Error).message, meta));
+      continue;
+    }
+    if (starts(wf.on, trigger)) ids.push(createRun(repoId, sha, actorId, file.path, wf, meta));
+  }
+  void drain();
+  return ids;
+}
+
+const MAX_CHANGED = 1000;
+
+// The files a push or pull request changes, for path filters; null when there are too many or git can't tell, which lets every filter through.
+async function changedFiles(repoPath: string, range: string[]): Promise<string[] | null> {
+  const res = await git.git(repoPath, ["diff", "--name-only", "-z", "--no-renames", "--end-of-options", ...range]);
+  if (res.code !== 0) return null;
+  const files = new TextDecoder().decode(res.stdout).split("\0").filter(Boolean);
+  return files.length > MAX_CHANGED ? null : files;
+}
+
+// A new branch changed what it has beyond the default branch; the default branch's own first push changed everything.
+async function newBranchChanges(repoPath: string, branch: string, sha: string) {
+  const main = await git.headBranch(repoPath).catch(() => null);
+  const mainSha = main && main !== branch ? await git.resolveCommit(repoPath, `refs/heads/${main}`) : null;
+  return mainSha ? changedFiles(repoPath, [`${mainSha}...${sha}`]) : null;
+}
+
+// After a push, or a merge (which moves the base branch): push workflows for each branch and tag that moved
+// to a new commit, and pull_request workflows for open pull requests whose head branch moved.
+export async function onPush(repoId: number, repoPath: string, before: git.Ref[], after: git.Ref[], actorId: string) {
+  for (const ref of after) {
+    const old = before.find((b) => b.kind === ref.kind && b.name === ref.name);
+    if (old?.sha === ref.sha) continue;
+    if (ref.kind === "tag") {
+      // An annotated tag names a tag object; runs are for the commit it points at.
+      const sha = await git.resolveCommit(repoPath, ref.sha);
+      if (sha) await startWorkflows(repoId, repoPath, sha, { event: "push", refType: "tag", ref: ref.name, changed: null }, { ref: ref.name, refType: "tag", event: "push", pullNumber: null, inputs: {} }, actorId);
+      continue;
+    }
+    const changed = old ? await changedFiles(repoPath, [old.sha, ref.sha]) : await newBranchChanges(repoPath, ref.name, ref.sha);
+    await startWorkflows(repoId, repoPath, ref.sha, { event: "push", refType: "branch", ref: ref.name, changed }, { ref: ref.name, refType: "branch", event: "push", pullNumber: null, inputs: {} }, actorId);
+    const pulls = db
+      .select({ number: issue.number })
+      .from(issue)
+      .where(and(eq(issue.repoId, repoId), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.headRef, ref.name)))
+      .all();
+    for (const p of pulls) await onPullRequest(repoId, repoPath, p.number, "synchronize", actorId);
+  }
+}
+
+// When a pull request is opened or reopened, or its head branch moves: its workflows run on the head commit.
+export async function onPullRequest(repoId: number, repoPath: string, number: number, action: PullAction, actorId: string) {
+  const pr = db.select().from(issue).where(and(eq(issue.repoId, repoId), eq(issue.number, number))).get();
+  if (!pr?.isPull || pr.state !== "open" || !pr.headRef || !pr.baseRef) return;
+  const [head, base] = await Promise.all([git.resolveCommit(repoPath, `refs/heads/${pr.headRef}`), git.resolveCommit(repoPath, `refs/heads/${pr.baseRef}`)]);
+  if (!head) return;
+  // What the pull request would bring in: its changes since it left the base branch.
+  const changed = base ? await changedFiles(repoPath, [`${base}...${head}`]) : null;
+  await startWorkflows(repoId, repoPath, head, { event: "pull_request", action, base: pr.baseRef, changed }, { ref: pr.headRef, refType: "branch", event: "pull_request", pullNumber: number, inputs: {} }, actorId);
+}
+
+export class DispatchError extends Error {}
+
+// Someone starts a workflow by hand on a branch, as the workflow is on that branch.
+export async function dispatch(repoId: number, repoPath: string, path: string, branch: string, given: Record<string, unknown>, actorId: string): Promise<number> {
+  if (!ciOn(repoId)) throw new DispatchError("CI is turned off for this repository");
+  if (!isWorkflowPath(path)) throw new DispatchError("No such workflow");
+  const sha = await git.resolveCommit(repoPath, `refs/heads/${branch}`);
+  if (!sha) throw new DispatchError(`No branch named ${branch}`);
+  const file = await git.readBlob(repoPath, sha, path).catch(() => null);
+  if (!file?.content) throw new DispatchError(`${branch} has no ${path}`);
+  let id: number;
+  try {
+    const wf = parseWorkflow(file.content, path);
+    if (!wf.on.workflow_dispatch) throw new Error(`${wf.name} can't be run by hand on ${branch}: its "on" doesn't include workflow_dispatch`);
+    const inputs = resolveInputs(wf.on.workflow_dispatch.inputs, given);
+    id = createRun(repoId, sha, actorId, path, wf, { ref: branch, refType: "branch", event: "workflow_dispatch", pullNumber: null, inputs });
+  } catch (e) {
+    throw new DispatchError((e as Error).message);
+  }
   void drain();
   return id;
 }
 
-// After a push: one run per branch that moved to a new commit.
-export async function onPush(repoId: number, repoPath: string, before: git.Ref[], after: git.Ref[], actorId: string) {
-  for (const ref of after) {
-    if (ref.kind !== "branch") continue;
-    if (before.some((b) => b.kind === "branch" && b.name === ref.name && b.sha === ref.sha)) continue;
-    await enqueue(repoId, repoPath, ref.sha, ref.name, actorId);
+// The same workflow for the same commit and event again, as the file is at that commit.
+export async function rerun(run: Run, repoPath: string, actorId: string): Promise<number | null> {
+  if (!ciOn(run.repoId)) return null;
+  const file = await git.readBlob(repoPath, run.sha, run.workflowPath).catch(() => null);
+  if (!file?.content) return null;
+  const meta: RunMeta = { ref: run.ref, refType: run.refType, event: run.event, pullNumber: run.pullNumber, inputs: JSON.parse(run.inputs) };
+  let wf: ParsedWorkflow;
+  try {
+    wf = parseWorkflow(file.content, run.workflowPath);
+  } catch (e) {
+    return erroredRun(run.repoId, repoPath, run.sha, actorId, run.workflowPath, (e as Error).message, meta);
   }
+  const id = createRun(run.repoId, run.sha, actorId, run.workflowPath, wf, meta);
+  void drain();
+  return id;
 }
 
 export function cancel(runId: number) {
@@ -435,9 +570,24 @@ export function cancel(runId: number) {
   return true;
 }
 
-// The newest run for a commit, which is what pull requests show as their checks.
-export const latestRun = (repoId: number, sha: string) =>
-  db.select().from(ciRun).where(and(eq(ciRun.repoId, repoId), eq(ciRun.sha, sha))).orderBy(desc(ciRun.id)).get() ?? null;
+// A commit's checks, as pull requests and the dashboard show them: the newest run of each workflow and event.
+// Manual runs aren't checks: someone started them for their own reasons, not to judge the change.
+export function commitChecks(repoId: number, sha: string) {
+  const seen = new Set<string>();
+  const runs = db
+    .select()
+    .from(ciRun)
+    .where(and(eq(ciRun.repoId, repoId), eq(ciRun.sha, sha), inArray(ciRun.event, ["push", "pull_request"])))
+    .orderBy(desc(ciRun.id))
+    .all()
+    .filter((r) => !seen.has(`${r.workflowPath}\0${r.event}`) && !!seen.add(`${r.workflowPath}\0${r.event}`))
+    .sort((a, b) => a.workflowName.localeCompare(b.workflowName) || a.event.localeCompare(b.event));
+  if (!runs.length) return null;
+  const checks = runs.map((r) => ({ id: r.id, workflow: r.workflowName, event: r.event, status: checkStatus(r) }));
+  const has = (...s: string[]) => checks.some((c) => s.includes(c.status));
+  const status: Run["status"] = has("failure", "error") ? "failure" : has("cancelled") ? "cancelled" : has("running") ? "running" : has("queued") ? "queued" : "success";
+  return { status, runs: checks };
+}
 
 // A run's result as a pull request's checks: its jobs without the deploy jobs. A deployment waiting for a
 // review, skipped, failed or cancelled says nothing about whether the change is good to merge.
