@@ -1,5 +1,5 @@
 // A workflow's `on:` and whether an event starts it, as on GitHub. Pure, so it can be tested without a database.
-import { matches, patternProblem } from "./branch-rules";
+import { globMatch, matches, patternProblem } from "./branch-rules";
 
 export const EVENTS = ["push", "pull_request", "workflow_dispatch"] as const;
 export type EventName = (typeof EVENTS)[number];
@@ -126,24 +126,18 @@ function passes(f: Filter, value: string, match: (pattern: string, value: string
   return hit;
 }
 
-// Paths are case-sensitive, unlike branch names; * stays within a directory, ** crosses them.
-function pathMatches(pattern: string, path: string): boolean {
-  let re = "";
-  for (let i = 0; i < pattern.length; i++) {
-    const c = pattern[i];
-    // `**/` also matches no directory at all, so src/**/*.ts covers src/a.ts.
-    if (c === "*" && pattern[i + 1] === "*" && pattern[i + 2] === "/") (re += "(?:.*/)?"), (i += 2);
-    else if (c === "*" && pattern[i + 1] === "*") (re += ".*"), i++;
-    else if (c === "*") re += "[^/]*";
-    else if (c === "?") re += "[^/]";
-    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-  }
-  return new RegExp(`^${re}$`).test(path);
-}
+// Paths are case-sensitive, unlike branch names.
+const pathMatches = (pattern: string, path: string) => globMatch(pattern, path, { dirs: true });
+
+// Matching costs about pattern length × path length; beyond this much work a push simply runs the workflow,
+// as when the changed files aren't known.
+const MAX_MATCH_WORK = 20_000_000;
 
 // `paths`: some changed file is included. `paths-ignore`: some changed file isn't ignored.
 function pathsPass(f: Filter | null, changed: string[] | null): boolean {
   if (!f || changed === null) return true;
+  const work = f.patterns.reduce((s, p) => s + p.length, 0) * changed.reduce((s, c) => s + c.length + 1, 0);
+  if (work > MAX_MATCH_WORK) return true;
   return changed.some((file) => passes(f, file, pathMatches));
 }
 

@@ -213,7 +213,8 @@ export const issueRoutes = new Elysia()
       const ref = { number: row.issue.number, title: set.title ?? row.issue.title };
       if (row.issue.isPull) {
         record(a.repo.id, viewer.id, set.state === "closed" ? "pull_closed" : "pull_reopened", { ...ref, base: row.issue.baseRef, head: row.issue.headRef });
-        if (set.state === "open") await onPullRequest(a.repo.id, a.path, row.issue.number, "reopened", viewer.id).catch(() => {});
+        // Starting runs (with secrets and deployments) takes write access, which an author may have lost since.
+        if (set.state === "open" && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "reopened", viewer.id).catch(() => {});
       }
       else record(a.repo.id, viewer.id, set.state === "closed" ? "issue_closed" : "issue_reopened", ref);
     }

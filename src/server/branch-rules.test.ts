@@ -83,3 +83,10 @@ describe("refusal", () => {
     expect(await refusal([rule("main")], { ref: "refs/tags/main", old: A, new: Z }, ctx())).toBeNull();
   });
 });
+
+test("branch patterns match in linear time, even ones built to backtrack", () => {
+  const started = performance.now();
+  expect(matches("**a".repeat(60) + "**b", "a".repeat(250))).toBe(false);
+  expect(performance.now() - started).toBeLessThan(500);
+  expect(matches("***/x", "a/b/x")).toBe(true);
+});

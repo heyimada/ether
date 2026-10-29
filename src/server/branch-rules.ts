@@ -13,19 +13,48 @@ export function patternProblem(pattern: string): string | null {
   return null;
 }
 
-// * matches within one path segment, ** across segments, ? one character. Case is ignored: on a
-// case-insensitive disk RELEASE/1.0 is the same ref as release/1.0, so a rule must cover both spellings.
-export function matches(pattern: string, branch: string): boolean {
-  let re = "";
+// A glob match in time linear in the pattern times the text, without regular expressions: patterns and
+// names both come from people who can push, and a backtracking regex like .*a.*a.*a… could stall the server.
+// * matches within one / segment, ** across segments, ? one character other than /. With `dirs`, **/ also
+// matches no directory at all (src/**/*.ts covers src/a.ts), as path filters expect.
+export function globMatch(pattern: string, text: string, opts: { ignoreCase?: boolean; dirs?: boolean } = {}): boolean {
+  if (opts.ignoreCase) (pattern = pattern.toLowerCase()), (text = text.toLowerCase());
+  const n = text.length;
+  // cur[j]: the pattern so far can match text[0, j).
+  let cur = new Uint8Array(n + 1);
+  cur[0] = 1;
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i];
-    if (c === "*" && pattern[i + 1] === "*") (re += ".*"), i++;
-    else if (c === "*") re += "[^/]*";
-    else if (c === "?") re += "[^/]";
-    else re += c.replace(/[.\-/]/g, "\\$&");
+    const next = new Uint8Array(n + 1);
+    if (c === "*" && pattern[i + 1] === "*") {
+      // Runs of * beyond two add nothing.
+      while (pattern[i + 1] === "*") i++;
+      if (opts.dirs && pattern[i + 1] === "/") {
+        i++;
+        let seen = 0;
+        for (let j = 0; j <= n; j++) {
+          next[j] = cur[j] || (seen && text[j - 1] === "/" ? 1 : 0);
+          seen |= cur[j];
+        }
+      } else {
+        let seen = 0;
+        for (let j = 0; j <= n; j++) next[j] = seen |= cur[j];
+      }
+    } else if (c === "*") {
+      let run = 0;
+      for (let j = 0; j <= n; j++) {
+        run |= cur[j];
+        next[j] = run;
+        if (text[j] === "/") run = 0;
+      }
+    } else for (let j = 0; j < n; j++) if (cur[j] && (c === "?" ? text[j] !== "/" : text[j] === c)) next[j + 1] = 1;
+    cur = next;
   }
-  return new RegExp(`^${re}$`, "i").test(branch);
+  return cur[n] === 1;
 }
+
+// Case is ignored: on a case-insensitive disk RELEASE/1.0 is the same ref as release/1.0, so a rule must cover both spellings.
+export const matches = (pattern: string, branch: string): boolean => globMatch(pattern, branch, { ignoreCase: true });
 
 // Every matching rule applies; the strictest setting wins.
 export function effectiveRule(rules: BranchRule[], branch: string): Omit<BranchRule, "pattern"> | null {

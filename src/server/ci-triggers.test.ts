@@ -97,3 +97,11 @@ test("workflow_dispatch inputs are checked and filled in", () => {
   expect(() => parseOn({ workflow_dispatch: { inputs: { a: { type: "choice", options: ["x"], default: "y" } } } })).toThrow("its default must be one of x");
   expect(() => parseOn({ workflow_dispatch: { inputs: { "a-b": {}, a_b: {} } } })).toThrow("both become CI_INPUT_A_B");
 });
+
+test("path globs match in linear time, even for patterns built to backtrack", () => {
+  const evil = parseOn({ push: { paths: ["**a".repeat(60) + "**b", "**/".repeat(60) + "z"] } });
+  const started = performance.now();
+  expect(starts(evil, push("main", ["a".repeat(4000), "/".repeat(2000) + "y", `${"x/".repeat(1500)}y`]))).toBe(false);
+  expect(performance.now() - started).toBeLessThan(2000);
+  expect(starts(evil, push("main", [`${"a".repeat(70)}b`]))).toBe(true);
+});
