@@ -519,7 +519,8 @@ export class DispatchError extends Error {}
 export async function dispatch(repoId: number, repoPath: string, path: string, branch: string, given: Record<string, unknown>, actorId: string): Promise<number> {
   if (!ciOn(repoId)) throw new DispatchError("CI is turned off for this repository");
   if (!isWorkflowPath(path)) throw new DispatchError("No such workflow");
-  const sha = await git.resolveCommit(repoPath, `refs/heads/${branch}`);
+  // A real branch, not a revision such as main~3 that rev-parse would also take.
+  const sha = (await git.listRefs(repoPath)).find((r) => r.kind === "branch" && r.name === branch)?.sha;
   if (!sha) throw new DispatchError(`No branch named ${branch}`);
   const file = await git.readBlob(repoPath, sha, path).catch(() => null);
   if (!file?.content) throw new DispatchError(`${branch} has no ${path}`);

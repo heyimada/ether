@@ -170,6 +170,8 @@ test("workflows in .ether/workflows run on the events their on: names", async ({
     expect(await (await dispatch({ workflow: ".ether/workflows/manual.yml", ref: "main", inputs: { note: "x", target: "prod" } })).text()).toContain("one of staging, production");
     expect(await (await dispatch({ workflow: ".ether/workflows/test.yml", ref: "main" })).text()).toContain("doesn't include workflow_dispatch");
     expect((await dispatch({ workflow: "../../etc/passwd", ref: "main" })).status()).toBe(400);
+    // Only a branch name, not a revision of one.
+    expect(await (await dispatch({ workflow: ".ether/workflows/manual.yml", ref: "main~1", inputs: { note: "x" } })).text()).toContain("No branch named main~1");
     const reader = await createUser(admin);
     await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: headers() });
     expect((await reader.ctx.post(`${api}/ci/workflows/dispatch`, { data: { workflow: ".ether/workflows/manual.yml", ref: "main", inputs: { note: "x" } }, headers: headers() })).status()).toBe(403);

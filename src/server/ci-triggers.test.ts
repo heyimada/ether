@@ -12,6 +12,11 @@ test("on: takes a name, a list or a map", () => {
   expect(() => parseOn({ push: { branches: ["a"], "branches-ignore": ["b"] } })).toThrow("either branches or branches-ignore");
   expect(() => parseOn({ pull_request: { types: ["closed"] } })).toThrow('"closed" isn\'t supported');
   expect(() => parseOn([])).toThrow("at least one event");
+  // Branch and tag patterns use the protected-branch glob syntax; nothing reaches a regular expression unchecked.
+  expect(() => parseOn({ push: { branches: ["feat["] } })).toThrow('on.push: branches: "feat["');
+  expect(() => parseOn({ push: { tags: ["(wip"] } })).toThrow('on.push: tags: "(wip"');
+  expect(() => parseOn({ pull_request: { "branches-ignore": ["release+1"] } })).toThrow("branches-ignore");
+  expect(() => parseOn({ push: { branches: ["releases/**", "!releases/**-alpha"], paths: ["src/[a]+.ts"] } })).not.toThrow();
 });
 
 test("a bare push runs for every branch and tag", () => {

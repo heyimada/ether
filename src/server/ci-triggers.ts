@@ -1,5 +1,5 @@
 // A workflow's `on:` and whether an event starts it, as on GitHub. Pure, so it can be tested without a database.
-import { matches } from "./branch-rules";
+import { matches, patternProblem } from "./branch-rules";
 
 export const EVENTS = ["push", "pull_request", "workflow_dispatch"] as const;
 export type EventName = (typeof EVENTS)[number];
@@ -36,14 +36,21 @@ const list = (raw: unknown, what: string): string[] => {
   return items.map((p: string) => p.trim());
 };
 
-// `x` and `x-ignore` can't both be given, as on GitHub.
-function filter(spec: Record<string, unknown>, key: string, where: string): Filter | null {
+// `x` and `x-ignore` can't both be given, as on GitHub. Branch and tag patterns are matched like protected
+// branches, so they're held to the same glob syntax; anything else would end up in a regular expression.
+function filter(spec: Record<string, unknown>, key: "branches" | "tags" | "paths", where: string): Filter | null {
   const plain = spec[key];
   const ignored = spec[`${key}-ignore`];
   if (plain !== undefined && ignored !== undefined) throw new Error(`${where}: use either ${key} or ${key}-ignore, not both`);
-  if (plain !== undefined) return { ignore: false, patterns: list(plain, `${where}: ${key}`) };
-  if (ignored !== undefined) return { ignore: true, patterns: list(ignored, `${where}: ${key}-ignore`) };
-  return null;
+  if (plain === undefined && ignored === undefined) return null;
+  const name = plain !== undefined ? key : `${key}-ignore`;
+  const patterns = list(plain ?? ignored, `${where}: ${name}`);
+  if (key !== "paths")
+    for (const p of patterns) {
+      const problem = patternProblem(plain !== undefined && p.startsWith("!") ? p.slice(1) : p);
+      if (problem) throw new Error(`${where}: ${name}: "${p}": ${problem}`);
+    }
+  return { ignore: plain === undefined, patterns };
 }
 
 function eventSpec(raw: unknown, event: string): Record<string, unknown> {
