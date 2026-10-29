@@ -34,14 +34,23 @@ export function RefPicker({ info, current, kind }: { info: RepoInfo; current: st
     navigate(kind === "tree" ? { to: "/$owner/$repo/tree/$", params } : { to: "/$owner/$repo/commits/$", params });
   };
 
+  // The name the last create was for: its error only shows while that name is still in the field.
+  const [tried, setTried] = useState<string | null>(null);
   const create = useAction(async (name: string) => {
+    setTried(name);
     await post(`${repoApi(info.repo.owner, info.repo.name)}/branches`, { name, from: current });
     await router.invalidate();
     pick(name);
   });
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setTried(null);
+      }}
+    >
       <Popover.Trigger className="max-w-full" aria-label={`Switch branch or tag, current ${current}`}>
         {isTag ? <Tag size={16} aria-hidden /> : <GitBranch size={16} aria-hidden />}
         <span className="max-w-[220px] truncate font-mono">{current}</span>
@@ -89,7 +98,7 @@ export function RefPicker({ info, current, kind }: { info: RepoInfo; current: st
                 </Command.Empty>
               )}
             </Command.List>
-            {create.error && (
+            {create.error && canCreate && tried === wanted && (
               <div className="border-t border-border p-3">
                 <ErrorNote error={create.error} />
               </div>

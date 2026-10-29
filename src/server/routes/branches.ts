@@ -4,7 +4,7 @@ import { refusal } from "../branch-rules";
 import { onPush } from "../ci";
 import { recordPushEvents } from "../events";
 import * as git from "../git";
-import { branchRules } from "../protection";
+import { branchRules, freshRepo } from "../protection";
 
 // Git's own rules for branch names, plus what `git branch` refuses on top: a leading - and HEAD.
 export function validBranch(name: string) {
@@ -33,11 +33,12 @@ export const branchRoutes = new Elysia().post("/repos/:owner/:repo/branches", as
   if (!sha) throw new HttpError(400, `No branch, tag or commit named ${from}`);
   const before = await git.listRefs(a.path);
   if (before.some((r) => r.kind === "branch" && r.name === name)) throw new HttpError(409, `A branch named ${name} already exists`);
-  // The same rules a push that creates the branch would meet; the repository has branches already, so it isn't fresh.
+  // The same rules a push that creates the branch would meet. A repository with only tags can still be fresh.
+  const branches = before.filter((r) => r.kind === "branch").map((r) => r.name);
   const refused = await refusal(
     branchRules(a.repo.id),
     { ref: `refs/heads/${name}`, old: "0".repeat(40), new: sha },
-    { isAncestor: async () => true, branches: async () => before.filter((r) => r.kind === "branch").map((r) => r.name), freshRepo: false },
+    { isAncestor: async () => true, branches: async () => branches, freshRepo: freshRepo(a.repo.id, branches.length > 0) },
   );
   if (refused) throw new HttpError(409, refused);
   // An empty old value makes git refuse if the branch appeared in the meantime. It also refuses a name
@@ -47,6 +48,8 @@ export const branchRoutes = new Elysia().post("/repos/:owner/:repo/branches", as
   } catch {
     throw new HttpError(409, `${name} clashes with an existing branch`);
   }
+  // The first branch of a repository with only tags becomes its default, as after a push.
+  await git.fixHead(a.path).catch(() => {});
   // Creating a branch here is a push as far as the activity feed and CI are concerned. Only this branch is
   // news: anything someone pushed meanwhile is reported by their own push. The branch exists by now, so a
   // failure here mustn't turn into an error for it.

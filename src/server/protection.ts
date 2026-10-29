@@ -59,9 +59,12 @@ export type Guard = { args: string[]; env: Record<string, string> };
 export function receivePackGuard(repoId: number, hasBranches: boolean): Guard {
   const rules = branchRules(repoId);
   if (rules.length === 0) return { args: [], env: {} };
-  const pushedBefore = !!db.select({ id: event.id }).from(event).where(and(eq(event.repoId, repoId), eq(event.kind, "push"))).get();
   return {
     args: ["-c", `core.hooksPath=${hooksDir()}`],
-    env: { ETHER_BRANCH_RULES: JSON.stringify(rules), ETHER_FRESH_REPO: !hasBranches && !pushedBefore ? "1" : "0" },
+    env: { ETHER_BRANCH_RULES: JSON.stringify(rules), ETHER_FRESH_REPO: freshRepo(repoId, hasBranches) ? "1" : "0" },
   };
 }
+
+// Ether has never seen a branch in this repository, so nothing created now can be a deleted one coming back.
+export const freshRepo = (repoId: number, hasBranches: boolean) =>
+  !hasBranches && !db.select({ id: event.id }).from(event).where(and(eq(event.repoId, repoId), eq(event.kind, "push"))).get();

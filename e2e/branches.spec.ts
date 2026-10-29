@@ -51,6 +51,9 @@ test("a second branch can be created from the branch picker, and the API checks 
   await picker.getByRole("combobox").fill("feature/login/x");
   await picker.getByRole("option", { name: /Create branch feature\/login\/x/ }).click();
   await expect(picker.getByRole("alert")).toContainText("feature/login/x clashes with an existing branch");
+  // The error belongs to that name: typing another one, or closing the picker, clears it.
+  await picker.getByRole("combobox").fill("feature/other");
+  await expect(picker.getByRole("alert")).toHaveCount(0);
   const post = (data: object, ctx = owner.ctx) => ctx.post(`${api}/branches`, { data, headers: headers() });
   expect((await post({ name: "docs", from: "main" })).status()).toBe(409);
   for (const name of ["a..b", "-x", "HEAD", "x.lock", "a b"]) expect((await post({ name, from: "main" })).status(), name).toBe(400);
@@ -77,6 +80,13 @@ test("a second branch can be created from the branch picker, and the API checks 
   const refused = await post({ name: "release/1", from: "main" });
   expect(refused.status()).toBe(409);
   expect((await refused.json()).error).toContain("release/1 is protected");
+
+  // In a repository with only tags, the first branch becomes the default, as after a push.
+  const tagsOnly = await createRepo(owner.ctx, unique("tags-only"));
+  gitOk(src, ["push", "-q", cloneUrl(owner.username, tagsOnly), "v1"], auth);
+  const first = await owner.ctx.post(`/api/repos/${owner.username}/${tagsOnly}/branches`, { data: { name: "dev", from: "v1" }, headers: headers() });
+  expect(first.ok(), await first.text()).toBe(true);
+  expect((await (await owner.ctx.get(`/api/repos/${owner.username}/${tagsOnly}`)).json()).repo.defaultBranch).toBe("dev");
 
   // Creating a branch is news in the activity feed, like pushing one.
   const { events } = await (await owner.ctx.get("/api/feed")).json();
