@@ -106,6 +106,25 @@ async function finishedRun(ctx: APIRequestContext, api: string, sha: string) {
   throw new Error(`run for ${sha} didn't finish`);
 }
 
+async function waitingRun(ctx: APIRequestContext, api: string, sha: string) {
+  for (let i = 0; i < 300; i++) {
+    const { runs } = await (await ctx.get(`${api}/ci/runs`)).json();
+    const run = runs.find((r: { sha: string }) => r.sha === sha);
+    if (run?.status === "waiting") return (await (await ctx.get(`${api}/ci/runs/${run.id}`)).json()).jobs as (Job & { id: number })[];
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`run for ${sha} didn't wait`);
+}
+
+const REVIEWED = `name: Deploy
+on: push
+jobs:
+  deploy:
+    environment: production
+    steps:
+      - run: echo deployed
+`;
+
 const at = (s: string | null) => new Date(s!).getTime();
 
 test("jobs wait for their needs, run side by side, fan out over a matrix and follow if:", async ({ page }, info) => {
@@ -181,6 +200,23 @@ test("jobs wait for their needs, run side by side, fan out over a matrix and fol
     expect(at(newer.jobs.build.finishedAt)).toBeLessThan(at(first.jobs.build.finishedAt));
     expect([first.jobs.deploy.status, newer.jobs.deploy.status]).toEqual(["success", "success"]);
     expect(at(newer.jobs.deploy.startedAt)).toBeGreaterThanOrEqual(at(first.jobs.deploy.finishedAt));
+
+    // An older deploy waiting for a review doesn't hold back a newer one; once the newer one deploys, the older is superseded.
+    expect((await owner.ctx.put(`${api}/environments/production`, { data: { reviewers: [owner.username] }, headers: headers() })).ok()).toBe(true);
+    writeFileSync(join(src, ".ether", "workflows", "graph.yml"), REVIEWED);
+    gitOk(src, ["commit", "-qam", "reviewed"]);
+    gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
+    const stale = gitOk(src, ["rev-parse", "HEAD"]).trim();
+    await waitingRun(owner.ctx, api, stale);
+    gitOk(src, ["commit", "-q", "--allow-empty", "-m", "newer"]);
+    gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
+    const fresh = gitOk(src, ["rev-parse", "HEAD"]).trim();
+    const [waiting] = await waitingRun(owner.ctx, api, fresh);
+    expect((await owner.ctx.post(`${api}/ci/jobs/${waiting.id}/review`, { data: { approve: true }, headers: headers() })).ok()).toBe(true);
+    expect((await finishedRun(owner.ctx, api, fresh)).jobs.deploy.status).toBe("success");
+    const superseded = (await finishedRun(owner.ctx, api, stale)).jobs.deploy;
+    expect(superseded.status).toBe("skipped");
+    expect(superseded.log).toContain("a newer run of main deploys to production");
 
     // fail-fast (the default): one shard failing cancels the others instead of letting them run out.
     writeFileSync(join(src, ".ether", "workflows", "graph.yml"), FAST);

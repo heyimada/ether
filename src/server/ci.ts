@@ -134,22 +134,47 @@ function ancestorsOf(job: Job, all: Job[]) {
 }
 
 // One deployment per environment at a time, in push order: two runs deploying to production at once could
-// finish out of order and leave the older commit live. So a deploy job also waits while an older run still
-// has one for the environment ahead of it, queued behind its own needs or waiting for approval; otherwise a
-// newer run whose build finished first would deploy, and the older one after it.
-const deploying = (repoId: number, environment: string, runId: number) =>
+// finish out of order and leave the older commit live. So a deploy job also waits while an older run of the
+// same ref still has its deploy job for the environment queued behind that job's needs; otherwise a newer
+// run whose build finished first would deploy, and the older one after it. Older jobs that wait for a review
+// or a timer don't hold it back (nobody may ever approve them): it supersedes them once it starts.
+type RunRef = Pick<Run, "id" | "repoId" | "ref" | "refType">;
+const deploying = (run: RunRef, environment: string) =>
   !!db
     .select({ id: ciJob.id })
     .from(ciJob)
     .innerJoin(ciRun, eq(ciRun.id, ciJob.runId))
     .where(
       and(
-        eq(ciRun.repoId, repoId),
+        eq(ciRun.repoId, run.repoId),
         eq(ciJob.environment, environment),
-        or(eq(ciJob.status, "running"), and(lt(ciJob.runId, runId), inArray(ciJob.status, ["queued", "waiting"]), inArray(ciRun.status, ["queued", "running", "waiting"]))),
+        or(
+          eq(ciJob.status, "running"),
+          and(lt(ciJob.runId, run.id), eq(ciRun.ref, run.ref), eq(ciRun.refType, run.refType), eq(ciJob.status, "queued"), inArray(ciRun.status, ["queued", "running", "waiting"])),
+        ),
       ),
     )
     .get();
+
+// Older runs' deploy jobs of the same ref that wait for a review or a timer, once a newer one deploys: going
+// ahead later would put the older commit back.
+function supersede(run: RunRef, environment: string) {
+  const older = db
+    .select({ job: ciJob })
+    .from(ciJob)
+    .innerJoin(ciRun, eq(ciRun.id, ciJob.runId))
+    .where(and(eq(ciRun.repoId, run.repoId), eq(ciJob.environment, environment), eq(ciJob.status, "waiting"), lt(ciJob.runId, run.id), eq(ciRun.ref, run.ref), eq(ciRun.refType, run.refType)))
+    .all()
+    .map((r) => r.job);
+  for (const job of older) {
+    clearTimeout(timers.get(job.id));
+    timers.delete(job.id);
+    // Its deployment stays, cancelled, so the environment's history shows it was waiting and why it ended.
+    db.update(ciJob).set({ status: "skipped", log: `${job.log}Skipped: a newer run of ${run.ref} deploys to ${environment}.\n`, finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
+    setDeployment(job.id, { status: "cancelled", finishedAt: new Date() });
+    void refreshRun(job.runId);
+  }
+}
 
 // The oldest queued job whose needs have all finished and whose if: holds. Jobs whose if: doesn't hold are
 // skipped on the way, which can free others, so it looks again until it finds one or nothing changes.
@@ -180,8 +205,8 @@ function nextJob(): Job | null {
       }
       if (job.maxParallel && all.filter((j) => j.key === job.key && j.status === "running").length >= job.maxParallel) continue;
       if (job.environment) {
-        const repoId = db.select({ repoId: ciRun.repoId }).from(ciRun).where(eq(ciRun.id, job.runId)).get()?.repoId;
-        if (repoId === undefined || deploying(repoId, job.environment, job.runId)) continue;
+        const run = db.select({ id: ciRun.id, repoId: ciRun.repoId, ref: ciRun.ref, refType: ciRun.refType }).from(ciRun).where(eq(ciRun.id, job.runId)).get();
+        if (!run || deploying(run, job.environment)) continue;
       }
       return job;
     }
@@ -211,7 +236,10 @@ async function runJob(job: Job) {
   const a: Active = { runId: run.id, proc: null, container: null, stopped: false };
   active.set(job.id, a);
   db.update(ciRun).set({ status: "running", startedAt: run.startedAt ?? new Date() }).where(and(eq(ciRun.id, run.id), inArray(ciRun.status, ["queued", "waiting", "running"]))).run();
-  if (env) setDeployment(job.id, { status: "in_progress" });
+  if (env) {
+    setDeployment(job.id, { status: "in_progress" });
+    supersede(run, env.name);
+  }
   const path = git.repoPath(r.owner!, r.repo.name);
   const matrix = Object.entries(JSON.parse(job.matrix) as MatrixValues).map(([k, v]) => [matrixEnvName(k), v]);
   const vars = { ...ciVars(run, r.owner!, r.repo.name), CI_JOB: job.key || job.name, ...Object.fromEntries(matrix) };

@@ -205,14 +205,17 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     // Staging's wait timer from the editor above would hold every run below for 5 minutes.
     expect((await owner.ctx.put(`${api}/environments/staging`, { data: { waitMinutes: 0 }, headers: headers() })).ok()).toBe(true);
 
-    // Production runs what finished deploying last: an older run approved after a newer one wins.
+    // A newer run approved first deploys, and the older one waiting for approval is superseded rather than
+    // put the older commit back later.
     const v5 = await pushMain("v5");
     const v6 = await pushMain("v6");
     expect((await approve(v6.jobs.production.id)).ok()).toBe(true);
     await settled(owner.ctx, api, v6.sha, ["success"]);
-    expect((await approve(v5.jobs.production.id)).ok()).toBe(true);
-    await settled(owner.ctx, api, v5.sha, ["success"]);
-    expect(await activeSha()).toBe(v5.sha);
+    const old = await settled(owner.ctx, api, v5.sha, ["success"]);
+    expect(old.jobs.production.status).toBe("skipped");
+    expect(old.jobs.production.log).toContain("a newer run of main deploys to production");
+    expect((await approve(v5.jobs.production.id)).status()).toBe(409);
+    expect(await activeSha()).toBe(v6.sha);
 
     // Dropping the reviewers lets a deployment that waits for one go ahead.
     const v7 = await pushMain("v7");
