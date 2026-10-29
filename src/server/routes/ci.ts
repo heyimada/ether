@@ -103,7 +103,10 @@ export const ciRoutes = new Elysia()
       run: { ...run, subject: await subject(a.path, run.sha) },
       jobs: jobs.map((j) => ({
         id: j.id,
+        key: j.key,
         name: j.name,
+        needs: JSON.parse(j.needs) as string[],
+        condition: j.condition,
         status: j.status,
         log: j.log,
         steps: JSON.parse(j.steps),

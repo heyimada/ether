@@ -38,6 +38,7 @@ Development: run `bun run dev:server` and `bun run dev:web` together. The app is
 | `BETTER_AUTH_SECRET` | generated into `data/auth-secret` | Session signing secret; CI secrets are encrypted under a key derived from it |
 | `ETHER_CI_RUNTIME` | `docker`, else `podman` | Container CLI for CI jobs |
 | `ETHER_CI_IMAGE` | `oven/bun:1` | Image for CI jobs that don't name one |
+| `ETHER_CI_JOBS` | `2` | CI jobs that run at the same time, across all repositories |
 
 ## Example deployment: a Tailscale tailnet
 
@@ -71,14 +72,25 @@ on:
   pull_request:
     branches: [main]                 # the branch the pull request goes into
 jobs:
+  lint:
+    steps:
+      - run: bun run lint
   test:
     image: oven/bun:1.4.0            # optional; the server's default image otherwise
+    strategy:
+      matrix:
+        shard: [1, 2, 3]             # one job per value: "test (1)", "test (2)", "test (3)"
     steps:
       - name: Install
         run: bun install
       - name: Test
-        run: bun test
+        run: bun test --shard "$CI_MATRIX_SHARD/3"
         timeout-minutes: 15          # default 10, at most 60
+  report:
+    needs: [lint, test]              # starts once both have finished
+    if: failure()                    # success() (the default), failure(), always() or cancelled()
+    steps:
+      - run: ./scripts/notify.sh
 ```
 
 ```yaml
@@ -110,9 +122,11 @@ jobs:
 - `paths` and `paths-ignore` look at the files the push changed (for a new branch, what it has beyond the default branch; for a pull request, what it would bring in). They don't apply to tags, or when more than 1000 files changed.
 - `workflow_dispatch` lets anyone with write access start the workflow on a branch from the **CI** tab, or with `POST /api/repos/:owner/:repo/ci/workflows/dispatch` and `{"workflow": ".ether/workflows/deploy.yml", "ref": "main", "inputs": {…}}`. Inputs are checked against their type, and the workflow is read from that branch.
 
-Other events (`schedule`, `pull_request_target`, …), `uses:` actions, `needs:`, `if:`, `matrix` and expressions other than `${{ secrets.NAME }}` aren't supported (yet); a workflow that uses an unknown event is refused with a message saying so. A workflow file that doesn't parse shows up as a failed run on the next push. The older single `.ether/ci.yml` still works: it may leave out `on:` and then runs on every push to a branch, like before.
+**Jobs** run side by side, up to `ETHER_CI_JOBS` at a time across the server, each from its own fresh checkout. A job with `needs:` starts once the jobs it names have finished, and by default only if they all succeeded; otherwise it is skipped, and so is whatever needs it. `if:` changes that with one of `success()`, `failure()` (a job before it failed, however far up the chain), `always()` or `cancelled()`, optionally negated with `!` or written as `${{ … }}`. Cancelling a run stops everything, `always()` jobs included. An environment takes one deploy job at a time, in push order: a deploy job also waits while an older run of the same branch or tag still has one for that environment queued behind its needs. An older one that waits for a review or a timer doesn't hold it back; it is skipped once the newer one deploys, so an older commit can't land after a newer one. `strategy.matrix` runs a job once per combination of its lists, with `include` and `exclude` as on GitHub (at most 256 combinations, 100 jobs per run); each gets its values as `CI_MATRIX_<KEY>`. With `fail-fast` (the default) the first combination that fails cancels the others; `max-parallel` limits how many run at once.
 
-Each run is one workflow for one commit; jobs run one at a time from a fresh checkout. Steps get `CI`, `CI_REPOSITORY`, `CI_COMMIT_SHA`, `CI_REF` (the branch or tag), `CI_REF_TYPE` (`branch` or `tag`), `CI_EVENT`, `CI_WORKFLOW`, for pull requests `CI_PULL_REQUEST` and `CI_BASE_REF`, a manual run's inputs as `CI_INPUT_<NAME>` (upper case, `-` becomes `_`), and the `env` they ask for, never Ether's own settings. Runs and logs are under the repository's **CI** tab, by workflow. Pull requests show the newest run of each workflow for their head commit as checks (their own `pull_request` runs, not another pull request's from the same branch; manual runs don't count), and **Require passing checks before merging** blocks merges until they all pass.
+Other events (`schedule`, `pull_request_target`, …), `uses:` actions, other `if:` conditions and expressions other than `${{ secrets.NAME }}` aren't supported (yet); a workflow that uses an unknown event is refused with a message saying so. A workflow file that doesn't parse shows up as a failed run on the next push. The older single `.ether/ci.yml` still works: it may leave out `on:` and then runs on every push to a branch, like before.
+
+Each run is one workflow for one commit. Steps get `CI`, `CI_REPOSITORY`, `CI_COMMIT_SHA`, `CI_REF` (the branch or tag), `CI_REF_TYPE` (`branch` or `tag`), `CI_EVENT`, `CI_WORKFLOW`, for pull requests `CI_PULL_REQUEST` and `CI_BASE_REF`, a manual run's inputs as `CI_INPUT_<NAME>` (upper case, `-` becomes `_`), `CI_JOB` (the job's id in the workflow), and the `env` they ask for, never Ether's own settings. Runs and logs are under the repository's **CI** tab, by workflow. Pull requests show the newest run of each workflow for their head commit as checks (their own `pull_request` runs, not another pull request's from the same branch; manual runs don't count), and **Require passing checks before merging** blocks merges until they all pass.
 
 **Where jobs run.** By default each job gets its own container, from Docker or Podman on the Ether machine (whichever is installed, or `ETHER_CI_RUNTIME`). The checkout is copied in, not mounted, so a job can't see Ether's data folder or anything else on the host. The container runs with `no-new-privileges`, without raw sockets, and capped at `ETHER_CI_MEMORY` (default `4g`), `ETHER_CI_CPUS` (`2`) and `ETHER_CI_PIDS` (`1024`) processes, and it is removed when the job ends. Jobs still have network access, for example to install packages. The default image is `ETHER_CI_IMAGE`, or `oven/bun:1`. Without a container runtime, jobs fail with a message saying so.
 

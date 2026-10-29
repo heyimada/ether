@@ -53,7 +53,8 @@ test("the dashboard feed shows what happened in repositories you can read, and n
 
   await uiLogin(page, bob.username, bob.password);
   const feed = page.getByRole("region", { name: "Feed" });
-  const item = (text: string | RegExp) => feed.getByRole("listitem").filter({ hasText: text }).first();
+  // Other specs run at the same time, and public repositories reach bob's feed too; only look at this one.
+  const item = (text: string | RegExp) => feed.getByRole("listitem").filter({ hasText: `${ada.username}/${shared}` }).filter({ hasText: text }).first();
   await expect(item(/pushed 4 commits to main/)).toContainText(`${ada.username}/${shared}`);
   await expect(item(/pushed 4 commits to main/)).toContainText("Tidy the printer");
   await expect(item(/opened issue/).filter({ hasText: "Printer jams on long numbers" })).toContainText(bob.username);
@@ -67,7 +68,7 @@ test("the dashboard feed shows what happened in repositories you can read, and n
   await expect(item(/created repository/).filter({ hasText: shared })).toBeVisible();
   // Grouped by day, newest first: the wiki page was the last thing that happened.
   await expect(feed.getByRole("heading", { name: "Today" })).toBeVisible();
-  await expect(feed.getByRole("listitem").first()).toContainText("Setup guide");
+  await expect(feed.getByRole("listitem").filter({ hasText: `${ada.username}/${shared}` }).first()).toContainText("Setup guide");
   for (const leak of [secret, classified, hiddenIssue]) await expect(page.getByRole("main")).not.toContainText(leak);
   const bobs = await feedJson(bob.ctx);
   for (const leak of [secret, classified, hiddenIssue]) expect(bobs).not.toContain(leak);
