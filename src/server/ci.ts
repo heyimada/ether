@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, or } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -133,14 +133,22 @@ function ancestorsOf(job: Job, all: Job[]) {
   return [...seen.values()];
 }
 
-// One deployment per environment at a time: two runs deploying to production at once could finish out of
-// order and leave the older commit live. The oldest waiting job goes first, since jobs are taken in id order.
-const deploying = (repoId: number, environment: string) =>
+// One deployment per environment at a time, in push order: two runs deploying to production at once could
+// finish out of order and leave the older commit live. So a deploy job also waits while an older run still
+// has one for the environment ahead of it, queued behind its own needs or waiting for approval; otherwise a
+// newer run whose build finished first would deploy, and the older one after it.
+const deploying = (repoId: number, environment: string, runId: number) =>
   !!db
     .select({ id: ciJob.id })
     .from(ciJob)
     .innerJoin(ciRun, eq(ciRun.id, ciJob.runId))
-    .where(and(eq(ciRun.repoId, repoId), eq(ciJob.environment, environment), eq(ciJob.status, "running")))
+    .where(
+      and(
+        eq(ciRun.repoId, repoId),
+        eq(ciJob.environment, environment),
+        or(eq(ciJob.status, "running"), and(lt(ciJob.runId, runId), inArray(ciJob.status, ["queued", "waiting"]), inArray(ciRun.status, ["queued", "running", "waiting"]))),
+      ),
+    )
     .get();
 
 // The oldest queued job whose needs have all finished and whose if: holds. Jobs whose if: doesn't hold are
@@ -173,7 +181,7 @@ function nextJob(): Job | null {
       if (job.maxParallel && all.filter((j) => j.key === job.key && j.status === "running").length >= job.maxParallel) continue;
       if (job.environment) {
         const repoId = db.select({ repoId: ciRun.repoId }).from(ciRun).where(eq(ciRun.id, job.runId)).get()?.repoId;
-        if (repoId === undefined || deploying(repoId, job.environment)) continue;
+        if (repoId === undefined || deploying(repoId, job.environment, job.runId)) continue;
       }
       return job;
     }

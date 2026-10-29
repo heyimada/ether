@@ -64,6 +64,21 @@ jobs:
         run: sleep 2 && echo "deployed $CI_MATRIX_PART"
 `;
 
+// Each run builds and then deploys; the older run's build is the slow one.
+const ordered = (seconds: number) => `name: Deploy
+on: push
+jobs:
+  build:
+    steps:
+      - shell: bash
+        run: sleep ${seconds}
+  deploy:
+    needs: build
+    environment: staging
+    steps:
+      - run: echo deployed
+`;
+
 const FAST = `name: Fast
 on: push
 jobs:
@@ -152,6 +167,20 @@ test("jobs wait for their needs, run side by side, fan out over a matrix and fol
     const [a, b] = [deploy.jobs["deploy (a)"], deploy.jobs["deploy (b)"]];
     expect([a.status, b.status]).toEqual(["success", "success"]);
     expect(at(b.startedAt)).toBeGreaterThanOrEqual(at(a.finishedAt));
+
+    // Deploys go in push order across runs: the newer run's build finishes first, but it deploys after the older run.
+    writeFileSync(join(src, ".ether", "workflows", "graph.yml"), ordered(4));
+    gitOk(src, ["commit", "-qam", "slow build"]);
+    gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
+    const older = gitOk(src, ["rev-parse", "HEAD"]).trim();
+    writeFileSync(join(src, ".ether", "workflows", "graph.yml"), ordered(0));
+    gitOk(src, ["commit", "-qam", "quick build"]);
+    gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
+    const newer = await finishedRun(owner.ctx, api, gitOk(src, ["rev-parse", "HEAD"]).trim());
+    const first = await finishedRun(owner.ctx, api, older);
+    expect(at(newer.jobs.build.finishedAt)).toBeLessThan(at(first.jobs.build.finishedAt));
+    expect([first.jobs.deploy.status, newer.jobs.deploy.status]).toEqual(["success", "success"]);
+    expect(at(newer.jobs.deploy.startedAt)).toBeGreaterThanOrEqual(at(first.jobs.deploy.finishedAt));
 
     // fail-fast (the default): one shard failing cancels the others instead of letting them run out.
     writeFileSync(join(src, ".ether", "workflows", "graph.yml"), FAST);
