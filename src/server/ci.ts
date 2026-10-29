@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -463,6 +463,7 @@ async function startWorkflows(repoId: number, repoPath: string, sha: string, tri
 }
 
 const MAX_CHANGED = 1000;
+const MAX_TAGS_PER_PUSH = 3;
 
 // The files a push or pull request changes, for path filters; null when there are too many or git can't tell, which lets every filter through.
 async function changedFiles(repoPath: string, range: string[]): Promise<string[] | null> {
@@ -482,10 +483,14 @@ async function newBranchChanges(repoPath: string, branch: string, sha: string) {
 // After a push, or a merge (which moves the base branch): push workflows for each branch and tag that moved
 // to a new commit, and pull_request workflows for open pull requests whose head branch moved.
 export async function onPush(repoId: number, repoPath: string, before: git.Ref[], after: git.Ref[], actorId: string) {
-  for (const ref of after) {
+  const moved = after.filter((ref) => before.find((b) => b.kind === ref.kind && b.name === ref.name)?.sha !== ref.sha);
+  // As on GitHub, pushing more than three tags at once (git push --tags, a mirror) starts nothing for them,
+  // rather than queueing a run per tag in front of everyone else's.
+  const tagEvents = moved.filter((r) => r.kind === "tag").length <= MAX_TAGS_PER_PUSH;
+  for (const ref of moved) {
     const old = before.find((b) => b.kind === ref.kind && b.name === ref.name);
-    if (old?.sha === ref.sha) continue;
     if (ref.kind === "tag") {
+      if (!tagEvents) continue;
       // An annotated tag names a tag object; runs are for the commit it points at.
       const sha = await git.resolveCommit(repoPath, ref.sha);
       if (sha) await startWorkflows(repoId, repoPath, sha, { event: "push", refType: "tag", ref: ref.name, changed: null }, { ref: ref.name, refType: "tag", event: "push", pullNumber: null, inputs: {} }, actorId);
@@ -571,14 +576,15 @@ export function cancel(runId: number) {
   return true;
 }
 
-// A commit's checks, as pull requests and the dashboard show them: the newest run of each workflow and event.
+// A pull request's checks: the newest run of each workflow and event for its head commit. Of pull_request
+// runs only its own count; another pull request from the same branch may run other workflows, or none.
 // Manual runs aren't checks: someone started them for their own reasons, not to judge the change.
-export function commitChecks(repoId: number, sha: string) {
+export function commitChecks(repoId: number, sha: string, pullNumber: number) {
   const seen = new Set<string>();
   const runs = db
     .select()
     .from(ciRun)
-    .where(and(eq(ciRun.repoId, repoId), eq(ciRun.sha, sha), inArray(ciRun.event, ["push", "pull_request"])))
+    .where(and(eq(ciRun.repoId, repoId), eq(ciRun.sha, sha), or(eq(ciRun.event, "push"), and(eq(ciRun.event, "pull_request"), eq(ciRun.pullNumber, pullNumber)))))
     .orderBy(desc(ciRun.id))
     .all()
     .filter((r) => !seen.has(`${r.workflowPath}\0${r.event}`) && !!seen.add(`${r.workflowPath}\0${r.event}`))

@@ -148,7 +148,7 @@ function listIssues(a: RepoAccess, isPull: boolean, q: Record<string, string | u
 async function headChecks(a: RepoAccess, row: NonNullable<IssueRow>) {
   if (!row.issue.headRef) return null;
   const sha = await git.resolveCommit(a.path, `refs/heads/${row.issue.headRef}`);
-  return sha ? commitChecks(a.repo.id, sha) : null;
+  return sha ? commitChecks(a.repo.id, sha, row.issue.number) : null;
 }
 
 // Environments currently running the pull request's head commit.

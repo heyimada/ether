@@ -50,7 +50,7 @@ export const dashboardRoutes = new Elysia()
       mine.map(async (p) => {
         const r = byId.get(p.repoId)!;
         const head = p.headRef ? await git.resolveCommit(r.path, `refs/heads/${p.headRef}`) : null;
-        return { ...at(p.repoId), number: p.number, title: p.title, updatedAt: p.updatedAt, reviewDecision: reviewSummary(p.id).reviewDecision, checks: head ? (commitChecks(r.id, head)?.status ?? null) : null };
+        return { ...at(p.repoId), number: p.number, title: p.title, updatedAt: p.updatedAt, reviewDecision: reviewSummary(p.id).reviewDecision, checks: head ? (commitChecks(r.id, head, p.number)?.status ?? null) : null };
       }),
     );
 

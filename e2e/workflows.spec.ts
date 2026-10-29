@@ -117,6 +117,12 @@ test("workflows in .ether/workflows run on the events their on: names", async ({
     expect(await log(owner.ctx, api, release.id)).toContain("releasing tag v1.0");
     expect((await runsOf(owner.ctx, api)).filter((r) => r.sha === docs).map((r) => r.workflowName)).toEqual(["Release"]);
 
+    // More than three tags in one push start nothing, as on GitHub.
+    for (const t of ["v2.0", "v2.1", "v2.2", "v2.3"]) gitOk(src, ["tag", t]);
+    gitOk(src, ["push", "-q", remote, "--tags"], auth);
+    await new Promise((r) => setTimeout(r, 1000));
+    expect((await runsOf(owner.ctx, api)).filter((r) => r.workflowName === "Release").map((r) => r.ref)).toEqual(["v1.0"]);
+
     // A feature branch push runs nothing (Tests only takes main); opening a pull request runs PR checks.
     gitOk(src, ["checkout", "-q", "-b", "feature"]);
     writeFileSync(join(src, "app.txt"), "v2\n");
@@ -134,6 +140,13 @@ test("workflows in .ether/workflows run on the events their on: names", async ({
     gitOk(src, ["push", "-q", remote, "feature"], auth);
     const v3 = gitOk(src, ["rev-parse", "HEAD"]).trim();
     expect((await finished(owner.ctx, api, v3, 1)).map((r) => [r.workflowName, r.event])).toEqual([["PR checks", "pull_request"]]);
+
+    // Another pull request from the same branch, into develop, which PR checks doesn't take: it has no checks,
+    // rather than borrowing the first pull request's.
+    gitOk(src, ["push", "-q", remote, "main:develop"], auth);
+    const other = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "into develop", body: "", base: "develop", head: "feature" }, headers: headers() })).json();
+    expect((await (await owner.ctx.get(`${api}/pulls/${other.pull.number}`)).json()).checks).toBeNull();
+    expect((await (await owner.ctx.get(`${api}/pulls/${pull.number}`)).json()).checks.runs).toHaveLength(1);
 
     await uiLogin(page, owner.username, owner.password);
     await page.goto(`${baseURL()}/${owner.username}/${repo}/pull/${pull.number}`);
