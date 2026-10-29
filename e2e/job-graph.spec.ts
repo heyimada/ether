@@ -41,6 +41,20 @@ jobs:
       - run: echo cleaning up
 `;
 
+// Two deploy jobs for one environment, which would otherwise run at the same time.
+const DEPLOY = `name: Deploy
+on: push
+jobs:
+  deploy:
+    environment: staging
+    strategy:
+      matrix:
+        part: [a, b]
+    steps:
+      - shell: bash
+        run: sleep 2 && echo "deployed $CI_MATRIX_PART"
+`;
+
 const FAST = `name: Fast
 on: push
 jobs:
@@ -115,6 +129,15 @@ test("jobs wait for their needs, run side by side, fan out over a matrix and fol
     await expect(page.getByRole("region", { name: "Job cleanup" })).toContainText("if always()");
     await expect(page.getByRole("region", { name: "Job test (3)" })).toContainText("Failed");
     await info.attach("job-graph", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+
+    // An environment takes one deployment at a time.
+    writeFileSync(join(src, ".ether", "workflows", "graph.yml"), DEPLOY);
+    gitOk(src, ["commit", "-qam", "deploy"]);
+    gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
+    const deploy = await finishedRun(owner.ctx, api, gitOk(src, ["rev-parse", "HEAD"]).trim());
+    const [a, b] = [deploy.jobs["deploy (a)"], deploy.jobs["deploy (b)"]];
+    expect([a.status, b.status]).toEqual(["success", "success"]);
+    expect(at(b.startedAt)).toBeGreaterThanOrEqual(at(a.finishedAt));
 
     // fail-fast (the default): one shard failing cancels the others instead of letting them run out.
     writeFileSync(join(src, ".ether", "workflows", "graph.yml"), FAST);

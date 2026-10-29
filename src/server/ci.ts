@@ -117,10 +117,23 @@ function pump() {
 }
 
 const runJobs = (runId: number) => db.select().from(ciJob).where(eq(ciJob.runId, runId)).orderBy(asc(ciJob.id)).all();
+// The jobs a job waits for. Jobs queued before jobs had needs (key "") ran one after another, whatever
+// the one before did, so they keep waiting for every earlier job of their run.
 const needed = (job: Job, all: Job[]) => {
+  if (!job.key) return all.filter((j) => j.id < job.id);
   const needs = JSON.parse(job.needs) as string[];
   return all.filter((j) => needs.includes(j.key));
 };
+
+// One deployment per environment at a time: two runs deploying to production at once could finish out of
+// order and leave the older commit live. The oldest waiting job goes first, since jobs are taken in id order.
+const deploying = (repoId: number, environment: string) =>
+  !!db
+    .select({ id: ciJob.id })
+    .from(ciJob)
+    .innerJoin(ciRun, eq(ciRun.id, ciJob.runId))
+    .where(and(eq(ciRun.repoId, repoId), eq(ciJob.environment, environment), eq(ciJob.status, "running")))
+    .get();
 
 // The oldest queued job whose needs have all finished and whose if: holds. Jobs whose if: doesn't hold are
 // skipped on the way, which can free others, so it looks again until it finds one or nothing changes.
@@ -140,13 +153,17 @@ function nextJob(): Job | null {
       const all = byRun.get(job.runId) ?? byRun.set(job.runId, runJobs(job.runId)).get(job.runId)!;
       const deps = needed(job, all);
       if (deps.some((d) => !DONE.has(d.status))) continue;
-      if (!conditionHolds(job.condition, deps.map((d) => d.status as NeedStatus))) {
+      if (job.key && !conditionHolds(job.condition, deps.map((d) => d.status as NeedStatus))) {
         const failed = deps.filter((d) => d.status !== "success").map((d) => d.name);
         skipJob(job, job.condition ? `if: ${job.condition} is false` : `${failed.join(", ")} didn't succeed`);
         skipped = true;
         break;
       }
       if (job.maxParallel && all.filter((j) => j.key === job.key && j.status === "running").length >= job.maxParallel) continue;
+      if (job.environment) {
+        const repoId = db.select({ repoId: ciRun.repoId }).from(ciRun).where(eq(ciRun.id, job.runId)).get()?.repoId;
+        if (repoId === undefined || deploying(repoId, job.environment)) continue;
+      }
       return job;
     }
     if (!skipped) return null;
@@ -191,7 +208,12 @@ async function runJob(job: Job) {
   // fail-fast: one combination of a matrix failing stops the others.
   if (result !== "success" && !stopped && job.failFast && job.key) {
     for (const sib of runJobs(run.id).filter((j) => j.key === job.key && j.id !== job.id && j.matrix !== "{}")) {
-      if (sib.status === "queued") db.update(ciJob).set({ status: "cancelled", log: `${sib.log}Cancelled: ${job.name} failed (fail-fast).\n`, finishedAt: new Date() }).where(eq(ciJob.id, sib.id)).run();
+      if (sib.status === "queued" || sib.status === "waiting") {
+        clearTimeout(timers.get(sib.id));
+        timers.delete(sib.id);
+        db.update(ciJob).set({ status: "cancelled", log: `${sib.log}Cancelled: ${job.name} failed (fail-fast).\n`, finishedAt: new Date() }).where(eq(ciJob.id, sib.id)).run();
+        if (sib.environment) setDeployment(sib.id, { status: "cancelled", finishedAt: new Date() });
+      }
       const other = active.get(sib.id);
       if (other) stop(other);
     }
@@ -217,13 +239,13 @@ function stop(a: Active) {
   if (a.container) void removeContainer(a.container.runtime, a.container.name);
 }
 
-// Queued jobs that can't start before a waiting deploy job finishes, directly or through other jobs.
+// Ids of the queued jobs that can't start before a waiting deploy job finishes, directly or through other jobs.
 function blockedByWaiting(jobs: Job[]) {
-  const blocked = new Set(jobs.filter((j) => j.status === "waiting").map((j) => j.key));
+  const blocked = new Set(jobs.filter((j) => j.status === "waiting").map((j) => j.id));
   for (let grew = true; grew; ) {
     grew = false;
     for (const j of jobs)
-      if (j.status === "queued" && !blocked.has(j.key) && (JSON.parse(j.needs) as string[]).some((n) => blocked.has(n))) blocked.add(j.key), (grew = true);
+      if (j.status === "queued" && !blocked.has(j.id) && needed(j, jobs).some((d) => blocked.has(d.id))) blocked.add(j.id), (grew = true);
   }
   return blocked;
 }
@@ -244,7 +266,7 @@ async function refreshRun(runId: number) {
   const blocked = blockedByWaiting(jobs);
   const status: Run["status"] = jobs.some((j) => j.status === "running")
     ? "running"
-    : jobs.some((j) => j.status === "queued" && !blocked.has(j.key))
+    : jobs.some((j) => j.status === "queued" && !blocked.has(j.id))
       ? "queued"
       : jobs.some((j) => j.status === "waiting")
         ? "waiting"
