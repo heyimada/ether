@@ -30,6 +30,11 @@ test("without if a job runs only when all its needs succeeded", () => {
   expect(conditionHolds("always()", ["failure", "cancelled"])).toBe(true);
   expect(conditionHolds("!cancelled()", ["failure"])).toBe(true);
   expect(conditionHolds("!failure()", ["failure"])).toBe(false);
+  // Further up the chain: build failed, so deploy was skipped; notify's failure() still sees it, as on GitHub.
+  expect(conditionHolds("failure()", ["skipped"], ["skipped", "failure"])).toBe(true);
+  expect(conditionHolds("!failure()", ["skipped"], ["skipped", "failure"])).toBe(false);
+  expect(conditionHolds(null, ["success"], ["success", "failure"])).toBe(false);
+  expect(conditionHolds(null, ["success"], ["success", "skipped"])).toBe(true);
 });
 
 test("a matrix is the product of its lists, minus excludes, plus includes", () => {

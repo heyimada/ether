@@ -39,6 +39,11 @@ jobs:
     if: \${{ always() }}
     steps:
       - run: echo cleaning up
+  notify:
+    needs: ship
+    if: failure()
+    steps:
+      - run: echo notifying
 `;
 
 // Two deploy jobs for one environment, which would otherwise run at the same time.
@@ -121,6 +126,8 @@ test("jobs wait for their needs, run side by side, fan out over a matrix and fol
     expect(jobs.ship.status).toBe("skipped");
     expect(jobs.ship.log).toContain("test (3) didn't succeed");
     expect(jobs.cleanup.status).toBe("success");
+    // failure() looks up the whole chain: ship was only skipped, but test (3) before it failed.
+    expect(jobs.notify.status).toBe("success");
     expect(run.status).toBe("failure");
 
     await uiLogin(page, owner.username, owner.password);

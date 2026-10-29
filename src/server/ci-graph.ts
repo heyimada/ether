@@ -28,14 +28,16 @@ export function parseCondition(raw: unknown, where: string): string | null {
 
 export type NeedStatus = "success" | "failure" | "error" | "cancelled" | "skipped";
 
-// Whether a job whose needs have all finished should run. Without `if:` it runs only when every need succeeded,
-// so a failed or skipped need skips everything after it unless that asks for always() or failure().
-export function conditionHolds(condition: string | null, needs: NeedStatus[]): boolean {
+// Whether a job whose needs have all finished should run, from its direct needs and all the jobs before those.
+// As on GitHub, failure() is true when any of them failed, however far up the chain (so a notify job at the
+// end still hears about a failed build), and success() needs every direct need to have succeeded and nothing
+// before them to have failed. Without `if:` that's success(), so a failed or skipped need skips what follows.
+export function conditionHolds(condition: string | null, needs: NeedStatus[], ancestors: NeedStatus[] = needs): boolean {
   const c = condition ?? "success()";
   const negated = c.startsWith("!");
   const fn = negated ? c.slice(1) : c;
-  const value =
-    fn === "always()" ? true : fn === "failure()" ? needs.some((s) => s === "failure" || s === "error") : fn === "cancelled()" ? false : needs.every((s) => s === "success");
+  const failed = ancestors.some((s) => s === "failure" || s === "error");
+  const value = fn === "always()" ? true : fn === "failure()" ? failed : fn === "cancelled()" ? false : needs.every((s) => s === "success") && !failed;
   return negated ? !value : value;
 }
 

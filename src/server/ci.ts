@@ -125,6 +125,14 @@ const needed = (job: Job, all: Job[]) => {
   return all.filter((j) => needs.includes(j.key));
 };
 
+// Every job a job comes after: its needs, theirs, and so on.
+function ancestorsOf(job: Job, all: Job[]) {
+  const seen = new Map<number, Job>();
+  const visit = (j: Job) => needed(j, all).forEach((d) => !seen.has(d.id) && (seen.set(d.id, d), visit(d)));
+  visit(job);
+  return [...seen.values()];
+}
+
 // One deployment per environment at a time: two runs deploying to production at once could finish out of
 // order and leave the older commit live. The oldest waiting job goes first, since jobs are taken in id order.
 const deploying = (repoId: number, environment: string) =>
@@ -153,7 +161,7 @@ function nextJob(): Job | null {
       const all = byRun.get(job.runId) ?? byRun.set(job.runId, runJobs(job.runId)).get(job.runId)!;
       const deps = needed(job, all);
       if (deps.some((d) => !DONE.has(d.status))) continue;
-      if (job.key && !conditionHolds(job.condition, deps.map((d) => d.status as NeedStatus))) {
+      if (job.key && !conditionHolds(job.condition, deps.map((d) => d.status as NeedStatus), ancestorsOf(job, all).map((d) => d.status as NeedStatus))) {
         const failed = deps.filter((d) => d.status !== "success").map((d) => d.name);
         skipJob(job, job.condition ? `if: ${job.condition} is false` : `${failed.join(", ")} didn't succeed`);
         skipped = true;
@@ -237,6 +245,12 @@ function stop(a: Active) {
   if (a.proc) killTree(a.proc);
   // Killing the CLI doesn't stop what it started inside the container.
   if (a.container) void removeContainer(a.container.runtime, a.container.name);
+}
+
+// When Ether stops: host steps run in their own process group, so a signal to Ether no longer reaches them;
+// stop them rather than let a deploy script carry on after the server that tracks it is gone.
+export function stopAllJobs() {
+  for (const a of active.values()) stop(a);
 }
 
 // Ids of the queued jobs that can't start before a waiting deploy job finishes, directly or through other jobs.
