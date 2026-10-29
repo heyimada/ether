@@ -25,10 +25,10 @@ export function DeployKeys({ base, keys, sshBase }: { base: string; keys: Deploy
   return (
     <section className="card">
       <header>
-        <h2 style={{ margin: 0 }}>Deploy keys</h2>
+        <h2 className="m-0">Deploy keys</h2>
       </header>
       <div className="body stack-md">
-        <p className="muted" style={{ margin: 0 }}>
+        <p className="text-muted m-0">
           A deploy key gives a server or a CI system git over SSH access to this repository only, without an account.
           {!sshBase && " Git over SSH is turned off on this server, so deploy keys won't work until an admin turns it on."}
         </p>
@@ -37,17 +37,17 @@ export function DeployKeys({ base, keys, sshBase }: { base: string; keys: Deploy
           <ul className="list card" aria-label="Deploy keys">
             {keys.map((k) => (
               <li key={k.id}>
-                <KeyRound size={18} aria-hidden className="muted" />
-                <div style={{ minWidth: 0 }}>
+                <KeyRound size={18} aria-hidden className="text-muted" />
+                <div className="min-w-0">
                   <strong>{k.title}</strong> <span className="badge">{k.readOnly ? "read" : "read and write"}</span>
-                  <div className="mono muted" style={{ fontSize: 12, overflowWrap: "anywhere" }}>
+                  <div className="font-mono text-muted text-xs wrap-anywhere">
                     {k.fingerprint}
                   </div>
-                  <div className="muted" style={{ fontSize: 12 }}>
+                  <div className="text-muted text-xs">
                     Added {timeAgo(k.createdAt)} · {k.lastUsedAt ? `last used ${timeAgo(k.lastUsedAt)}` : "never used"}
                   </div>
                 </div>
-                <span className="spacer" />
+                <span className="flex-1" />
                 <button className="danger small" aria-label={`Remove ${k.title}`} onClick={() => remove.run(k.id)}>
                   Remove
                 </button>
@@ -61,7 +61,7 @@ export function DeployKeys({ base, keys, sshBase }: { base: string; keys: Deploy
             <input id="deploy-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} />
           </Field>
           <Field id="deploy-key" label="Deploy public key" hint="The contents of a .pub file. Use a key made for this repository, not your personal one.">
-            <textarea id="deploy-key" className="mono" value={key} onChange={(e) => setKey(e.target.value)} required style={{ minHeight: 80 }} placeholder="ssh-ed25519 AAAA… deploy@server" />
+            <textarea id="deploy-key" className="font-mono min-h-[80px]" value={key} onChange={(e) => setKey(e.target.value)} required placeholder="ssh-ed25519 AAAA… deploy@server" />
           </Field>
           <label className="radio">
             <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} />

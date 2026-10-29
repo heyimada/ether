@@ -26,10 +26,10 @@ export function SshKeys({ keys, sshBase, hostKey }: { keys: SshKey[]; sshBase: s
   return (
     <section className="card">
       <header>
-        <h2 style={{ margin: 0 }}>SSH keys</h2>
+        <h2 className="m-0">SSH keys</h2>
       </header>
       <div className="body stack-md">
-        <p className="muted" style={{ margin: 0 }}>
+        <p className="text-muted m-0">
           {sshBase ? (
             <>
               Use git over SSH with these keys, for example <code>git clone {sshBase}/owner/repo.git</code>.
@@ -39,9 +39,9 @@ export function SshKeys({ keys, sshBase, hostKey }: { keys: SshKey[]; sshBase: s
           )}
         </p>
         {hostKey && (
-          <p className="muted" style={{ margin: 0 }}>
+          <p className="text-muted m-0">
             On your first connection, check that ssh shows this server's host key fingerprint:{" "}
-            <code aria-label="Host key fingerprint" style={{ overflowWrap: "anywhere" }}>
+            <code className="wrap-anywhere" aria-label="Host key fingerprint">
               {hostKey.fingerprint}
             </code>
           </p>
@@ -51,17 +51,17 @@ export function SshKeys({ keys, sshBase, hostKey }: { keys: SshKey[]; sshBase: s
           <ul className="list card" aria-label="SSH keys">
             {keys.map((k) => (
               <li key={k.id}>
-                <KeyRound size={18} aria-hidden className="muted" />
-                <div style={{ minWidth: 0 }}>
+                <KeyRound size={18} aria-hidden className="text-muted" />
+                <div className="min-w-0">
                   <strong>{k.title}</strong>
-                  <div className="mono muted" style={{ fontSize: 12, overflowWrap: "anywhere" }}>
+                  <div className="font-mono text-muted text-xs wrap-anywhere">
                     {k.fingerprint}
                   </div>
-                  <div className="muted" style={{ fontSize: 12 }}>
+                  <div className="text-muted text-xs">
                     Added {timeAgo(k.createdAt)} · {k.lastUsedAt ? `last used ${timeAgo(k.lastUsedAt)}` : "never used"}
                   </div>
                 </div>
-                <span className="spacer" />
+                <span className="flex-1" />
                 <button className="danger small" aria-label={`Remove ${k.title}`} onClick={() => remove.run(k.id)}>
                   Remove
                 </button>
@@ -75,7 +75,7 @@ export function SshKeys({ keys, sshBase, hostKey }: { keys: SshKey[]; sshBase: s
             <input id="ssh-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} />
           </Field>
           <Field id="ssh-key" label="Public key" hint="The contents of a .pub file, such as ~/.ssh/id_ed25519.pub. Never paste a private key.">
-            <textarea id="ssh-key" className="mono" value={key} onChange={(e) => setKey(e.target.value)} required style={{ minHeight: 80 }} placeholder="ssh-ed25519 AAAA… you@laptop" />
+            <textarea id="ssh-key" className="font-mono min-h-[80px]" value={key} onChange={(e) => setKey(e.target.value)} required placeholder="ssh-ed25519 AAAA… you@laptop" />
           </Field>
           <div>
             <button disabled={add.pending}>Add SSH key</button>

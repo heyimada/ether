@@ -42,6 +42,19 @@ export const Route = createFileRoute("/_authed/")({
   component: Dashboard,
 });
 
+// Repositories on the left, the feed in the middle, your work on the right. Narrower screens
+// move your work above the feed, then stack everything with your work first.
+const GRID = "grid grid-cols-[260px_minmax(0,1fr)_300px] [grid-template-areas:'left_main_right'] items-start gap-x-8 gap-y-6 max-2xl:grid-cols-[240px_minmax(0,1fr)] max-2xl:[grid-template-areas:'left_right'_'left_main'] max-[820px]:grid-cols-[minmax(0,1fr)] max-[820px]:[grid-template-areas:'right'_'left'_'main']";
+const GRID_TWO = "grid grid-cols-[280px_minmax(0,1fr)] [grid-template-areas:'left_main'] items-start gap-x-8 gap-y-6 max-2xl:grid-cols-[240px_minmax(0,1fr)] max-2xl:[grid-template-areas:'left_right'_'left_main'] max-[820px]:grid-cols-[minmax(0,1fr)] max-[820px]:[grid-template-areas:'right'_'left'_'main']";
+const PANEL = "rounded-md border border-border bg-surface shadow-card";
+const PANEL_HEAD = "m-0 flex items-center gap-1 border-b border-border px-3.5 py-2.5 text-base";
+const PANEL_TITLE = "font-semibold text-fg wrap-anywhere";
+const PANEL_META = "text-xs text-muted wrap-anywhere";
+const PANEL_STATUS = "flex flex-wrap items-center gap-x-2 gap-y-1 text-xs wrap-anywhere";
+const REPO_ICON = "flex-none text-muted";
+const STAT = "flex flex-col-reverse gap-0.5 border-t border-border px-3.5 py-3 [&:nth-child(-n+2)]:border-t-0 [&:nth-child(even)]:border-l";
+const STAT_VALUE = "m-0 text-[22px] font-bold tracking-tighter tabular-nums";
+
 function Dashboard() {
   const { repos, orgs, feed, work } = Route.useLoaderData();
   const { me } = Route.useRouteContext();
@@ -49,8 +62,8 @@ function Dashboard() {
   const q = filter.trim().toLowerCase();
   const by = (relation: RepoRow["relation"]) => repos.filter((r) => r.relation === relation && (!q || `${r.owner}/${r.name}`.includes(q)));
   const feedSection = (
-    <section className="dash-main stack-sm" aria-labelledby="feed-title">
-      <h2 id="feed-title" className="section-title">
+    <section className="stack-sm [grid-area:main] min-w-0" aria-labelledby="feed-title">
+      <h2 id="feed-title" className="m-0 text-lg">
         Feed
       </h2>
       <Feed initial={feed} empty={me ? "Nothing has happened in repositories you can see yet. Push some code or open an issue to get things going." : "Nothing has happened in public repositories yet."} />
@@ -59,15 +72,17 @@ function Dashboard() {
   if (!me)
     return (
       <main className="page wide stack">
-        <div className="row page-head">
-          <h1 style={{ margin: 0 }}>Public repositories</h1>
-          <span className="spacer" />
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-4xl m-0">
+            Public repositories
+          </h1>
+          <span className="flex-1" />
           <Link to="/login" className="button primary small">
             Sign in
           </Link>
         </div>
-        <div className="dash-grid dash-grid-2">
-          <aside className="dash-left stack-md" aria-label="Repositories">
+        <div className={GRID_TWO}>
+          <aside className="[grid-area:left] min-w-0 stack-md" aria-label="Repositories">
             <RepoSection title="Public repositories" repos={by("public")} empty="Nothing public yet." />
           </aside>
           {feedSection}
@@ -76,18 +91,26 @@ function Dashboard() {
     );
   return (
     <main className="page wide stack">
-      <div className="row page-head">
-        <h1 style={{ margin: 0 }}>Welcome, {me.username}</h1>
-        <span className="spacer" />
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-4xl m-0">
+          Welcome, {me.username}
+        </h1>
+        <span className="flex-1" />
         <Link to="/organizations/new" className="button small">
           <Building2 size={16} aria-hidden /> New organization
         </Link>
       </div>
-      <div className="dash-grid">
-        <aside className="dash-left stack-md" aria-label="Repositories">
-          <label className="dash-filter">
-            <Search size={16} aria-hidden className="muted" />
-            <input aria-label="Find a repository" placeholder="Find a repository…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+      <div className={GRID}>
+        <aside className="[grid-area:left] min-w-0 stack-md" aria-label="Repositories">
+          <label className="m-0 flex items-center gap-2 rounded-sm border border-control-border bg-surface px-2.5 font-normal [transition:border-color_150ms_ease,box-shadow_220ms_ease] focus-within:border-focus focus-within:shadow-[0_0_0_5px_color-mix(in_srgb,var(--focus)_16%,transparent)]">
+            <Search size={16} aria-hidden className="text-muted" />
+            <input
+              className="min-w-0 border-0 bg-transparent px-0 py-1.5 focus-visible:shadow-none focus-visible:outline-none"
+              aria-label="Find a repository"
+              placeholder="Find a repository…"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
           </label>
           <RepoSection
             title="Your repositories"
@@ -141,35 +164,40 @@ function RepoSection({
   const [all, setAll] = useState(false);
   const shown = all ? repos : repos.slice(0, TOP);
   return (
-    <section className="dash-repos" aria-labelledby={id}>
-      <header className="dash-repos-head">
+    <section className="flex flex-col gap-1.5" aria-labelledby={id}>
+      <header className="flex min-h-7 items-center gap-2">
         {icon}
-        <h2 id={id} className="dash-repos-title">
+        <h2 id={id} className="m-0 text-base font-bold wrap-anywhere">
           {titleLink ? (
-            <Link to="/$owner" params={{ owner: titleLink }} className="heading-link">
+            <Link to="/$owner" params={{ owner: titleLink }} className="text-fg">
               {title}
             </Link>
           ) : (
             title
           )}
         </h2>
-        <span className="spacer" />
+        <span className="flex-1" />
         {action}
       </header>
       {repos.length === 0 ? (
-        <p className="dash-empty">{empty}</p>
+        <p className="m-0 text-sm text-muted">{empty}</p>
       ) : (
-        <motion.ul className="dash-repo-list" {...staggered}>
+        <motion.ul className="m-0 flex list-none flex-col p-0" {...staggered}>
           {shown.map((r, i) => (
-            <motion.li key={`${r.owner}/${r.name}`} variants={rise} custom={i}>
-              <Link to="/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="dash-repo" title={r.description || undefined}>
-                {r.visibility === "public" ? <Globe size={14} aria-hidden className="muted" /> : <BookLock size={14} aria-hidden className="muted" />}
-                <span className="dash-repo-name">
-                  {r.owner}/<strong>{r.name}</strong>
+            <motion.li key={`${r.owner}/${r.name}`} variants={rise} custom={i} className="flex min-w-0 items-center gap-2">
+              <Link
+                to="/$owner/$repo"
+                params={{ owner: r.owner, repo: r.name }}
+                className="-mx-1.5 flex min-w-0 flex-1 items-center gap-2 rounded-sm px-1.5 py-1 text-base text-fg transition-[background-color] hover:bg-surface-3 hover:no-underline"
+                title={r.description || undefined}
+              >
+                {r.visibility === "public" ? <Globe size={14} aria-hidden className={REPO_ICON} /> : <BookLock size={14} aria-hidden className={REPO_ICON} />}
+                <span className="min-w-0 truncate">
+                  {r.owner}/<strong className="font-semibold">{r.name}</strong>
                 </span>
               </Link>
               {r.stars > 0 && (
-                <span className="dash-repo-stars muted num" title={`${r.stars} stars`}>
+                <span className="inline-flex flex-none items-center gap-[3px] text-xs text-muted tabular-nums" title={`${r.stars} stars`}>
                   <Star size={12} aria-hidden /> {r.stars}
                 </span>
               )}
@@ -178,7 +206,11 @@ function RepoSection({
         </motion.ul>
       )}
       {repos.length > TOP && (
-        <button type="button" className="ghost dash-more" onClick={() => setAll(!all)}>
+        <button
+          type="button"
+          className="ghost self-start min-h-0 text-sm text-link hover:not-disabled:bg-transparent hover:not-disabled:underline hover:not-disabled:underline-offset-[3px]"
+          onClick={() => setAll(!all)}
+        >
           {all ? "Show fewer" : `Show ${repos.length - TOP} more`}
         </button>
       )}
@@ -190,12 +222,12 @@ function RepoSection({
 function YourWork({ work }: { work: Work }) {
   const c = work.counts;
   return (
-    <aside className="dash-right stack-md" aria-label="Your work">
+    <aside className="[grid-area:right] min-w-0 stack-md" aria-label="Your work">
       <Panel title="Waiting for your review" items={work.reviews}>
         {(p) => (
           <>
             <IssueTitle r={p} isPull />
-            <span className="muted panel-meta">
+            <span className={PANEL_META}>
               {p.owner}/{p.repo}#{p.number} · by {p.author}
             </span>
           </>
@@ -205,7 +237,7 @@ function YourWork({ work }: { work: Work }) {
         {(i) => (
           <>
             <IssueTitle r={i} isPull={i.isPull} />
-            <span className="muted panel-meta">
+            <span className={PANEL_META}>
               {i.owner}/{i.repo}#{i.number} · updated {timeAgo(i.updatedAt)}
             </span>
           </>
@@ -215,8 +247,8 @@ function YourWork({ work }: { work: Work }) {
         {(p) => (
           <>
             <IssueTitle r={p} isPull />
-            <span className="panel-meta panel-status">
-              <span className="muted">
+            <span className={PANEL_STATUS}>
+              <span className="text-muted">
                 {p.owner}/{p.repo}#{p.number}
               </span>
               <ReviewChip decision={p.reviewDecision} />
@@ -228,33 +260,33 @@ function YourWork({ work }: { work: Work }) {
       <Panel title="Recently starred" items={work.starred}>
         {(s) => (
           <>
-            <Link to="/$owner/$repo" params={{ owner: s.owner, repo: s.repo }} className="panel-title">
+            <Link to="/$owner/$repo" params={{ owner: s.owner, repo: s.repo }} className={PANEL_TITLE}>
               {s.owner}/{s.repo}
             </Link>
-            {s.description && <span className="muted panel-meta">{s.description}</span>}
+            {s.description && <span className={PANEL_META}>{s.description}</span>}
           </>
         )}
       </Panel>
-      <section className="panel" aria-labelledby="server-title">
-        <h2 id="server-title" className="panel-head">
+      <section className={PANEL} aria-labelledby="server-title">
+        <h2 id="server-title" className={PANEL_HEAD}>
           On this server
         </h2>
-        <dl className="server-stats">
-          <div>
-            <dt>Repositories you can see</dt>
-            <dd className="num">{c.repos}</dd>
+        <dl className="m-0 grid grid-cols-2">
+          <div className={STAT}>
+            <dt className="text-xs text-muted">Repositories you can see</dt>
+            <dd className={STAT_VALUE}>{c.repos}</dd>
           </div>
-          <div>
-            <dt>Public repositories</dt>
-            <dd className="num">{c.publicRepos}</dd>
+          <div className={STAT}>
+            <dt className="text-xs text-muted">Public repositories</dt>
+            <dd className={STAT_VALUE}>{c.publicRepos}</dd>
           </div>
-          <div>
-            <dt>People</dt>
-            <dd className="num">{c.people}</dd>
+          <div className={STAT}>
+            <dt className="text-xs text-muted">People</dt>
+            <dd className={STAT_VALUE}>{c.people}</dd>
           </div>
-          <div>
-            <dt>Your organizations</dt>
-            <dd className="num">{c.orgs}</dd>
+          <div className={STAT}>
+            <dt className="text-xs text-muted">Your organizations</dt>
+            <dd className={STAT_VALUE}>{c.orgs}</dd>
           </div>
         </dl>
       </section>
@@ -266,13 +298,13 @@ function Panel<T>({ title, items, children }: { title: string; items: T[]; child
   const id = useId();
   if (items.length === 0) return null;
   return (
-    <section className="panel" aria-labelledby={id}>
-      <h2 id={id} className="panel-head">
+    <section className={PANEL} aria-labelledby={id}>
+      <h2 id={id} className={PANEL_HEAD}>
         {title} <span className="count">{items.length}</span>
       </h2>
-      <motion.ul className="panel-list" {...staggered}>
+      <motion.ul className="m-0 list-none px-0 py-1" {...staggered}>
         {items.map((item, i) => (
-          <motion.li key={i} variants={rise} custom={i}>
+          <motion.li key={i} variants={rise} custom={i} className={`flex min-w-0 flex-col gap-0.5 px-3.5 py-2${i > 0 ? " border-t border-border" : ""}`}>
             {children(item)}
           </motion.li>
         ))}
@@ -284,18 +316,19 @@ function Panel<T>({ title, items, children }: { title: string; items: T[]; child
 function IssueTitle({ r, isPull }: { r: Ref; isPull: boolean }) {
   const params = { owner: r.owner, repo: r.repo, number: String(r.number) };
   return isPull ? (
-    <Link to="/$owner/$repo/pull/$number" params={params} className="panel-title">
+    <Link to="/$owner/$repo/pull/$number" params={params} className={PANEL_TITLE}>
       {r.title}
     </Link>
   ) : (
-    <Link to="/$owner/$repo/issues/$number" params={params} className="panel-title">
+    <Link to="/$owner/$repo/issues/$number" params={params} className={PANEL_TITLE}>
       {r.title}
     </Link>
   );
 }
 
 function ReviewChip({ decision }: { decision: "approved" | "changes_requested" | null }) {
-  if (decision === "approved") return <span className="review-state review-approved">Approved</span>;
-  if (decision === "changes_requested") return <span className="review-state review-changes_requested">Changes requested</span>;
-  return <span className="review-state">Review pending</span>;
+  const base = "inline-flex items-center gap-1 text-xs whitespace-nowrap";
+  if (decision === "approved") return <span className={`${base} text-open`}>Approved</span>;
+  if (decision === "changes_requested") return <span className={`${base} text-danger`}>Changes requested</span>;
+  return <span className={`${base} text-muted`}>Review pending</span>;
 }

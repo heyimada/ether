@@ -11,10 +11,10 @@ function History() {
   const { info } = Route.useRouteContext();
   const data = Route.useLoaderData();
   return (
-    <div className="stack-md" style={{ maxWidth: 900 }}>
-      <div className="row">
-        <h2 style={{ margin: 0 }}>History of {data.title}</h2>
-        <span className="spacer" />
+    <div className="stack-md max-w-[900px]">
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="m-0">History of {data.title}</h2>
+        <span className="flex-1" />
         <Link to="/$owner/$repo/wiki/$slug" params={{ owner: info.repo.owner, repo: info.repo.name, slug: data.slug }}>
           Back to the page
         </Link>
@@ -24,12 +24,12 @@ function History() {
           <li key={c.sha}>
             <div>
               <strong>{c.subject}</strong>
-              <div className="muted">
+              <div className="text-muted">
                 {c.author} · {timeAgo(c.date)}
               </div>
             </div>
-            <span className="spacer" />
-            <code className="muted">{shortSha(c.sha)}</code>
+            <span className="flex-1" />
+            <code className="text-muted">{shortSha(c.sha)}</code>
           </li>
         ))}
       </ul>

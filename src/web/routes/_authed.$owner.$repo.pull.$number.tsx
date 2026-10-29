@@ -62,14 +62,14 @@ function PullPage() {
                 <Link to="/$owner/$repo/commit/$sha" params={{ owner: info.repo.owner, repo: info.repo.name, sha: c.sha }}>
                   {c.subject}
                 </Link>
-                <span className="spacer" />
-                <code className="muted">{shortSha(c.sha)}</code>
+                <span className="flex-1" />
+                <code className="text-muted">{shortSha(c.sha)}</code>
               </li>
             ))}
           </ul>
         </section>
       ) : (
-        <div className="issue-layout">
+        <div className="grid grid-cols-[minmax(0,1fr)_240px] items-start gap-6 max-lg:grid-cols-[minmax(0,1fr)]">
           <div className="timeline">
             <Conversation info={info} issue={pull} comments={data.comments} me={me?.username ?? null} />
             <ReviewList reviews={data.reviews} />
@@ -112,7 +112,7 @@ function MergeBox({ data }: { data: PullData }) {
         <p>A branch of this pull request no longer exists.</p>
       ) : blocked ? (
         <>
-          <p style={{ marginTop: 0 }}>
+          <p className="mt-0">
             <strong>This branch has conflicts that must be resolved.</strong> Merge <code>{pull.base}</code> into <code>{pull.head}</code> locally, fix the
             conflicts and push.
           </p>
@@ -127,14 +127,14 @@ function MergeBox({ data }: { data: PullData }) {
           )}
         </>
       ) : (
-        <p style={{ marginTop: 0 }}>
+        <p className="mt-0">
           <strong>This branch has no conflicts with the base branch.</strong>
         </p>
       )}
-      {data.reviewDecision === "changes_requested" && <p className="review-note review-changes_requested">Changes were requested in a review.</p>}
-      {data.reviewDecision === "approved" && <p className="review-note review-approved">Approved in review.</p>}
+      {data.reviewDecision === "changes_requested" && <p className="m-0 mb-3 text-danger">Changes were requested in a review.</p>}
+      {data.reviewDecision === "approved" && <p className="m-0 mb-3 text-open">Approved in review.</p>}
       {data.checks && (
-        <p className="review-note">
+        <p className="m-0 mb-3">
           <CiBadge status={data.checks.status} />{" "}
           <Link to="/$owner/$repo/ci/$id" params={{ owner: info.repo.owner, repo: info.repo.name, id: String(data.checks.id) }}>
             {data.checks.status === "success"
@@ -147,7 +147,7 @@ function MergeBox({ data }: { data: PullData }) {
         </p>
       )}
       {data.deployments.map((d) => (
-        <p key={d.environment} className="review-note">
+        <p key={d.environment} className="m-0 mb-3">
           <CiBadge status="success" />{" "}
           <Link to="/$owner/$repo/ci/$id" params={{ owner: info.repo.owner, repo: info.repo.name, id: String(d.runId) }}>
             Deployed to {d.environment}
@@ -163,7 +163,7 @@ function MergeBox({ data }: { data: PullData }) {
         </p>
       ))}
       {needsApproval && (
-        <p className="review-note">
+        <p className="m-0 mb-3">
           <strong>Merging requires an approving review</strong> because this repository protects its pull requests.
         </p>
       )}
@@ -172,7 +172,7 @@ function MergeBox({ data }: { data: PullData }) {
           Merge pull request
         </button>
       ) : (
-        <p className="muted">Only collaborators with write access can merge.</p>
+        <p className="text-muted">Only collaborators with write access can merge.</p>
       )}
     </section>
   );

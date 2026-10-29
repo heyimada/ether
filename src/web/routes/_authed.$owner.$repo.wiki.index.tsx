@@ -15,9 +15,9 @@ export const Route = createFileRoute("/_authed/$owner/$repo/wiki/")({
 function EmptyWiki() {
   const { info } = Route.useRouteContext();
   return (
-    <section className="card empty stack-sm" style={{ alignItems: "center" }}>
+    <section className="card empty stack-sm items-center">
       <strong>This wiki has no pages yet.</strong>
-      <span className="muted">Wikis hold longer documentation: guides, decisions, how-tos.</span>
+      <span className="text-muted">Wikis hold longer documentation: guides, decisions, how-tos.</span>
       {info.role !== "read" && (
         <Link to="/$owner/$repo/wiki/new" params={{ owner: info.repo.owner, repo: info.repo.name }} search={{ title: "Home" }} className="button primary">
           Create the first page

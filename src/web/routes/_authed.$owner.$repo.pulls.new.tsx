@@ -41,7 +41,7 @@ function NewPull() {
   const branchSelect = (id: string, label: string, value: string, set: (v: string) => void) => (
     <div>
       <label htmlFor={id}>{label}</label>
-      <select id={id} value={value} onChange={(e) => set(e.target.value)} style={{ width: "auto", minWidth: 180 }}>
+      <select className="w-auto min-w-[180px]" id={id} value={value} onChange={(e) => set(e.target.value)}>
         <option value="" disabled>
           Choose a branch
         </option>
@@ -57,14 +57,14 @@ function NewPull() {
   return (
     <div className="stack-md">
       <h2>Open a pull request</h2>
-      <div className="row card body" style={{ alignItems: "end" }}>
+      <div className="flex flex-wrap gap-3 card body items-end">
         {branchSelect("base", "Base", baseRef, setBaseRef)}
-        <span className="muted" style={{ paddingBottom: 8 }}>
+        <span className="text-muted pb-2">
           ←
         </span>
         {branchSelect("compare", "Compare", headRef, setHeadRef)}
         {compare && (
-          <span className={compare.mergeable ? "add-count" : "del-count"} style={{ paddingBottom: 8 }}>
+          <span className={`pb-2 font-semibold ${compare.mergeable ? "text-add-fg" : "text-del-fg"}`}>
             {compare.mergeable ? "✓ Able to merge" : "✗ These branches have conflicts"}
           </span>
         )}

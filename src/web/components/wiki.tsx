@@ -33,30 +33,30 @@ export function WikiContent({ info, source, pages, title }: { info: RepoInfo; so
 export function WikiSidebar({ info, pages, current }: { info: RepoInfo; pages: WikiPage[]; current?: string }) {
   const params = { owner: info.repo.owner, repo: info.repo.name };
   return (
-    <aside className="side-col">
-      <section className="side-section">
-        <div className="side-head">
-          <h3>Pages</h3>
-          <span className="muted num">{pages.length}</span>
+    <aside className="flex min-w-0 flex-col gap-6">
+      <section>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="m-0 text-base">Pages</h3>
+          <span className="tabular-nums text-muted">{pages.length}</span>
         </div>
-        <ul className="people" aria-label="Wiki pages">
+        <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Wiki pages">
           {pages.map((p) => (
-            <li key={p.slug}>
-              <Link to="/$owner/$repo/wiki/$slug" params={{ ...params, slug: p.slug }} className={p.slug === current ? "active-page" : ""}>
+            <li key={p.slug} className="flex items-center gap-2 text-sm">
+              <Link to="/$owner/$repo/wiki/$slug" params={{ ...params, slug: p.slug }} className={p.slug === current ? "font-bold text-fg" : ""}>
                 {p.title}
               </Link>
             </li>
           ))}
         </ul>
         {info.role !== "read" && (
-          <Link to="/$owner/$repo/wiki/new" params={params} search={{}} className="button small" style={{ marginTop: 12 }}>
+          <Link to="/$owner/$repo/wiki/new" params={params} search={{}} className="button small mt-3">
             New page
           </Link>
         )}
       </section>
-      <section className="side-section">
-        <h3>Clone this wiki</h3>
-        <code className="side-text" style={{ overflowWrap: "anywhere" }}>
+      <section>
+        <h3 className="mt-0 mb-2 text-base">Clone this wiki</h3>
+        <code className="m-0 text-base wrap-anywhere">
           {`${location.origin}/${info.repo.owner}/${info.repo.name}.wiki.git`}
         </code>
       </section>
@@ -83,7 +83,7 @@ export function WikiEditor({ info, slug, initial }: { info: RepoInfo; slug?: str
         <input id="wiki-title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={100} />
       </Field>
       <Field id="wiki-content" label="Content" hint="Markdown. Link other pages with [[Page title]].">
-        <textarea id="wiki-content" value={content} onChange={(e) => setContent(e.target.value)} style={{ minHeight: 320 }} className="mono" />
+        <textarea id="wiki-content" value={content} onChange={(e) => setContent(e.target.value)} className="font-mono min-h-[320px]" />
       </Field>
       <Field id="wiki-message" label="Edit message" hint="Optional: what changed.">
         <input id="wiki-message" value={message} onChange={(e) => setMessage(e.target.value)} maxLength={200} />

@@ -4,7 +4,10 @@ import { colord } from "colord";
 import { Check, Settings2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, put, repoApi, type Issue, type Label, type RepoInfo } from "../lib/api";
-import { Avatar, ErrorNote, useAction } from "./ui";
+import { Avatar, ErrorNote, MENU_LABEL, MENU_SEP, PEOPLE, PERSON, SIDE_HEAD, useAction } from "./ui";
+
+const PILL = "inline-flex items-center rounded-full px-2 text-xs font-semibold leading-5 whitespace-nowrap transition-transform duration-150 ease-out";
+const SIDE_TEXT = "m-0 text-base text-muted wrap-anywhere";
 
 // A label in its own colour, with whichever text colour reads on it.
 export function LabelPill({ label, info }: { label: Label; info?: RepoInfo }) {
@@ -12,7 +15,7 @@ export function LabelPill({ label, info }: { label: Label; info?: RepoInfo }) {
   const style = { background: label.color, color: bg.contrast("#ffffff") >= bg.contrast("#1f2328") ? "#ffffff" : "#1f2328" };
   if (!info)
     return (
-      <span className="label-pill" style={style} title={label.description || undefined}>
+      <span className={PILL} style={style} title={label.description || undefined}>
         {label.name}
       </span>
     );
@@ -21,7 +24,7 @@ export function LabelPill({ label, info }: { label: Label; info?: RepoInfo }) {
       to="/$owner/$repo/issues"
       params={{ owner: info.repo.owner, repo: info.repo.name }}
       search={{ label: label.name }}
-      className="label-pill"
+      className={`${PILL} hover:no-underline hover:-translate-y-px`}
       style={style}
       title={label.description || undefined}
     >
@@ -65,12 +68,12 @@ export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue:
   };
 
   return (
-    <aside className="issue-sidebar">
+    <aside className="flex min-w-0 flex-col gap-5">
       {children}
       <ErrorNote error={save.error} />
-      <section className="side-section">
-        <div className="side-head">
-          <h3>Labels</h3>
+      <section>
+        <div className={SIDE_HEAD}>
+          <h3 className="m-0 text-base">Labels</h3>
           {canEdit && (
             <Menu.Root>
               <Menu.Trigger className="ghost small" aria-label="Edit labels">
@@ -78,7 +81,7 @@ export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue:
               </Menu.Trigger>
               <Menu.Portal>
                 <Menu.Content className="menu" align="end" sideOffset={4}>
-                  <Menu.Label className="menu-label">Apply labels</Menu.Label>
+                  <Menu.Label className={MENU_LABEL}>Apply labels</Menu.Label>
                   {(labels ?? []).map((l) => (
                     <Menu.CheckboxItem
                       key={l.name}
@@ -88,11 +91,11 @@ export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue:
                       onCheckedChange={() => pickLabel(l.name)}
                     >
                       <Check size={14} aria-hidden className={current.includes(l.name) ? "" : "invisible"} />
-                      <span className="label-dot" style={{ background: l.color }} aria-hidden />
+                      <span className="size-2.5 flex-none rounded-full" style={{ background: l.color }} aria-hidden />
                       {l.name}
                     </Menu.CheckboxItem>
                   ))}
-                  <Menu.Separator className="menu-sep" />
+                  <Menu.Separator className={MENU_SEP} />
                   <Menu.Item asChild className="menu-item">
                     <Link to="/$owner/$repo/labels" params={{ owner: info.repo.owner, repo: info.repo.name }}>
                       Manage labels
@@ -104,7 +107,7 @@ export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue:
           )}
         </div>
         {issue.labels.length ? (
-          <ul className="chips" aria-label="Issue labels">
+          <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0" aria-label="Issue labels">
             {issue.labels.map((l) => (
               <li key={l.name}>
                 <LabelPill label={l} info={info} />
@@ -112,12 +115,12 @@ export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue:
             ))}
           </ul>
         ) : (
-          <p className="muted side-text">None yet</p>
+          <p className={SIDE_TEXT}>None yet</p>
         )}
       </section>
-      <section className="side-section">
-        <div className="side-head">
-          <h3>Assignees</h3>
+      <section>
+        <div className={SIDE_HEAD}>
+          <h3 className="m-0 text-base">Assignees</h3>
           {canEdit && (
             <Menu.Root>
               <Menu.Trigger className="ghost small" aria-label="Edit assignees">
@@ -125,7 +128,7 @@ export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue:
               </Menu.Trigger>
               <Menu.Portal>
                 <Menu.Content className="menu" align="end" sideOffset={4}>
-                  <Menu.Label className="menu-label">Assign up to 10 people</Menu.Label>
+                  <Menu.Label className={MENU_LABEL}>Assign up to 10 people</Menu.Label>
                   {(people ?? []).map((p) => (
                     <Menu.CheckboxItem
                       key={p}
@@ -145,9 +148,9 @@ export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue:
           )}
         </div>
         {issue.assignees.length ? (
-          <ul className="people" aria-label="Assignees">
+          <ul className={PEOPLE} aria-label="Assignees">
             {issue.assignees.map((p) => (
-              <li key={p}>
+              <li key={p} className={PERSON}>
                 <Avatar name={p} />
                 <Link to="/$owner" params={{ owner: p }}>
                   {p}
@@ -156,7 +159,7 @@ export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue:
             ))}
           </ul>
         ) : (
-          <p className="muted side-text">No one assigned</p>
+          <p className={SIDE_TEXT}>No one assigned</p>
         )}
       </section>
     </aside>

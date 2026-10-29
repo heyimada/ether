@@ -14,10 +14,10 @@ function Releases() {
   const params = { owner: info.repo.owner, repo: info.repo.name };
   const latest = releases.find((r) => !r.prerelease)?.tag;
   return (
-    <div className="stack-md" style={{ maxWidth: 900 }}>
-      <div className="row">
-        <h2 style={{ margin: 0 }}>Releases</h2>
-        <span className="spacer" />
+    <div className="stack-md max-w-[900px]">
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="m-0">Releases</h2>
+        <span className="flex-1" />
         {info.role !== "read" && (
           <Link to="/$owner/$repo/releases/new" params={params} className="button primary small">
             <Plus size={16} aria-hidden /> Create a release

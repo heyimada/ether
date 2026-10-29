@@ -32,7 +32,7 @@ function Register() {
         </>
       }
     >
-      <form className="card body" onSubmit={onSubmit(register.run)}>
+      <form className="card body shadow-raised" onSubmit={onSubmit(register.run)}>
         <ErrorNote error={register.error} />
         <Field id="code" label="Invite code" hint="Filled in for you when you open an invite link.">
           <input id="code" value={code} onChange={(e) => setCode(e.target.value)} required />
@@ -43,7 +43,7 @@ function Register() {
         <Field id="password" label="Password" hint="At least 10 characters.">
           <input id="password" type="password" autoComplete="new-password" minLength={10} value={password} onChange={(e) => setPassword(e.target.value)} required />
         </Field>
-        <button className="primary wide" disabled={register.pending}>
+        <button className="primary wide min-h-10" disabled={register.pending}>
           {register.pending ? "Creating account…" : "Create account"}
         </button>
       </form>

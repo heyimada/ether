@@ -28,10 +28,10 @@ function Runs() {
   }, [active, busy, router]);
 
   return (
-    <div className="stack-md" style={{ maxWidth: 900 }}>
-      <h2 style={{ margin: 0 }}>CI runs</h2>
+    <div className="stack-md max-w-[900px]">
+      <h2 className="m-0">CI runs</h2>
       {!enabled && (
-        <p className="notice" style={{ margin: 0 }}>
+        <p className="notice m-0">
           CI is off for this repository.{" "}
           {info.role === "owner" ? (
             <>
@@ -49,17 +49,17 @@ function Runs() {
           {runs.map((r, i) => (
             <motion.li key={r.id} variants={rise} custom={i}>
               <CiBadge status={r.status} />
-              <div style={{ minWidth: 0 }}>
-                <Link to="/$owner/$repo/ci/$id" params={{ ...params, id: String(r.id) }} style={{ fontWeight: 600 }}>
+              <div className="min-w-0">
+                <Link className="font-semibold" to="/$owner/$repo/ci/$id" params={{ ...params, id: String(r.id) }}>
                   {r.subject || shortSha(r.sha)}
                 </Link>
-                <div className="muted">
+                <div className="text-muted">
                   #{r.id} · <code>{r.ref}</code> · <code>{shortSha(r.sha)}</code> · {timeAgo(r.createdAt)}
                   {r.message && ` · ${r.message}`}
                 </div>
               </div>
-              <span className="spacer" />
-              <span className="muted num">{r.jobs.filter((j) => j.status === "success").length}/{r.jobs.length} jobs passed</span>
+              <span className="flex-1" />
+              <span className="text-muted tabular-nums">{r.jobs.filter((j) => j.status === "success").length}/{r.jobs.length} jobs passed</span>
             </motion.li>
           ))}
         </motion.ul>

@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { RefPicker } from "../components/code-browser";
 import { api, repoApi, shortSha, splitRefPath, timeAgo, type Commit } from "../lib/api";
 import { rise, staggered } from "../lib/motion";
+import { ROW } from "../components/ui";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/commits/$")({
   validateSearch: (s: Record<string, unknown>): { path?: string; page?: number } => ({
@@ -26,9 +27,9 @@ function Commits() {
   const params = { owner: info.repo.owner, repo: info.repo.name };
   return (
     <div>
-      <div className="row" style={{ marginBottom: 12 }}>
+      <div className={`${ROW} mb-3`}>
         <RefPicker info={info} current={ref} kind="commits" />
-        <h2 style={{ margin: 0 }}>Commits{path ? ` to ${path}` : ""}</h2>
+        <h2 className="m-0">Commits{path ? ` to ${path}` : ""}</h2>
       </div>
       <section className="card">
         {commits.length === 0 ? (
@@ -41,18 +42,18 @@ function Commits() {
                   <Link to="/$owner/$repo/commit/$sha" params={{ ...params, sha: c.sha }}>
                     {c.subject}
                   </Link>
-                  <div className="muted">
+                  <div className="text-muted">
                     {c.author} committed {timeAgo(c.date)}
                   </div>
                 </div>
-                <span className="spacer" />
-                <code className="muted">{shortSha(c.sha)}</code>
+                <span className="flex-1" />
+                <code className="text-muted">{shortSha(c.sha)}</code>
               </motion.li>
             ))}
           </motion.ul>
         )}
       </section>
-      <div className="row" style={{ marginTop: 12 }}>
+      <div className={`${ROW} mt-3`}>
         {page > 0 && (
           <Link to="." search={{ path, page: page - 1 }} className="button">
             Newer

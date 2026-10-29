@@ -78,42 +78,42 @@ function Admin() {
   });
 
   return (
-    <main className="page stack" style={{ maxWidth: 820 }}>
+    <main className="page stack max-w-[820px]">
       <h1>Admin</h1>
       <section className="card body stack-sm">
-        <h2 style={{ margin: 0 }}>Access</h2>
+        <h2 className="m-0">Access</h2>
         <ErrorNote error={setAnonymous.error} />
-        <label className="radio" style={{ alignItems: "flex-start" }}>
+        <label className="radio items-start">
           <input type="checkbox" checked={allowVisitors} onChange={(e) => setAnonymous.run(e.target.checked)} disabled={setAnonymous.pending} />
           <span>
             Let visitors without an account read public repositories
-            <span className="hint" style={{ display: "block" }}>
+            <span className="hint block">
               They can browse and clone public repositories and read their issues and pull requests. Everything else still needs an account. Leave this off if
               people outside your team can reach this server.
             </span>
           </span>
         </label>
         <ErrorNote error={setCi.error} />
-        <label className="radio" style={{ alignItems: "flex-start" }}>
+        <label className="radio items-start">
           <input type="checkbox" checked={allowCi} onChange={(e) => setCi.run(e.target.checked)} disabled={setCi.pending} />
           <span>
             Run CI jobs on this server
-            <span className="hint" style={{ display: "block" }}>
+            <span className="hint block">
               Repositories that turn CI on run the commands in their <code>.ether/ci.yml</code> when someone pushes.
             </span>
           </span>
         </label>
         {allowCi && (
-          <fieldset className="stack-sm" style={{ border: 0, padding: "0 0 0 28px", margin: 0 }}>
-            <legend className="muted" style={{ padding: 0 }}>
+          <fieldset className="stack-sm m-0 border-0 p-0 pl-7">
+            <legend className="text-muted p-0">
               Where jobs run
             </legend>
             <ErrorNote error={setIsolation.error} />
-            <label className="radio" style={{ alignItems: "flex-start" }}>
+            <label className="radio items-start">
               <input type="radio" name="ci-isolation" checked={isolation === "container"} onChange={() => setIsolation.run("container")} disabled={setIsolation.pending} />
               <span>
                 In a container per job (recommended)
-                <span className="hint" style={{ display: "block" }}>
+                <span className="hint block">
                   {runtime ? (
                     <>
                       Uses <code>{runtime}</code>. Jobs get a copy of the checkout and can't read this server's files. Repository secrets are only passed to
@@ -125,11 +125,11 @@ function Admin() {
                 </span>
               </span>
             </label>
-            <label className="radio" style={{ alignItems: "flex-start" }}>
+            <label className="radio items-start">
               <input type="radio" name="ci-isolation" checked={isolation === "host"} onChange={() => setIsolation.run("host")} disabled={setIsolation.pending} />
               <span>
                 On this machine, as the user Ether runs as (unsafe)
-                <span className="hint" style={{ display: "block" }}>
+                <span className="hint block">
                   Jobs can read Ether's data folder, including the database and the auth secret, so everyone with write access to a repository with CI
                   controls the server. Jobs that use secrets are refused.
                 </span>
@@ -138,15 +138,15 @@ function Admin() {
           </fieldset>
         )}
         {saved && (
-          <span role="status" className="muted">
+          <span role="status" className="text-muted">
             {saved}
           </span>
         )}
       </section>
       <section className="card">
         <header>
-          <h2 style={{ margin: 0 }}>Invites</h2>
-          <span className="spacer" />
+          <h2 className="m-0">Invites</h2>
+          <span className="flex-1" />
           <button className="primary" onClick={() => invite.run()} disabled={invite.pending}>
             Create invite link
           </button>
@@ -154,23 +154,23 @@ function Admin() {
         <div className="body">
           <ErrorNote error={invite.error} />
           {link && (
-            <div className="notice" style={{ marginBottom: 12 }}>
-              <p style={{ marginTop: 0 }}>Send this one-time link to your friend. It expires in 7 days.</p>
-              <div className="clone">
+            <div className="notice mb-3">
+              <p className="mt-0">Send this one-time link to your friend. It expires in 7 days.</p>
+              <div className="flex items-center gap-2">
                 <code aria-label="Invite link">{link}</code>
                 <CopyButton text={link} />
               </div>
             </div>
           )}
           {invites.length === 0 ? (
-            <p className="muted">No invites yet.</p>
+            <p className="text-muted">No invites yet.</p>
           ) : (
             <ul className="list">
               {invites.map((i, n) => (
                 <li key={n}>
                   <span>Created {timeAgo(i.createdAt)}</span>
-                  <span className="spacer" />
-                  <span className="muted">
+                  <span className="flex-1" />
+                  <span className="text-muted">
                     {i.usedBy ? `Used by ${i.usedBy}` : new Date(i.expiresAt) < new Date() ? "Expired" : `Expires ${timeAgo(i.expiresAt)}`}
                   </span>
                 </li>
@@ -181,7 +181,7 @@ function Admin() {
       </section>
       <section className="card">
         <header>
-          <h2 style={{ margin: 0 }}>Users</h2>
+          <h2 className="m-0">Users</h2>
         </header>
         <ul className="list">
           {users.map((u) => (
