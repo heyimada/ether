@@ -501,6 +501,17 @@ export const ciJob = sqliteTable("ci_job", {
     .notNull()
     .references(() => ciRun.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  // Its id in the workflow, which other jobs' `needs` name; matrix jobs share it. Empty for jobs from before
+  // jobs had needs, which ran one after another.
+  key: text("key").notNull().default(""),
+  // JSON: the keys of the jobs it waits for.
+  needs: text("needs").notNull().default("[]"),
+  // Its `if:` (see ci-graph.ts); null runs it when everything it needs succeeded.
+  condition: text("condition"),
+  // JSON: this matrix combination's values, and how its siblings behave when one fails.
+  matrix: text("matrix").notNull().default("{}"),
+  failFast: integer("fail_fast", { mode: "boolean" }).notNull().default(true),
+  maxParallel: integer("max_parallel"),
   // JSON: [{ name, run, shell, timeoutMinutes, env }]; env values are strings or { secret: NAME }, never secret values.
   steps: text("steps").notNull(),
   // The container image the job runs in when CI is isolated; null means the server's default.

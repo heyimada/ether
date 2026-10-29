@@ -8,7 +8,7 @@ process.env.ETHER_E2E_REPORT_DIR = reportDir;
 
 // Specs that change site-wide settings (CI on/off and its runner, anonymous access). They run one at a time after the
 // rest, because the other specs assume those settings are at their defaults.
-const SITE_SETTINGS = ["ci.spec.ts", "ci-isolation.spec.ts", "workflows.spec.ts", "anonymous.spec.ts"];
+const SITE_SETTINGS = ["ci.spec.ts", "ci-isolation.spec.ts", "workflows.spec.ts", "job-graph.spec.ts", "anonymous.spec.ts"];
 
 export default defineConfig({
   testDir: "e2e",

@@ -1,6 +1,7 @@
 // Parsing workflow files into triggers, jobs and steps. Pure, so it can be tested without a database.
 import { parse as parseYaml } from "yaml";
 import { IMAGE_RE } from "./ci-container";
+import { checkGraph, comboName, parseCondition, parseNeeds, parseStrategy, type MatrixValues } from "./ci-graph";
 import { LEGACY_TRIGGERS, parseOn, type Triggers } from "./ci-triggers";
 
 // Workflows live in .ether/workflows/*.yml, each with its own `on:`. The older single .ether/ci.yml still
@@ -54,7 +55,22 @@ function parseEnvironment(raw: unknown, job: string): { name: string; url: strin
   return { name, url };
 }
 
-export type ParsedJob = { name: string; image: string | null; environment: { name: string; url: string | null } | null; steps: Step[] };
+// One job to run: a job of the workflow, or one combination of its matrix. `key` is its id in the workflow, which
+// `needs` refers to; `name` is what people see.
+export type ParsedJob = {
+  key: string;
+  name: string;
+  image: string | null;
+  environment: { name: string; url: string | null } | null;
+  steps: Step[];
+  needs: string[];
+  condition: string | null;
+  matrix: MatrixValues;
+  failFast: boolean;
+  maxParallel: number | null;
+};
+// Matrices multiply jobs; a run is kept to this many.
+export const MAX_RUN_JOBS = 100;
 export type ParsedWorkflow = { name: string; on: Triggers; jobs: ParsedJob[] };
 
 // Validates the workflow and normalises it into its name, triggers and jobs of steps; throws a readable message.
@@ -76,14 +92,22 @@ export function parseWorkflow(text: string, path = WORKFLOW): ParsedWorkflow {
     throw new Error(`${path}: ${(e as Error).message}`);
   }
   if (!jobs || typeof jobs !== "object" || Array.isArray(jobs)) throw new Error(`${path} needs a "jobs" map`);
-  const out = Object.entries(jobs as Record<string, unknown>).map(([name, job]) => {
+  const defs = Object.entries(jobs as Record<string, unknown>);
+  if (defs.length === 0 || defs.length > 20) throw new Error(`${path} needs between 1 and 20 jobs`);
+  const parsed = defs.map(([name, job]) => {
     if (!NAME_RE.test(name)) throw new Error(`Job name "${name}" must be letters, digits, spaces, '.', '_' or '-'`);
-    const { steps, image, env, environment } = (job ?? {}) as { steps?: unknown; image?: unknown; env?: unknown; environment?: unknown };
+    const spec = (job ?? {}) as { steps?: unknown; image?: unknown; env?: unknown; environment?: unknown; name?: unknown; needs?: unknown; if?: unknown; strategy?: unknown };
+    const { steps, image, env, environment } = spec;
+    if (spec.name !== undefined && (typeof spec.name !== "string" || !spec.name.trim() || spec.name.length > 100)) throw new Error(`Job "${name}": name must be text of up to 100 characters`);
     if (!Array.isArray(steps) || steps.length === 0) throw new Error(`Job "${name}" needs a list of steps`);
     if (image !== undefined && (typeof image !== "string" || !IMAGE_RE.test(image))) throw new Error(`Job "${name}": image must be a container image name such as alpine:3.20`);
     const jobEnv = parseEnv(env, `Job "${name}"`);
     return {
-      name,
+      key: name,
+      title: typeof spec.name === "string" ? spec.name.trim() : name,
+      needs: parseNeeds(spec.needs, `Job "${name}"`),
+      condition: parseCondition(spec.if, `Job "${name}"`),
+      strategy: parseStrategy(spec.strategy, `Job "${name}"`),
       image: (image as string | undefined) ?? null,
       environment: parseEnvironment(environment, name),
       steps: steps.map((s, i): Step => {
@@ -101,6 +125,21 @@ export function parseWorkflow(text: string, path = WORKFLOW): ParsedWorkflow {
       }),
     };
   });
-  if (out.length === 0 || out.length > 20) throw new Error(`${path} needs between 1 and 20 jobs`);
+  checkGraph(new Map(parsed.map((j) => [j.key, j.needs])));
+  const out = parsed.flatMap(({ key, title, needs, condition, strategy, image, environment, steps }): ParsedJob[] =>
+    (strategy?.combos ?? [{}]).map((matrix) => ({
+      key,
+      name: comboName(title, matrix),
+      image,
+      environment,
+      steps,
+      needs,
+      condition,
+      matrix,
+      failFast: strategy?.failFast ?? true,
+      maxParallel: strategy?.maxParallel ?? null,
+    })),
+  );
+  if (out.length > MAX_RUN_JOBS) throw new Error(`${path}: its matrices make ${out.length} jobs; a run can have at most ${MAX_RUN_JOBS}`);
   return { name: typeof name === "string" ? name.trim() : defaultWorkflowName(path), on: triggers, jobs: out };
 }

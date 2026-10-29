@@ -13,7 +13,7 @@ type JobDeployment = {
   notBefore: string | null;
   canReview: boolean;
 };
-type Job = { id: number; name: string; status: CiStatus; log: string; steps: { name: string }[]; startedAt: string | null; finishedAt: string | null; deployment: JobDeployment | null };
+type Job = { id: number; key: string; name: string; needs: string[]; condition: string | null; status: CiStatus; log: string; steps: { name: string }[]; startedAt: string | null; finishedAt: string | null; deployment: JobDeployment | null };
 type RunDetail = {
   run: {
     id: number;
@@ -123,17 +123,30 @@ function RunPage() {
               {j.name}
             </h3>
             <CiBadge status={j.status} />
+            {(j.needs.length > 0 || j.condition) && (
+              <span className="text-muted text-xs">
+                {j.needs.length > 0 && `needs ${j.needs.join(", ")}`}
+                {j.needs.length > 0 && j.condition && " · "}
+                {j.condition && `if ${j.condition}`}
+              </span>
+            )}
             <span className="flex-1" />
             <span className="text-muted tabular-nums">{duration(j.startedAt, j.finishedAt)}</span>
           </header>
           {j.deployment && <DeploymentNote job={j} deployment={j.deployment} base={repoApi(info.repo.owner, info.repo.name)} />}
           <LiveLog live={j.status === "running"} label={`${j.name} log`}>
-            {j.log || (j.status === "queued" ? "Waiting for a runner…" : "")}
+            {j.log || (j.status === "queued" ? waitingFor(j, jobs) : "")}
           </LiveLog>
         </section>
       ))}
     </div>
   );
+}
+
+// What a queued job is waiting for: the jobs it needs that haven't finished, else a free runner.
+function waitingFor(job: Job, jobs: Job[]) {
+  const pending = [...new Set(jobs.filter((o) => job.needs.includes(o.key) && !ciDone(o.status)).map((o) => o.key))];
+  return pending.length ? `Waiting for ${pending.join(", ")}…` : "Waiting for a runner…";
 }
 
 // What a manual run was started with.
