@@ -44,6 +44,10 @@ jobs:
     if: failure()
     steps:
       - run: echo notifying
+  archive:
+    needs: cleanup
+    steps:
+      - run: echo archiving
 `;
 
 // Two deploy jobs for one environment, which would otherwise run at the same time.
@@ -128,6 +132,9 @@ test("jobs wait for their needs, run side by side, fan out over a matrix and fol
     expect(jobs.cleanup.status).toBe("success");
     // failure() looks up the whole chain: ship was only skipped, but test (3) before it failed.
     expect(jobs.notify.status).toBe("success");
+    // cleanup succeeded, but archive is still skipped for what failed before it, and says which job that was.
+    expect(jobs.archive.status).toBe("skipped");
+    expect(jobs.archive.log).toContain("test (3) didn't succeed");
     expect(run.status).toBe("failure");
 
     await uiLogin(page, owner.username, owner.password);

@@ -161,9 +161,12 @@ function nextJob(): Job | null {
       const all = byRun.get(job.runId) ?? byRun.set(job.runId, runJobs(job.runId)).get(job.runId)!;
       const deps = needed(job, all);
       if (deps.some((d) => !DONE.has(d.status))) continue;
-      if (job.key && !conditionHolds(job.condition, deps.map((d) => d.status as NeedStatus), ancestorsOf(job, all).map((d) => d.status as NeedStatus))) {
+      const ancestors = ancestorsOf(job, all);
+      if (job.key && !conditionHolds(job.condition, deps.map((d) => d.status as NeedStatus), ancestors.map((d) => d.status as NeedStatus))) {
+        // When the direct needs succeeded, it was a job further up that failed; name that one.
         const failed = deps.filter((d) => d.status !== "success").map((d) => d.name);
-        skipJob(job, job.condition ? `if: ${job.condition} is false` : `${failed.join(", ")} didn't succeed`);
+        const why = failed.length ? failed : ancestors.filter((d) => d.status === "failure" || d.status === "error").map((d) => d.name);
+        skipJob(job, job.condition ? `if: ${job.condition} is false` : `${why.join(", ")} didn't succeed`);
         skipped = true;
         break;
       }
