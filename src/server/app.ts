@@ -19,6 +19,7 @@ import { sshKeyRoutes } from "./routes/ssh-keys";
 import { deployKeyRoutes } from "./routes/deploy-keys";
 import { deploymentRoutes } from "./routes/deployments";
 import { branchProtectionRoutes } from "./routes/branch-protection";
+import { branchRoutes } from "./routes/branches";
 import { wikiRoutes } from "./routes/wiki";
 
 const api = new Elysia({ prefix: "/api" })
@@ -51,6 +52,7 @@ const api = new Elysia({ prefix: "/api" })
   .use(sshKeyRoutes)
   .use(deployKeyRoutes)
   .use(branchProtectionRoutes)
+  .use(branchRoutes)
   .use(ciRoutes)
   .use(deploymentRoutes)
   .use(dashboardRoutes)
