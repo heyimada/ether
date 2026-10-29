@@ -99,7 +99,7 @@ function Admin() {
           <span>
             Run CI jobs on this server
             <span className="hint block">
-              Repositories that turn CI on run the commands in their <code>.ether/ci.yml</code> when someone pushes.
+              Repositories that turn CI on run the commands in their workflows (<code>.ether/workflows/</code>) when someone pushes, opens a pull request or starts one.
             </span>
           </span>
         </label>

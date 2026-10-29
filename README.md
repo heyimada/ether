@@ -59,29 +59,60 @@ Restore: stop Ether, then `ETHER_DATA=<empty folder> bun run ether restore <dir>
 
 ## CI
 
-Off until an admin ticks **Admin → Access → Run CI jobs on this server** and an owner turns it on in the repository's **Settings**. Then commit `.ether/ci.yml`:
+Off until an admin ticks **Admin → Access → Run CI jobs on this server** and an owner turns it on in the repository's **Settings**. Then commit workflows to `.ether/workflows/` (any number of `.yml` or `.yaml` files, up to 20), in a format close to GitHub Actions:
 
 ```yaml
+# .ether/workflows/test.yml
+name: Tests
+on:
+  push:
+    branches: [main, "release/**"]   # or branches-ignore; tags / tags-ignore work the same way
+    paths-ignore: ["docs/**"]        # or paths
+  pull_request:
+    branches: [main]                 # the branch the pull request goes into
 jobs:
   test:
-    image: oven/bun:1.4.0          # optional; the server's default image otherwise
+    image: oven/bun:1.4.0            # optional; the server's default image otherwise
     steps:
       - name: Install
         run: bun install
       - name: Test
         run: bun test
-        timeout-minutes: 15        # default 10, at most 60
+        timeout-minutes: 15          # default 10, at most 60
+```
+
+```yaml
+# .ether/workflows/deploy.yml
+name: Deploy
+on:
+  workflow_dispatch:                 # a "Run workflow" button on the CI tab
+    inputs:
+      target:
+        type: choice                 # string (default), boolean, number or choice
+        options: [staging, production]
+      dry-run:
+        type: boolean
+jobs:
   deploy:
     env:
       DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}   # set under the repository's Settings → CI secrets
     steps:
-      - run: ./scripts/deploy.sh
-        shell: bash                # bash (default when installed) or sh; pwsh if the image has it
+      - run: ./scripts/deploy.sh "$CI_INPUT_TARGET"
+        shell: bash                  # bash (default when installed) or sh; pwsh if the image has it
         env:
-          TARGET: production       # plain values work too
+          RETRIES: 3                 # plain values work too
 ```
 
-Every push to a branch runs the workflow of its new commit, one job at a time, from a fresh checkout. Steps get `CI`, `CI_REPOSITORY`, `CI_COMMIT_SHA`, `CI_REF` and the `env` they ask for, never Ether's own settings. Runs and logs are under the repository's **CI** tab; pull requests show their head commit's checks, and **Require passing checks before merging** blocks merges until they pass.
+**When workflows run.** `on:` takes `push`, `pull_request` and `workflow_dispatch`, as a name, a list or a map with filters:
+
+- `push` runs when a branch or tag moves to a new commit, including when a pull request is merged into a branch. Naming only `branches` leaves tags out and the other way round; naming neither takes both. As on GitHub, a push of more than three tags at once (`git push --tags`, a mirror) starts nothing for its tags. Patterns use `*` (within one `/` segment), `**` and `?`, and in a list a later `!pattern` takes a match back.
+- `pull_request` runs on the pull request's head commit when it is opened or reopened and whenever its branch moves (`types: [opened, synchronize, reopened]`, all three by default).
+- `paths` and `paths-ignore` look at the files the push changed (for a new branch, what it has beyond the default branch; for a pull request, what it would bring in). They don't apply to tags, or when more than 1000 files changed.
+- `workflow_dispatch` lets anyone with write access start the workflow on a branch from the **CI** tab, or with `POST /api/repos/:owner/:repo/ci/workflows/dispatch` and `{"workflow": ".ether/workflows/deploy.yml", "ref": "main", "inputs": {…}}`. Inputs are checked against their type, and the workflow is read from that branch.
+
+Other events (`schedule`, `pull_request_target`, …), `uses:` actions, `needs:`, `if:`, `matrix` and expressions other than `${{ secrets.NAME }}` aren't supported (yet); a workflow that uses an unknown event is refused with a message saying so. A workflow file that doesn't parse shows up as a failed run on the next push. The older single `.ether/ci.yml` still works: it may leave out `on:` and then runs on every push to a branch, like before.
+
+Each run is one workflow for one commit; jobs run one at a time from a fresh checkout. Steps get `CI`, `CI_REPOSITORY`, `CI_COMMIT_SHA`, `CI_REF` (the branch or tag), `CI_REF_TYPE` (`branch` or `tag`), `CI_EVENT`, `CI_WORKFLOW`, for pull requests `CI_PULL_REQUEST` and `CI_BASE_REF`, a manual run's inputs as `CI_INPUT_<NAME>` (upper case, `-` becomes `_`), and the `env` they ask for, never Ether's own settings. Runs and logs are under the repository's **CI** tab, by workflow. Pull requests show the newest run of each workflow for their head commit as checks (their own `pull_request` runs, not another pull request's from the same branch; manual runs don't count), and **Require passing checks before merging** blocks merges until they all pass.
 
 **Where jobs run.** By default each job gets its own container, from Docker or Podman on the Ether machine (whichever is installed, or `ETHER_CI_RUNTIME`). The checkout is copied in, not mounted, so a job can't see Ether's data folder or anything else on the host. The container runs with `no-new-privileges`, without raw sockets, and capped at `ETHER_CI_MEMORY` (default `4g`), `ETHER_CI_CPUS` (`2`) and `ETHER_CI_PIDS` (`1024`) processes, and it is removed when the job ends. Jobs still have network access, for example to install packages. The default image is `ETHER_CI_IMAGE`, or `oven/bun:1`. Without a container runtime, jobs fail with a message saying so.
 
@@ -111,7 +142,7 @@ jobs:
 
 An environment is created the first time a job names it. Under **Settings → Environments** owners can give it rules, all optional:
 
-- **Branches that may deploy**: names or patterns like `main` or `release/*`, matched like protected branches. A job from any other branch is skipped, which doesn't fail its run.
+- **Branches that may deploy**: names or patterns like `main` or `release/*`, matched like protected branches. A job from any other branch is skipped, which doesn't fail its run. With branches set, a run for a tag is skipped too; without any, tags may deploy.
 - **Required reviewers**: up to six people with write access. The job waits until one of them clicks **Approve and deploy** on the CI run, or **Reject**, which fails it. Nobody else can answer, the owner included.
 - **Wait timer**: minutes the job waits before it starts, counted from the approval (or from the push when no approval is needed).
 - **Secrets**: like CI secrets, but only for jobs deploying to this environment, where they replace a repository secret of the same name.

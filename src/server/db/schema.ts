@@ -472,7 +472,17 @@ export const ciRun = sqliteTable(
       .notNull()
       .references(() => repo.id, { onDelete: "cascade" }),
     sha: text("sha").notNull(),
+    // A branch name, or a tag's name for a push of a tag; a pull request's run is on its head branch.
     ref: text("ref").notNull(),
+    refType: text("ref_type", { enum: ["branch", "tag"] }).notNull().default("branch"),
+    // Which workflow file it runs and what started it (see ci-triggers.ts). Runs from before workflows had
+    // their own files ran .ether/ci.yml on a push.
+    workflowPath: text("workflow_path").notNull().default(".ether/ci.yml"),
+    workflowName: text("workflow_name").notNull().default("CI"),
+    event: text("event", { enum: ["push", "pull_request", "workflow_dispatch"] }).notNull().default("push"),
+    pullNumber: integer("pull_number"),
+    // JSON: a manual run's inputs by name.
+    inputs: text("inputs").notNull().default("{}"),
     status: text("status", { enum: ["queued", "waiting", "running", "success", "failure", "cancelled", "error"] }).notNull(),
     // Whose push or re-run started it; failures are reported to them.
     actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),

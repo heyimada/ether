@@ -32,3 +32,9 @@ test("the wait timer counts from the approval, or from queueing when nobody has 
   expect(gate(rules, "main", { approved: true, at: at(30) }, queued, at(31))).toEqual({ action: "wait-until", at: at(40) });
   expect(gate(rules, "main", { approved: true, at: at(30) }, queued, at(41)).action).toBe("run");
 });
+
+test("a tag only deploys where no branches are named", () => {
+  const now = new Date();
+  expect(gate({ branches: ["main"], reviewers: 0, waitMinutes: 0 }, "main", null, now, now, "tag")).toEqual({ action: "skip", reason: "tags aren't allowed to deploy here, only main" });
+  expect(gate({ branches: [], reviewers: 0, waitMinutes: 0 }, "v1", null, now, now, "tag")).toEqual({ action: "run" });
+});

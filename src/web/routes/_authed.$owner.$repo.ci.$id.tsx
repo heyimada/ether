@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef, type ReactNode } from "react";
-import { CiBadge, ciDone, type CiStatus } from "../components/ci";
+import { CiBadge, ciDone, EVENT_LABEL, type CiEvent, type CiStatus } from "../components/ci";
 import { ErrorNote, ROW, useAction } from "../components/ui";
 import { api, post, repoApi, shortSha, timeAgo } from "../lib/api";
 
@@ -14,7 +14,24 @@ type JobDeployment = {
   canReview: boolean;
 };
 type Job = { id: number; name: string; status: CiStatus; log: string; steps: { name: string }[]; startedAt: string | null; finishedAt: string | null; deployment: JobDeployment | null };
-type RunDetail = { run: { id: number; sha: string; ref: string; status: CiStatus; message: string; subject: string; createdAt: string }; jobs: Job[] };
+type RunDetail = {
+  run: {
+    id: number;
+    sha: string;
+    ref: string;
+    refType: "branch" | "tag";
+    workflowName: string;
+    workflowPath: string;
+    event: CiEvent;
+    pullNumber: number | null;
+    inputs: string;
+    status: CiStatus;
+    message: string;
+    subject: string;
+    createdAt: string;
+  };
+  jobs: Job[];
+};
 
 export const Route = createFileRoute("/_authed/$owner/$repo/ci/$id")({
   loader: ({ context: { info }, params }) => api<RunDetail>(`${repoApi(info.repo.owner, info.repo.name)}/ci/runs/${params.id}`),
@@ -77,13 +94,27 @@ function RunPage() {
         <CiBadge status={run.status} />
       </div>
       <p className="text-muted m-0">
-        Run #{run.id} on <code>{run.ref}</code> at{" "}
+        <Link to="/$owner/$repo/ci" params={params} search={{ workflow: run.workflowPath }}>
+          {run.workflowName}
+        </Link>{" "}
+        #{run.id} · {EVENT_LABEL[run.event]}
+        {run.pullNumber !== null && (
+          <>
+            {" of "}
+            <Link to="/$owner/$repo/pull/$number" params={{ ...params, number: String(run.pullNumber) }}>
+              #{run.pullNumber}
+            </Link>
+          </>
+        )}{" "}
+        on {run.refType === "tag" ? "tag " : ""}
+        <code>{run.ref}</code> at{" "}
         <Link to="/$owner/$repo/commit/$sha" params={{ ...params, sha: run.sha }}>
           <code>{shortSha(run.sha)}</code>
         </Link>{" "}
         · {timeAgo(run.createdAt)}
       </p>
       {run.message && <p className="error">{run.message}</p>}
+      <RunInputs inputs={JSON.parse(run.inputs) as Record<string, string>} />
       {jobs.map((j) => (
         <section key={j.id} className={`card border-l-3 ${JOB_EDGE[j.status]}`} aria-labelledby={`job-${j.id}`}>
           <header>
@@ -102,6 +133,22 @@ function RunPage() {
         </section>
       ))}
     </div>
+  );
+}
+
+// What a manual run was started with.
+function RunInputs({ inputs }: { inputs: Record<string, string> }) {
+  const entries = Object.entries(inputs);
+  if (!entries.length) return null;
+  return (
+    <dl className="card body m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1" aria-label="Inputs">
+      {entries.map(([k, v]) => (
+        <div key={k} className="contents">
+          <dt className="font-mono text-muted">{k}</dt>
+          <dd className="m-0 font-mono wrap-anywhere">{v || <span className="text-muted">(empty)</span>}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

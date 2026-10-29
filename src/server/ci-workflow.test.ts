@@ -2,7 +2,9 @@ import { expect, test } from "bun:test";
 import { parseWorkflow } from "./ci-workflow";
 
 test("jobs may name an image, and job env is merged under step env", () => {
-  const [job] = parseWorkflow(`jobs:
+  const {
+    jobs: [job],
+  } = parseWorkflow(`jobs:
   deploy:
     image: ghcr.io/org/tools:1.2
     env:
@@ -19,7 +21,7 @@ test("jobs may name an image, and job env is merged under step env", () => {
 });
 
 test("a job without image or env still parses as before", () => {
-  const [job] = parseWorkflow("jobs:\n  t:\n    steps:\n      - run: echo hi\n");
+  const [job] = parseWorkflow("jobs:\n  t:\n    steps:\n      - run: echo hi\n").jobs;
   expect(job.image).toBeNull();
   expect(job.steps[0]).toEqual({ name: "echo hi", run: "echo hi", shell: null, timeoutMinutes: 10, env: {} });
 });
@@ -48,7 +50,7 @@ test("image names that could be read as CLI flags are refused", () => {
 });
 
 test("jobs may name an environment, alone or with a url", () => {
-  const jobs = parseWorkflow(`jobs:
+  const { jobs } = parseWorkflow(`jobs:
   staging:
     environment: staging
     steps: [{ run: ./deploy }]
@@ -72,3 +74,15 @@ test("environment names and urls are checked", () => {
   expect(env("prod.eu-1")).not.toThrow();
 });
 
+
+test("workflows have a name, and only the older .ether/ci.yml may leave out on:", () => {
+  const legacy = parseWorkflow("jobs:\n  t:\n    steps: [{ run: x }]\n");
+  expect(legacy.name).toBe("CI");
+  expect(legacy.on.push?.branches).toEqual({ ignore: false, patterns: ["**"] });
+  expect(() => parseWorkflow("jobs:\n  t:\n    steps: [{ run: x }]\n", ".ether/workflows/test.yml")).toThrow('needs "on"');
+  const named = parseWorkflow("name: Tests\non: [push, pull_request]\njobs:\n  t:\n    steps: [{ run: x }]\n", ".ether/workflows/test.yml");
+  expect(named.name).toBe("Tests");
+  expect(named.on.pull_request?.types).toEqual(["opened", "synchronize", "reopened"]);
+  expect(parseWorkflow("on: push\njobs:\n  t:\n    steps: [{ run: x }]\n", ".ether/workflows/lint.yaml").name).toBe("lint");
+  expect(() => parseWorkflow("on: schedule\njobs:\n  t:\n    steps: [{ run: x }]\n", ".ether/workflows/x.yml")).toThrow('.ether/workflows/x.yml: on: "schedule" isn\'t supported');
+});

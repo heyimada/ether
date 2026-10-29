@@ -1,10 +1,12 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
-import { cancel, enqueue } from "../ci";
+import { cancel, dispatch, DispatchError, isWorkflowPath, rerun, workflowFiles } from "../ci";
 import { deleteSecret, listSecrets, MAX_SECRET, SECRET_NAME_RE, setSecret } from "../ci-secrets";
 import { db } from "../db/client";
 import { ciJob, ciRun, user } from "../db/schema";
+import { parseWorkflow } from "../ci-workflow";
+import { EVENTS } from "../ci-triggers";
 import { deploymentOfJob, environmentOfJob, reviewerIds } from "../deploy";
 import * as git from "../git";
 
@@ -37,9 +39,17 @@ async function subject(path: string, sha: string) {
 }
 
 export const ciRoutes = new Elysia()
-  .get("/repos/:owner/:repo/ci/runs", async ({ request, params }) => {
+  // Newest first; ?workflow=<path> keeps one workflow's runs.
+  .get("/repos/:owner/:repo/ci/runs", async ({ request, params, query }) => {
     const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
-    const runs = db.select().from(ciRun).where(eq(ciRun.repoId, a.repo.id)).orderBy(desc(ciRun.id)).limit(50).all();
+    const workflow = typeof query.workflow === "string" && query.workflow ? query.workflow : null;
+    const runs = db
+      .select()
+      .from(ciRun)
+      .where(workflow ? and(eq(ciRun.repoId, a.repo.id), eq(ciRun.workflowPath, workflow)) : eq(ciRun.repoId, a.repo.id))
+      .orderBy(desc(ciRun.id))
+      .limit(50)
+      .all();
     return {
       enabled: a.repo.ciEnabled,
       runs: await Promise.all(
@@ -50,6 +60,39 @@ export const ciRoutes = new Elysia()
         })),
       ),
     };
+  })
+  // The default branch's workflows: when they run, what a manual run asks for, or why the file doesn't parse.
+  .get("/repos/:owner/:repo/ci/workflows", async ({ request, params }) => {
+    const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
+    const branch = await git.headBranch(a.path).catch(() => null);
+    const sha = branch ? await git.resolveCommit(a.path, `refs/heads/${branch}`) : null;
+    const files = sha ? await workflowFiles(a.path, sha) : [];
+    return {
+      branch,
+      workflows: files.map((f) => {
+        try {
+          const wf = parseWorkflow(f.content, f.path);
+          return { path: f.path, name: wf.name, events: EVENTS.filter((e) => wf.on[e]), inputs: wf.on.workflow_dispatch?.inputs ?? null, error: null };
+        } catch (e) {
+          return { path: f.path, name: f.path, events: [], inputs: null, error: (e as Error).message };
+        }
+      }),
+    };
+  })
+  // Runs a workflow that has workflow_dispatch, on a branch, with its inputs.
+  .post("/repos/:owner/:repo/ci/workflows/dispatch", async ({ request, params, body }) => {
+    const viewer = await requireUser(request);
+    const a = requireRepo(viewer, params.owner, params.repo, "write");
+    const b = (body ?? {}) as { workflow?: unknown; ref?: unknown; inputs?: unknown };
+    if (typeof b.workflow !== "string" || !isWorkflowPath(b.workflow)) throw new HttpError(400, "Name a workflow file, e.g. .ether/workflows/deploy.yml");
+    if (typeof b.ref !== "string" || !b.ref || b.ref.length > 255) throw new HttpError(400, "Name the branch to run on");
+    if (b.inputs !== undefined && (typeof b.inputs !== "object" || b.inputs === null || Array.isArray(b.inputs))) throw new HttpError(400, "inputs must be a map of names to values");
+    try {
+      return { run: { id: await dispatch(a.repo.id, a.path, b.workflow, b.ref, (b.inputs ?? {}) as Record<string, unknown>, viewer.id) } };
+    } catch (e) {
+      if (e instanceof DispatchError) throw new HttpError(e.message.startsWith("CI is turned off") ? 409 : 400, e.message);
+      throw e;
+    }
   })
   .get("/repos/:owner/:repo/ci/runs/:id", async ({ request, params }) => {
     const viewer = await readerOrVisitor(request);
@@ -74,8 +117,8 @@ export const ciRoutes = new Elysia()
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "write");
     const run = findRun(a, params.id);
-    const id = await enqueue(a.repo.id, a.path, run.sha, run.ref, viewer.id);
-    if (!id) throw new HttpError(409, "CI is turned off, or that commit has no .ether/ci.yml");
+    const id = await rerun(run, a.path, viewer.id);
+    if (!id) throw new HttpError(409, `CI is turned off, or that commit has no ${run.workflowPath}`);
     return { run: { id } };
   })
   .post("/repos/:owner/:repo/ci/runs/:id/cancel", async ({ request, params }) => {

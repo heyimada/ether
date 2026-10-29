@@ -143,7 +143,7 @@ export function Environments({ base, environments, candidates, isolation }: { ba
       </header>
       <div className="body stack-md">
         <p className="text-muted m-0">
-          A job with <code>environment: production</code> in <code>.ether/ci.yml</code> deploys there. Environments are created the first time a job names
+          A job with <code>environment: production</code> in a workflow deploys there. Environments are created the first time a job names
           one; here you can limit which branches may deploy, require an approval, add a wait and give them their own secrets.
         </p>
         {environments.length > 0 && (
