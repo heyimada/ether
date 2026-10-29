@@ -154,6 +154,9 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     expect(run.status).toBe("failure");
     expect(jobs.production.log).toContain(`Rejected by ${reviewer.username}`);
     expect(jobs.production.deployment!.status).toBe("rejected");
+    // A rejection is a decision, not broken checks, so the pusher's feed doesn't report it as one.
+    const feed = (await (await owner.ctx.get("/api/feed")).json()).events as { kind: string; repo: string; payload: { sha?: string } }[];
+    expect(feed.filter((e) => e.kind === "ci_failed" && e.payload.sha === v3)).toEqual([]);
 
     writeFileSync(join(src, "app.txt"), "v4\n");
     gitOk(src, ["commit", "-qam", "v4"]);

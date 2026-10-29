@@ -145,7 +145,7 @@ function admit(job: typeof ciJob.$inferSelect, env: Environment, run: typeof ciR
 async function settle(runId: number, path: string) {
   const run = db.select().from(ciRun).where(eq(ciRun.id, runId)).get();
   if (!run) return;
-  const jobs = db.select({ status: ciJob.status }).from(ciJob).where(eq(ciJob.runId, runId)).all();
+  const jobs = db.select({ id: ciJob.id, status: ciJob.status }).from(ciJob).where(eq(ciJob.runId, runId)).all();
   if (run.status === "cancelled") {
     db.update(ciJob).set({ status: "cancelled" }).where(and(eq(ciJob.runId, runId), inArray(ciJob.status, ["queued", "waiting", "running"]))).run();
     cancelDeployments(runId);
@@ -156,7 +156,10 @@ async function settle(runId: number, path: string) {
   if (jobs.some((j) => j.status === "waiting")) return void db.update(ciRun).set({ status: "waiting" }).where(eq(ciRun.id, runId)).run();
   const ok = jobs.every((j) => j.status === "success" || j.status === "skipped");
   db.update(ciRun).set({ status: ok ? "success" : "failure", finishedAt: new Date() }).where(eq(ciRun.id, runId)).run();
-  if (!ok) await reportFailure(run, path, "failure");
+  // "Checks failed" is news when something broke, not when a reviewer turned a deployment down on purpose.
+  const rejected = new Set(db.select({ jobId: deployment.jobId }).from(deployment).where(and(eq(deployment.runId, runId), eq(deployment.status, "rejected"))).all().map((d) => d.jobId));
+  const broke = jobs.some((j) => (j.status === "failure" || j.status === "error") && !rejected.has(j.id));
+  if (!ok && broke) await reportFailure(run, path, "failure");
 }
 
 // ---------- waiting deploy jobs ----------
