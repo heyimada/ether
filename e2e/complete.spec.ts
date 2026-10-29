@@ -75,7 +75,8 @@ test("branch picker filters refs and switches the tree", async ({ page }, info) 
   const picker = page.getByRole("dialog", { name: "Switch branch or tag" });
   await expect(picker.getByRole("option", { name: /main.*default/ })).toBeVisible();
   await picker.getByRole("combobox").fill("pick");
-  await expect(picker.getByRole("option")).toHaveCount(1);
+  // One branch matches; the other option offers to create a branch named "pick".
+  await expect(picker.getByRole("option").filter({ hasNotText: "Create branch" })).toHaveCount(1);
   await info.attach("picker", { body: await page.screenshot(), contentType: "image/png" });
   await picker.getByRole("option", { name: /feature\/picker/ }).click();
 
