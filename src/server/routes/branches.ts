@@ -13,11 +13,14 @@ export function validBranch(name: string) {
 
 // A branch, tag or full commit id the new branch starts at; never anything rev-parse would read as more.
 async function startPoint(path: string, from: string): Promise<string | null> {
+  if (/^[0-9a-f]{40}$/.test(from)) return git.resolveCommit(path, from);
+  // Only plain ref names: check-ref-format refuses ~ ^ : @{ and the rest of rev-parse's syntax.
+  if (Bun.spawnSync(["git", "check-ref-format", `refs/heads/${from}`]).exitCode !== 0) return null;
   for (const ref of [`refs/heads/${from}`, `refs/tags/${from}`]) {
     const sha = await git.resolveCommit(path, ref);
     if (sha) return sha;
   }
-  return /^[0-9a-f]{40}$/.test(from) ? git.resolveCommit(path, from) : null;
+  return null;
 }
 
 export const branchRoutes = new Elysia().post("/repos/:owner/:repo/branches", async ({ request, params, body }) => {
@@ -44,9 +47,11 @@ export const branchRoutes = new Elysia().post("/repos/:owner/:repo/branches", as
   } catch {
     throw new HttpError(409, `${name} clashes with an existing branch`);
   }
-  // Creating a branch here is a push as far as the activity feed and CI are concerned.
-  const after = await git.listRefs(a.path);
-  await recordPushEvents(a.repo.id, viewer.id, a.path, before, after);
-  await onPush(a.repo.id, a.path, before, after, viewer.id);
+  // Creating a branch here is a push as far as the activity feed and CI are concerned. Only this branch is
+  // news: anything someone pushed meanwhile is reported by their own push. The branch exists by now, so a
+  // failure here mustn't turn into an error for it.
+  const after = [...before, { name, kind: "branch" as const, sha }];
+  await recordPushEvents(a.repo.id, viewer.id, a.path, before, after).catch(() => {});
+  await onPush(a.repo.id, a.path, before, after, viewer.id).catch(() => {});
   return { branch: { name, sha } };
 });

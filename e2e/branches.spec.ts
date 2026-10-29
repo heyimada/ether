@@ -55,7 +55,12 @@ test("a second branch can be created from the branch picker, and the API checks 
   expect((await post({ name: "docs", from: "main" })).status()).toBe(409);
   for (const name of ["a..b", "-x", "HEAD", "x.lock", "a b"]) expect((await post({ name, from: "main" })).status(), name).toBe(400);
   expect((await post({ name: "y", from: "nope" })).status()).toBe(400);
-  expect((await post({ name: "y", from: "main~1" })).status()).toBe(400);
+  // Revision syntax isn't a starting point, even where history would let it resolve.
+  writeFileSync(join(src, "b.txt"), "b\n");
+  gitOk(src, ["add", "-A"]);
+  gitOk(src, ["commit", "-q", "-m", "b"]);
+  gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
+  for (const from of ["main~1", "main^", "main@{1}", "main^{/a}"]) expect((await post({ name: "y", from })).status(), from).toBe(400);
   // Tags and full commit ids work as starting points.
   expect((await post({ name: "from-tag", from: "v1" })).ok()).toBe(true);
   expect((await post({ name: "from-sha", from: sha })).ok()).toBe(true);
