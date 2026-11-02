@@ -131,7 +131,7 @@ jobs:
       - run: find pr -type l -delete
       # Missing when the fix job failed; fix.ts reports that. The job that made it ran the pull request's code, which could
       # have put anything in it, so it goes in its own directory where it can't replace fix.ts or anything else here.
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: fix
