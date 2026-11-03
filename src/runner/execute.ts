@@ -63,6 +63,18 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
   let proc: ReturnType<typeof Bun.spawn> | null = null;
   let box: { runtime: string; name: string } | null = null;
 
+  // Held in `proc` like a step, so stopping the job ends a clone that's taking long.
+  const git = async (args: string[]) => {
+    const running = Bun.spawn(["git", ...args], { stdout: "ignore", stderr: "pipe", stdin: "ignore", detached: process.platform !== "win32" });
+    proc = running;
+    const timer = setTimeout(() => killTree(running), 10 * 60_000);
+    const output = await new Response(running.stderr as ReadableStream<Uint8Array>).text();
+    const code = await running.exited;
+    clearTimeout(timer);
+    proc = null;
+    return { code, output };
+  };
+
   const execute = async (): Promise<JobResult> => {
     const append = channel.log;
     const fail = (message: string): JobResult => {
@@ -77,8 +89,10 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
     let dir: string | null = null;
     try {
       dir = mkdtempSync(join(tmpdir(), "ether-ci-"));
-      const clone = await collect("git", ["clone", "--quiet", "--no-checkout", job.checkout.url, dir], 10 * 60_000);
-      const checkout = clone.code === 0 ? await collect("git", ["-C", dir, "checkout", "--quiet", "--detach", job.checkout.sha], 10 * 60_000) : clone;
+      const clone = await git(["clone", "--quiet", "--no-checkout", job.checkout.url, dir]);
+      const checkout = clone.code === 0 && !stopped ? await git(["-C", dir, "checkout", "--quiet", "--detach", job.checkout.sha]) : clone;
+      // Nothing more to do for a job stopped by now, least of all pulling an image for it.
+      if (stopped) return "cancelled";
       if (checkout.code !== 0) return fail(`Could not check out ${job.checkout.sha}: ${checkout.output}`);
 
       if (job.isolation === "container") {

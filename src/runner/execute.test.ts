@@ -85,6 +85,14 @@ test("stopping a job ends what its step started", async () => {
   expect(log).not.toContain("▶ echo never");
 });
 
+test("a job stopped during its checkout ends there", async () => {
+  let log = "";
+  const job = startJob(assignment([step("echo never")], { isolation: "container", image: "example/never" }), { log: (t) => void (log += t) }, "test");
+  job.stop();
+  expect(await job.done).toBe("cancelled");
+  expect(log).toBe("");
+});
+
 test("a step that runs out of time fails the job", async () => {
   const { result, log } = await run(assignment([step("sleep 60", { timeoutMinutes: 0.01 })]));
   expect(result).toBe("failure");
