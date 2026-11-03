@@ -171,7 +171,11 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
     } finally {
       if (box) await removeContainer(box.runtime, box.name);
       box = null;
-      if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+      try {
+        if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+      } catch {
+        // A leftover temp dir shouldn't change how the job went.
+      }
     }
   };
 
