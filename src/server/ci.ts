@@ -1,13 +1,12 @@
 import { and, asc, desc, eq, inArray, lt, or } from "drizzle-orm";
-import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
-import { chownWorkspaceArgs, cli, collect, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, instanceLabel, shellCommand } from "./ci-container";
+import { resolve } from "node:path";
+import { removeLeftoverContainers, startJob } from "../runner/execute";
+import type { Isolation, JobAssignment, JobResult, RunningJob } from "../runner/protocol";
+import { instanceLabel } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
 import { conditionHolds, matrixEnvName, type MatrixValues, type NeedStatus } from "./ci-graph";
 import { inputEnvName, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
-import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type EnvValue, type ParsedWorkflow, type Shell, type Step } from "./ci-workflow";
+import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type EnvValue, type ParsedWorkflow, type Step } from "./ci-workflow";
 import { config } from "./config";
 import { db } from "./db/client";
 import { ciJob, ciRun, deployment, instanceSetting, issue, repo, user } from "./db/schema";
@@ -15,40 +14,23 @@ import { cancelDeployments, deploymentOfJob, ensureEnvironment, environmentOfJob
 import { gate } from "./deploy-rules";
 import { record } from "./events";
 import * as git from "./git";
-import { LogMasker } from "./log-mask";
 
 // CI runs workflows from .ether/workflows/*.yml (and the older .ether/ci.yml) when what their `on:`
 // names happens: a push, a pull request or someone starting one by hand. It is opt-in twice: an admin allows it for the server,
-// and an owner turns it on per repository. Jobs run one at a time from a fresh checkout. By default
-// each job runs in its own container (see ci-container.ts) and sees nothing of the server; an admin
-// can instead let jobs run on the host as Ether's own user, which gives every writer the server.
+// and an owner turns it on per repository. This file decides what runs when; a runner (see
+// ../runner/execute.ts) does the running, from an assignment that holds all it needs. By default each job
+// runs in its own container and sees nothing of the server; an admin can instead let jobs run on the host
+// as Ether's own user, which gives every writer the server.
 // Repository secrets are only ever passed to container jobs. A job that names an environment is a
 // deployment (see deploy.ts): it may first have to wait for a reviewer or a timer, which it does outside
 // the queue, so other runs go on meanwhile.
 
 const MAX_LOG = 1024 * 1024;
-export type Isolation = "container" | "host";
 
 const setting = (key: string) => db.select().from(instanceSetting).where(eq(instanceSetting.key, key)).get()?.value;
 export const ciAllowed = () => setting("ciEnabled") === "true";
 // Containers unless an admin chose the host explicitly.
 export const ciIsolation = (): Isolation => (setting("ciIsolation") === "host" ? "host" : "container");
-
-function command(shell: Shell | null, run: string): string[] {
-  const chosen = shell ?? (Bun.which("bash") ? "bash" : process.platform === "win32" ? "cmd" : "sh");
-  switch (chosen) {
-    case "bash":
-      return [Bun.which("bash") ?? "bash", "-e", "-c", run];
-    case "sh":
-      return ["sh", "-e", "-c", run];
-    case "pwsh":
-      return ["pwsh", "-NoProfile", "-NonInteractive", "-Command", run];
-    case "powershell":
-      return ["powershell", "-NoProfile", "-NonInteractive", "-Command", run];
-    case "cmd":
-      return ["cmd", "/d", "/s", "/c", run];
-  }
-}
 
 type Run = typeof ciRun.$inferSelect;
 
@@ -71,21 +53,11 @@ function ciVars(run: Run, owner: string, name: string): Record<string, string> {
 const pullBase = (run: Run) =>
   run.pullNumber === null ? null : (db.select({ base: issue.baseRef }).from(issue).where(and(eq(issue.repoId, run.repoId), eq(issue.number, run.pullNumber))).get()?.base ?? null);
 
-// On the host, only what tools need to work: no ETHER_* settings, auth secret or tokens.
-function hostEnv() {
-  const keep = ["PATH", "Path", "PATHEXT", "SYSTEMROOT", "SystemRoot", "COMSPEC", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE", "LANG", "APPDATA", "LOCALAPPDATA", "PROGRAMFILES", "ProgramFiles"];
-  const env: Record<string, string> = {};
-  for (const k of keep) if (process.env[k]) env[k] = process.env[k]!;
-  return env;
-}
-
 const secretNames = (steps: Step[]) => [...new Set(steps.flatMap((s) => Object.values(s.env ?? {}).flatMap((v) => (typeof v === "string" ? [] : [v.secret]))))];
 const resolveEnv = (env: Record<string, EnvValue> | undefined, secrets: Map<string, string>) =>
   Object.fromEntries(Object.entries(env ?? {}).map(([k, v]) => [k, typeof v === "string" ? v : secrets.get(v.secret)!]));
 
 const instance = () => instanceLabel(resolve(config.dataDir));
-
-const removeContainer = (runtime: string, name: string) => Bun.spawn([runtime, "rm", "--force", name], { stdout: "ignore", stderr: "ignore" }).exited;
 
 // ---------- scheduler ----------
 
@@ -93,8 +65,8 @@ type Job = typeof ciJob.$inferSelect;
 // Jobs run side by side up to this many at a time, across all runs; each container job gets its own
 // ETHER_CI_MEMORY and ETHER_CI_CPUS.
 const MAX_ACTIVE = Math.max(1, Math.floor(Number(process.env.ETHER_CI_JOBS) || 2));
-// What a running job holds, so it can be stopped: its process and container, and whether it was told to stop.
-type Active = { runId: number; proc: ReturnType<typeof Bun.spawn> | null; container: { runtime: string; name: string } | null; stopped: boolean };
+// A running job: its runner's handle, so it can be stopped, and whether it was told to stop.
+type Active = { runId: number; job: RunningJob | null; stopped: boolean };
 const active = new Map<number, Active>();
 const DONE = new Set<Job["status"]>(["success", "failure", "error", "cancelled", "skipped"]);
 const FINISHED_RUN = new Set<Run["status"]>(["success", "failure", "cancelled", "error"]);
@@ -233,20 +205,35 @@ async function runJob(job: Job) {
   }
   if (env && !admit(job, env, run)) return refreshRun(run.id);
   // Everything up to here is synchronous, so pump() sees this job as taken before it looks for the next.
-  const a: Active = { runId: run.id, proc: null, container: null, stopped: false };
+  const a: Active = { runId: run.id, job: null, stopped: false };
   active.set(job.id, a);
   db.update(ciRun).set({ status: "running", startedAt: run.startedAt ?? new Date() }).where(and(eq(ciRun.id, run.id), inArray(ciRun.status, ["queued", "waiting", "running"]))).run();
   if (env) {
     setDeployment(job.id, { status: "in_progress" });
     supersede(run, env.name);
   }
-  const path = git.repoPath(r.owner!, r.repo.name);
-  const matrix = Object.entries(JSON.parse(job.matrix) as MatrixValues).map(([k, v]) => [matrixEnvName(k), v]);
-  const vars = { ...ciVars(run, r.owner!, r.repo.name), CI_JOB: job.key || job.name, ...Object.fromEntries(matrix) };
-  let result: Awaited<ReturnType<typeof executeJob>>;
+  db.update(ciJob).set({ status: "running", startedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
+  // A deploy job already says whether it waited and who approved it.
+  let log = job.log ?? "";
+  const append = (text: string) => {
+    if (log.length >= MAX_LOG) return;
+    log += text.slice(0, MAX_LOG - log.length);
+    db.update(ciJob).set({ log }).where(eq(ciJob.id, job.id)).run();
+  };
+  let result: JobResult = "error";
   try {
-    result = await executeJob(job, r.repo.id, path, { sha: run.sha, vars }, env, a);
+    const assignment = assignmentFor(job, run, r.owner!, r.repo.name, env);
+    if (typeof assignment === "string") append(`${assignment}\n`);
+    else {
+      if (env) append(`▶ Deploying to ${env.name}${job.url ? ` (${job.url})` : ""}\n`);
+      a.job = startJob(assignment, { log: append }, instance());
+      result = await a.job.done;
+    }
+  } catch (e) {
+    append(`\nRunner error: ${(e as Error).message}\n`);
   } finally {
+    const cancelled = a.stopped || currentStatus(run.id) === "cancelled";
+    db.update(ciJob).set({ log, status: cancelled ? "cancelled" : result === "success" ? "success" : "failure", finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
     active.delete(job.id);
   }
   const stopped = a.stopped || currentStatus(run.id) === "cancelled";
@@ -268,22 +255,9 @@ async function runJob(job: Job) {
   await refreshRun(run.id);
 }
 
-// A host step runs in its own process group, so stopping it also stops what it started (a `sleep`, a
-// test runner's workers), which would otherwise keep running and hold its output open.
-function killTree(proc: ReturnType<typeof Bun.spawn>) {
-  try {
-    if (process.platform !== "win32") return void process.kill(-proc.pid, "SIGKILL");
-  } catch {
-    // Already gone, or not a group leader (a container CLI): fall through.
-  }
-  proc.kill();
-}
-
 function stop(a: Active) {
   a.stopped = true;
-  if (a.proc) killTree(a.proc);
-  // Killing the CLI doesn't stop what it started inside the container.
-  if (a.container) void removeContainer(a.container.runtime, a.container.name);
+  a.job?.stop();
 }
 
 // When Ether stops: host steps run in their own process group, so a signal to Ether no longer reaches them;
@@ -465,128 +439,25 @@ async function reportFailure(run: { id: number; repoId: number; sha: string; ref
 
 const currentStatus = (runId: number) => db.select({ s: ciRun.status }).from(ciRun).where(eq(ciRun.id, runId)).get()?.s;
 
-async function executeJob(job: Job, repoId: number, repoPath: string, ctx: { sha: string; vars: Record<string, string> }, env: Environment | null, a: Active) {
-  // A deploy job already says whether it waited and who approved it.
-  let log = job.log ?? "";
-  const append = (s: string) => {
-    if (log.length < MAX_LOG) log += s.slice(0, MAX_LOG - log.length);
-  };
-  const save = (status?: typeof ciJob.$inferInsert.status) =>
-    db.update(ciJob).set({ log, ...(status ? { status } : {}) }).where(eq(ciJob.id, job.id)).run();
-  db.update(ciJob).set({ status: "running", startedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
-  const dir = mkdtempSync(join(tmpdir(), "ether-ci-"));
+// All a runner needs for a job, secrets filled in, or why the job can't have one.
+function assignmentFor(job: Job, run: Run, owner: string, name: string, env: Environment | null): JobAssignment | string {
   const steps = JSON.parse(job.steps) as Step[];
   const isolation = ciIsolation();
-  let box: { runtime: string; name: string } | null = null;
-  let status: "success" | "failure" | "error" = "success";
-  const fail = (message: string) => {
-    append(`${message}\n`);
-    status = "error";
-    return status;
+  const wanted = secretNames(steps);
+  if (wanted.length && isolation === "host")
+    return `This job uses secrets (${wanted.join(", ")}), which are only passed to jobs that run in containers. An admin can switch CI to containers under Admin → Access.`;
+  const secrets = loadSecrets(run.repoId, wanted, env?.id ?? null);
+  const matrix = Object.entries(JSON.parse(job.matrix) as MatrixValues).map(([k, v]) => [matrixEnvName(k), v]);
+  return {
+    jobId: job.id,
+    runId: run.id,
+    isolation,
+    image: job.image,
+    checkout: { url: git.repoPath(owner, name), sha: run.sha },
+    vars: { ...ciVars(run, owner, name), CI_JOB: job.key || job.name, ...Object.fromEntries(matrix), ...(env ? { CI_ENVIRONMENT: env.name } : {}) },
+    mask: [...secrets.values()],
+    steps: steps.map((s) => ({ name: s.name, run: s.run, shell: s.shell, timeoutMinutes: s.timeoutMinutes, env: resolveEnv(s.env, secrets) })),
   };
-  try {
-    const wanted = secretNames(steps);
-    if (wanted.length && isolation === "host")
-      return fail(`This job uses secrets (${wanted.join(", ")}), which are only passed to jobs that run in containers. An admin can switch CI to containers under Admin → Access.`);
-    const secrets = loadSecrets(repoId, wanted, env?.id ?? null);
-    if (env) append(`▶ Deploying to ${env.name}${job.url ? ` (${job.url})` : ""}\n`);
-    const values = [...secrets.values()];
-    // Everything that goes into the log passes a masker, step names (often the command itself) included.
-    const masked = (text: string) => {
-      const m = new LogMasker(values);
-      return m.push(text) + m.flush();
-    };
-
-    const clone = Bun.spawnSync(["git", "clone", "--quiet", "--no-checkout", repoPath, dir]);
-    const checkout = clone.exitCode === 0 ? Bun.spawnSync(["git", "-C", dir, "checkout", "--quiet", "--detach", ctx.sha]) : clone;
-    if (checkout.exitCode !== 0) return fail(`Could not check out ${ctx.sha}: ${new TextDecoder().decode(checkout.stderr)}`);
-
-    if (isolation === "container") {
-      const runtime = containerRuntime();
-      if (!runtime) return fail("No container runtime found: install Docker or Podman on the server, or let an admin run CI on the host under Admin → Access (unsafe).");
-      const image = job.image ?? DEFAULT_IMAGE;
-      box = { runtime, name: `ether-ci-${job.runId}-${job.id}-${randomBytes(4).toString("hex")}` };
-      a.container = box;
-      append(`▶ Starting ${image} with ${basename(runtime)}\n`);
-      save();
-      // Creating pulls the image when it isn't there yet, which can take a while.
-      if ((await cli(runtime, createArgs(box.name, image, instance()), append, 15 * 60_000)) !== 0) return fail(`✖ Could not create a container from ${image}`);
-      if ((await cli(runtime, ["cp", `${dir}/.`, `${box.name}:/workspace`], append, 10 * 60_000)) !== 0) return fail("✖ Could not copy the checkout into the container");
-      if ((await cli(runtime, ["start", box.name], append, 60_000)) !== 0) return fail("✖ Could not start the container");
-      // `cp` leaves the checkout owned by root; an image that runs as another user needs it to be theirs.
-      // The image decides what `sh` and `id` do here, so this runs like every other call: async and with a timeout.
-      const who = await collect(runtime, ["exec", box.name, "sh", "-c", 'echo "$(id -u):$(id -g)"'], 30_000);
-      // stdout and stderr arrive together, so pick out the uid:gid line.
-      const owner = who.code === 0 ? (/^(\d+:\d+)$/m.exec(who.output)?.[1] ?? null) : null;
-      if (owner && owner !== "0:0" && (await cli(runtime, chownWorkspaceArgs(box.name, owner), append, 5 * 60_000)) !== 0)
-        append(`Could not hand /workspace to the image's user ${owner}; steps may not be able to write to it\n`);
-      append("\n");
-    }
-
-    for (const step of steps) {
-      if (a.stopped || currentStatus(job.runId) === "cancelled") break;
-      append(masked(`▶ ${step.name}\n`));
-      save();
-      const started = Date.now();
-      const vars = { ...ctx.vars, ...(env ? { CI_ENVIRONMENT: env.name } : {}), ...resolveEnv(step.env, secrets) };
-      let proc: ReturnType<typeof Bun.spawn>;
-      try {
-        if (box) {
-          // The job's variables go in on stdin; the CLI keeps Ether's own environment.
-          const script = envScript(vars);
-          const exec = Bun.spawn([box.runtime, ...execArgs(box.name, shellCommand(step.shell, step.run))], { stdout: "pipe", stderr: "pipe", stdin: "pipe" });
-          exec.stdin.write(script);
-          await exec.stdin.end();
-          proc = exec;
-        } else
-          proc = Bun.spawn(command(step.shell, step.run), {
-            cwd: dir,
-            env: { ...hostEnv(), ...vars },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "ignore",
-            detached: process.platform !== "win32",
-          });
-      } catch (e) {
-        return fail(masked(`✖ ${step.name}: ${(e as Error).message}`));
-      }
-      a.proc = proc;
-      const timer = setTimeout(() => {
-        append(`\n✖ Timed out after ${step.timeoutMinutes} minutes\n`);
-        killTree(proc);
-      }, step.timeoutMinutes * 60_000);
-      // One masker and decoder per stream, so a secret or a character split across chunks stays whole.
-      const pump = async (s: ReadableStream<Uint8Array>) => {
-        const decoder = new TextDecoder();
-        const mask = new LogMasker(values);
-        for await (const chunk of s) {
-          append(mask.push(decoder.decode(chunk, { stream: true })));
-          save();
-        }
-        append(mask.flush());
-      };
-      await Promise.all([pump(proc.stdout as ReadableStream<Uint8Array>), pump(proc.stderr as ReadableStream<Uint8Array>)]);
-      const code = await proc.exited;
-      clearTimeout(timer);
-      a.proc = null;
-      append(masked(`${code === 0 ? "✔" : "✖"} ${step.name} (exit ${code}, ${((Date.now() - started) / 1000).toFixed(1)}s)\n\n`));
-      if (code !== 0) {
-        status = "failure";
-        break;
-      }
-    }
-    return status;
-  } catch (e) {
-    append(`\nRunner error: ${(e as Error).message}\n`);
-    status = "error";
-    return status;
-  } finally {
-    if (box) await removeContainer(box.runtime, box.name);
-    a.container = null;
-    const cancelled = a.stopped || currentStatus(job.runId) === "cancelled";
-    db.update(ciJob).set({ log, status: cancelled ? "cancelled" : status === "success" ? "success" : "failure", finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
-    rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
-  }
 }
 
 // ---------- triggers ----------
@@ -812,16 +683,6 @@ export function checkStatus(run: typeof ciRun.$inferSelect): typeof ciRun.$infer
 }
 
 // Runs interrupted by a restart can't resume mid-step; queued ones simply continue.
-// Containers of this server's jobs that a crash or restart interrupted; another Ether's on the same daemon stay.
-// Async and with timeouts, so a slow or wedged daemon can't hold up the server's start.
-async function removeLeftoverContainers() {
-  const runtime = containerRuntime();
-  if (!runtime) return;
-  const list = await collect(runtime, ["ps", "--all", "--quiet", "--filter", "label=ether.ci=1", "--filter", `label=ether.ci.instance=${instance()}`], 30_000);
-  const ids = list.code === 0 ? list.output.split(/\s+/).filter(Boolean) : [];
-  if (ids.length) await collect(runtime, ["rm", "--force", ...ids], 60_000);
-}
-
 export function resumeQueue() {
   // Runs a restart cut off end as errored, with everything of them that hadn't finished: their running job,
   // and also queued or waiting deploy jobs, which nothing would pick up again.
@@ -838,6 +699,6 @@ export function resumeQueue() {
   // In the background so a slow daemon doesn't hold up the server's start; pump() waits for it, also
   // when a push queues a run meanwhile, since the sweep would match that job's container too.
   swept = false;
-  sweep = removeLeftoverContainers().catch((e) => console.error("Removing leftover CI containers failed:", e));
+  sweep = removeLeftoverContainers(instance()).catch((e) => console.error("Removing leftover CI containers failed:", e));
   pump();
 }
