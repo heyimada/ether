@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chownWorkspaceArgs, collect, createArgs, envScript, execArgs, IMAGE_RE, instanceLabel, shellCommand } from "./ci-container";
@@ -42,6 +42,25 @@ test("the exec wrapper evaluates the variables from stdin and gives the step an 
   expect(out.stdout).toBe("t'o$k|a\nb|end\n");
 });
 
+test("a step's script reaches the container on stdin, as a file only its user can read; never as an argument", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ether-script-test-"));
+  const file = join(dir, "step.sh");
+  const run = `echo "$SECRET" 'it''s' $(echo sub)\nexit 3`;
+  try {
+    const command = shellCommand(null, file);
+    expect(command.join(" ")).not.toContain("echo");
+    const args = execArgs("c1", command);
+    const wrapper = args.slice(args.indexOf("c1") + 1);
+    const out = spawnSync(wrapper[0], wrapper.slice(1), { input: envScript({ SECRET: "s3cret" }, { file, run }), encoding: "utf8", env: { PATH: process.env.PATH } });
+    expect(out.stdout).toBe("s3cret its sub\n");
+    expect(out.status).toBe(3);
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  expect(() => envScript({}, { file, run: "a\0b" })).toThrow("NUL");
+});
+
 test("the checkout is handed to the image's user as root, inside the container only", () => {
   expect(chownWorkspaceArgs("c1", "101:101")).toEqual(["exec", "--user", "0", "c1", "chown", "-R", "101:101", "/workspace"]);
 });
@@ -65,8 +84,8 @@ test("the variables script round-trips any value through a real shell, including
 });
 
 test("steps default to bash when the image has it, and Windows shells are refused", () => {
-  expect(shellCommand(null, "echo $1").at(-1)).toBe("echo $1");
-  expect(shellCommand("bash", "x")).toEqual(["bash", "-e", "-c", "x"]);
+  expect(shellCommand(null, "/tmp/s.sh").at(-1)).toBe("/tmp/s.sh");
+  expect(shellCommand("bash", "/tmp/s.sh")).toEqual(["bash", "-e", "/tmp/s.sh"]);
   expect(() => shellCommand("cmd", "x")).toThrow("isn't available in a container");
   expect(() => shellCommand("powershell", "x")).toThrow();
 });

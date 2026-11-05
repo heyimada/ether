@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { chownWorkspaceArgs, cli, collect, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, shellCommand } from "../server/ci-container";
+import { chownWorkspaceArgs, cli, collect, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, scriptExtension, shellCommand } from "../server/ci-container";
 import { LogMasker } from "../server/log-mask";
 import { evalTemplate, fillTemplate, holds, toText, type Context, type Status, type Value } from "./expr";
 import type { JobAssignment, JobChannel, JobResult, RunningJob, Shell } from "./protocol";
@@ -12,19 +12,23 @@ import { parseOutputs } from "./step-output";
 // By default each job runs in a container (see ci-container.ts) and sees nothing of the machine. Everything
 // this does on Ether's behalf comes in through the assignment and goes out through the channel.
 
-function command(shell: Shell | null, run: string): string[] {
-  const chosen = shell ?? (Bun.which("bash") ? "bash" : process.platform === "win32" ? "cmd" : "sh");
-  switch (chosen) {
+// The shell a host step runs with when it names none.
+const hostShell = (shell: Shell | null): Shell => shell ?? (Bun.which("bash") ? "bash" : process.platform === "win32" ? "cmd" : "sh");
+
+// Runs a step's script file. Only the path is on the command line, where `ps` would show a secret in the script.
+function command(shell: Shell, file: string): string[] {
+  const dotSourced = `. '${file.replaceAll("'", "''")}'`;
+  switch (shell) {
     case "bash":
-      return [Bun.which("bash") ?? "bash", "-e", "-c", run];
+      return [Bun.which("bash") ?? "bash", "-e", file];
     case "sh":
-      return ["sh", "-e", "-c", run];
+      return ["sh", "-e", file];
     case "pwsh":
-      return ["pwsh", "-NoProfile", "-NonInteractive", "-Command", run];
+      return ["pwsh", "-NoProfile", "-NonInteractive", "-Command", dotSourced];
     case "powershell":
-      return ["powershell", "-NoProfile", "-NonInteractive", "-Command", run];
+      return ["powershell", "-NoProfile", "-NonInteractive", "-Command", dotSourced];
     case "cmd":
-      return ["cmd", "/d", "/s", "/c", run];
+      return ["cmd", "/d", "/c", file];
   }
 }
 
@@ -94,6 +98,9 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
       return m.push(text) + m.flush();
     };
     let dir: string | null = null;
+    // Scripts and output files of host steps: beside the checkout, never in it, where `git status` or
+    // `git add -A` would find them. mkdtemp makes it readable by the runner's user alone.
+    let work: string | null = null;
     try {
       dir = mkdtempSync(join(tmpdir(), "ether-ci-"));
       const clone = await git(["clone", "--quiet", "--no-checkout", job.checkout.url, dir]);
@@ -102,6 +109,7 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
       if (stopped) return "cancelled";
       if (checkout.code !== 0) return fail(`Could not check out ${job.checkout.sha}: ${checkout.output}`);
 
+      if (job.isolation === "host") work = mkdtempSync(join(tmpdir(), "ether-ci-work-"));
       if (job.isolation === "container") {
         const runtime = containerRuntime();
         if (!runtime) return fail("No container runtime found: install Docker or Podman on the machine that runs this job, or let it run jobs on the host (unsafe).");
@@ -138,14 +146,31 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
         let name: string;
         let script: string;
         const env: Record<string, string> = {};
+        // As on GitHub, a step that doesn't run can't fail: an env value that can't be worked out (say from the
+        // outputs of a step that was skipped) only counts once the step's if: says it runs. The if: sees the
+        // values that could be.
+        let problem: Error | null = null;
+        for (const [key, value] of Object.entries(step.env)) {
+          try {
+            env[key] = toText(evalTemplate(value, context(env), status()));
+          } catch (e) {
+            problem ??= e as Error;
+          }
+        }
         try {
-          for (const [key, value] of Object.entries(step.env)) env[key] = toText(evalTemplate(value, context(env), status()));
-          name = fillTemplate(step.name, context(env), status());
           if (!holds(step.if, context(env), status())) {
-            append(masked(`⊘ ${name} (skipped)\n\n`));
+            let shown = step.name;
+            try {
+              shown = fillTemplate(step.name, context(env), status());
+            } catch {
+              // The name as written will do for a step that's skipped.
+            }
+            append(masked(`⊘ ${shown} (skipped)\n\n`));
             if (step.id) steps[step.id] = { outcome: "skipped", conclusion: "skipped", outputs: {} };
             continue;
           }
+          if (problem) throw problem;
+          name = fillTemplate(step.name, context(env), status());
           script = fillTemplate(step.run, context(env), status());
         } catch (e) {
           append(masked(`✖ ${step.name}: ${(e as Error).message}\n\n`));
@@ -154,20 +179,24 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
         }
         append(masked(`▶ ${name}\n`));
         const started = Date.now();
-        // Steps write their outputs to this file, a fresh one each.
-        const outputFile = box ? `/tmp/ether-ci-output-${index}` : join(dir, `.ether-ci-output-${randomBytes(6).toString("hex")}`);
+        // Steps write their outputs to this file, a fresh one each, and their script is read from another.
+        const tag = `${index}-${randomBytes(6).toString("hex")}`;
+        const outputFile = box ? `/tmp/ether-ci-output-${tag}` : join(work!, `output-${tag}`);
+        const shell = box ? step.shell : hostShell(step.shell);
+        const scriptFile = box ? `/tmp/ether-ci-step-${tag}${scriptExtension(shell)}` : join(work!, `step-${tag}${scriptExtension(shell)}`);
         const vars = { ...job.vars, ...env, CI_OUTPUT: outputFile };
         let running: ReturnType<typeof Bun.spawn>;
         try {
           if (box) {
-            // The job's variables go in on stdin; the CLI keeps Ether's own environment.
-            const variables = envScript(vars);
-            const exec = Bun.spawn([box.runtime, ...execArgs(box.name, shellCommand(step.shell, script))], { stdout: "pipe", stderr: "pipe", stdin: "pipe" });
+            // The job's variables and the script go in on stdin; the CLI keeps Ether's own environment.
+            const variables = envScript(vars, { file: scriptFile, run: script });
+            const exec = Bun.spawn([box.runtime, ...execArgs(box.name, shellCommand(shell, scriptFile))], { stdout: "pipe", stderr: "pipe", stdin: "pipe" });
             exec.stdin.write(variables);
             await exec.stdin.end();
             running = exec;
-          } else
-            running = Bun.spawn(command(step.shell, script), {
+          } else {
+            writeFileSync(scriptFile, script, { mode: 0o600 });
+            running = Bun.spawn(command(shell!, scriptFile), {
               cwd: dir,
               env: { ...hostEnv(), ...vars },
               stdout: "pipe",
@@ -175,6 +204,7 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
               stdin: "ignore",
               detached: process.platform !== "win32",
             });
+          }
         } catch (e) {
           return fail(masked(`✖ ${name}: ${(e as Error).message}`));
         }
@@ -198,11 +228,12 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
         // The file belongs to the step's own user and may be anything a step wrote, so it's read like any other output.
         let written = "";
         if (box) {
-          const read = await collect(box.runtime, ["exec", box.name, "sh", "-c", `cat ${outputFile} 2>/dev/null; rm -f ${outputFile}`], 30_000, MAX_OUTPUT_FILE);
+          const read = await collect(box.runtime, ["exec", box.name, "sh", "-c", `cat ${outputFile} 2>/dev/null; rm -f ${outputFile} ${scriptFile}`], 30_000, MAX_OUTPUT_FILE);
           if (read.code === 0) written = read.output;
-        } else if (existsSync(outputFile)) {
-          written = readFileSync(outputFile, "utf8").slice(0, MAX_OUTPUT_FILE);
+        } else {
+          if (existsSync(outputFile)) written = readFileSync(outputFile, "utf8").slice(0, MAX_OUTPUT_FILE);
           rmSync(outputFile, { force: true });
+          rmSync(scriptFile, { force: true });
         }
         const outcome = code === 0 ? "success" : "failure";
         if (step.id) steps[step.id] = { outcome, conclusion: code === 0 || step.continueOnError ? "success" : "failure", outputs: parseOutputs(written) };
@@ -227,6 +258,7 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
       box = null;
       try {
         if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+        if (work) rmSync(work, { recursive: true, force: true, maxRetries: 3 });
       } catch {
         // A leftover temp dir shouldn't change how the job went.
       }

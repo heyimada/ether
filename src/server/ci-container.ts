@@ -54,21 +54,27 @@ export function createArgs(name: string, image: string, instance: string): strin
   ];
 }
 
-// The shell command for one step inside the container. Without a shell, bash when the image has it, else sh.
-export function shellCommand(shell: string | null, run: string): string[] {
+// The shell command that runs one step's script file inside the container. Without a shell, bash when the image
+// has it, else sh. Only the file's path is on the command line: a script can hold secrets, and a container's
+// command lines show in the host's `ps` like any other process's.
+export function shellCommand(shell: string | null, file: string): string[] {
   switch (shell) {
     case null:
-      return ["sh", "-c", 'if command -v bash >/dev/null 2>&1; then exec bash -e -c "$1"; else exec sh -e -c "$1"; fi', "sh", run];
+      return ["sh", "-c", 'if command -v bash >/dev/null 2>&1; then exec bash -e "$1"; else exec sh -e "$1"; fi', "sh", file];
     case "bash":
-      return ["bash", "-e", "-c", run];
+      return ["bash", "-e", file];
     case "sh":
-      return ["sh", "-e", "-c", run];
+      return ["sh", "-e", file];
     case "pwsh":
-      return ["pwsh", "-NoProfile", "-NonInteractive", "-Command", run];
+      // As GitHub runs it: dot-sourced, so the step's own `exit` and errors decide how it ends.
+      return ["pwsh", "-NoProfile", "-NonInteractive", "-Command", `. '${file.replaceAll("'", "''")}'`];
     default:
       throw new Error(`shell "${shell}" isn't available in a container; use sh, bash or pwsh`);
   }
 }
+
+// The file name a step's script gets, by its shell: pwsh only runs .ps1 files.
+export const scriptExtension = (shell: string | null) => (shell === "pwsh" || shell === "powershell" ? ".ps1" : shell === "cmd" ? ".cmd" : ".sh");
 
 // A step's variables reach the container on the exec's stdin, as a script sh evaluates before running the
 // step. They never go through the CLI's own environment, where a job could set DOCKER_HOST, LD_PRELOAD and
@@ -78,14 +84,18 @@ export function shellCommand(shell: string | null, run: string): string[] {
 const shellQuote = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
 
 // A script sh can evaluate to export the variables; values may span lines and contain anything but NUL.
-export function envScript(vars: Record<string, string>): string {
-  return Object.entries(vars)
+// With `script`, it also writes the step's script to that file, readable by its user alone, the same way.
+export function envScript(vars: Record<string, string>, script?: { file: string; run: string }): string {
+  const exports = Object.entries(vars)
     .map(([name, value]) => {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`"${name}" isn't a valid variable name`);
       if (value.includes("\0")) throw new Error(`${name} contains a NUL character, which environment variables can't hold`);
       return `export ${name}=${shellQuote(value)}\n`;
     })
     .join("");
+  if (!script) return exports;
+  if (script.run.includes("\0")) throw new Error("The script contains a NUL character");
+  return `${exports}(umask 077 && printf '%s' ${shellQuote(script.run)} > ${shellQuote(script.file)}) || exit 1\n`;
 }
 
 // Runs `command` in the container after evaluating the variables script written to stdin; the step itself

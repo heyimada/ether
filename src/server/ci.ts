@@ -100,15 +100,24 @@ const repoNames = (repoId: number) => db.select({ owner: user.username, name: re
 const pullBase = (run: Run) =>
   run.pullNumber === null ? null : (db.select({ base: issue.baseRef }).from(issue).where(and(eq(issue.repoId, run.repoId), eq(issue.number, run.pullNumber))).get()?.base ?? null);
 
-// The secrets a job's steps and outputs refer to; it gets those and no others.
+// The secrets a job's steps and outputs refer to; it gets those and no others. A text that doesn't parse names
+// none: a job queued before run: and names were read as expressions can hold one, and must not stop the
+// scheduler. It gets nothing for it, and fails on the runner when that text comes to be filled in.
 function secretNames(steps: Step[], outputs: Record<string, string> = {}) {
+  const named = (text: string, isExpression = false) => {
+    try {
+      return secretsIn(text, isExpression);
+    } catch {
+      return [];
+    }
+  };
   const names = steps.flatMap((s) => [
-    ...Object.values(s.env ?? {}).flatMap((v) => (typeof v === "string" ? secretsIn(v) : [v.secret])),
-    ...secretsIn(s.run),
-    ...secretsIn(s.name),
-    ...(s.if ? secretsIn(s.if, true) : []),
+    ...Object.values(s.env ?? {}).flatMap((v) => (typeof v === "string" ? named(v) : [v.secret])),
+    ...named(s.run),
+    ...named(s.name),
+    ...(s.if ? named(s.if, true) : []),
   ]);
-  return [...new Set([...names, ...Object.values(outputs).flatMap((v) => secretsIn(v))])];
+  return [...new Set([...names, ...Object.values(outputs).flatMap((v) => named(v))])];
 }
 
 const instance = () => instanceLabel(resolve(config.dataDir));

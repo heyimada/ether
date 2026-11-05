@@ -17,6 +17,10 @@ type Node =
 
 const MAX_SOURCE = 4096;
 const MAX_DEPTH = 64;
+// How many characters one evaluation may produce, all its functions together. The source's length doesn't bound
+// this: format('{0}{0}…', format('{0}{0}…', …)) multiplies at every level, so without it a workflow could make
+// the server build gigabytes on its event loop. Step outputs can be 1 MiB, so there is room to pass a few on.
+export const MAX_PRODUCED = 8 * 1024 * 1024;
 const STATUS = new Set(["success", "failure", "always", "cancelled"]);
 const ARITY: Record<string, [number, number]> = { success: [0, 0], failure: [0, 0], always: [0, 0], cancelled: [0, 0], contains: [2, 2], startswith: [2, 2], endswith: [2, 2], format: [1, 64], join: [1, 2], tojson: [1, 1], fromjson: [1, 1] };
 
@@ -238,7 +242,23 @@ function compare(op: string, a: Value, b: Value): boolean {
   return { "==": order === 0, "!=": order !== 0, "<": order < 0, "<=": order <= 0, ">": order > 0, ">=": order >= 0 }[op]!;
 }
 
-function format(template: string, args: string[]) {
+type Budget = { left: number };
+const charge = (budget: Budget, chars: number) => {
+  budget.left -= chars;
+  if (budget.left < 0) throw new Error(`An expression can produce at most ${MAX_PRODUCED} characters`);
+};
+
+// How deeply arrays and objects nest. toJSON indents every level, so its output grows with the square of this.
+const MAX_NESTING = 64;
+function shallow(v: Value, depth = 0): Value {
+  if (v !== null && typeof v === "object") {
+    if (depth >= MAX_NESTING) throw new Error(`A value can nest at most ${MAX_NESTING} levels deep`);
+    for (const inner of Object.values(v)) shallow(inner, depth + 1);
+  }
+  return v;
+}
+
+function format(template: string, args: string[], budget: Budget) {
   let out = "";
   for (let i = 0; i < template.length; i++) {
     const c = template[i];
@@ -249,10 +269,12 @@ function format(template: string, args: string[]) {
       const end = template.indexOf("}", i);
       const n = end === -1 ? NaN : Number(template.slice(i + 1, end));
       if (!Number.isInteger(n) || n < 0 || n >= args.length) throw new Error(`format(): "${template}" refers to an argument it wasn't given`);
+      if (out.length + args[n].length > budget.left) charge(budget, out.length + args[n].length);
       out += args[n];
       i = end;
     } else out += c;
   }
+  charge(budget, out.length);
   return out;
 }
 
@@ -263,32 +285,32 @@ const own = (target: { [key: string]: Value }, key: string): Value => {
   return found === undefined ? null : target[found];
 };
 
-function evaluate(node: Node, ctx: Context, status: Status): Value {
+function evaluate(node: Node, ctx: Context, status: Status, budget: Budget): Value {
   switch (node.kind) {
     case "literal":
       return node.value;
     case "context":
       return own(ctx, node.name);
     case "index": {
-      const target = evaluate(node.target, ctx, status);
-      const key = evaluate(node.key, ctx, status);
+      const target = evaluate(node.target, ctx, status, budget);
+      const key = evaluate(node.key, ctx, status, budget);
       if (Array.isArray(target)) return typeof key === "number" && Number.isInteger(key) ? (target[key] ?? null) : null;
       return target !== null && typeof target === "object" ? own(target, toText(key)) : null;
     }
     case "not":
-      return !truthy(evaluate(node.operand, ctx, status));
+      return !truthy(evaluate(node.operand, ctx, status, budget));
     case "binary": {
-      const left = evaluate(node.left, ctx, status);
-      if (node.op === "&&") return truthy(left) ? evaluate(node.right, ctx, status) : left;
-      if (node.op === "||") return truthy(left) ? left : evaluate(node.right, ctx, status);
-      return compare(node.op, left, evaluate(node.right, ctx, status));
+      const left = evaluate(node.left, ctx, status, budget);
+      if (node.op === "&&") return truthy(left) ? evaluate(node.right, ctx, status, budget) : left;
+      if (node.op === "||") return truthy(left) ? left : evaluate(node.right, ctx, status, budget);
+      return compare(node.op, left, evaluate(node.right, ctx, status, budget));
     }
     case "call": {
       if (node.name === "success") return status.success;
       if (node.name === "failure") return status.failure;
       if (node.name === "cancelled") return status.cancelled;
       if (node.name === "always") return true;
-      const args = node.args.map((a) => evaluate(a, ctx, status));
+      const args = node.args.map((a) => evaluate(a, ctx, status, budget));
       switch (node.name) {
         case "contains": {
           const [hay, needle] = args;
@@ -300,17 +322,28 @@ function evaluate(node: Node, ctx: Context, status: Status): Value {
         case "endswith":
           return toText(args[0]).toLowerCase().endsWith(toText(args[1]).toLowerCase());
         case "format":
-          return format(toText(args[0]), args.slice(1).map(toText));
-        case "join":
-          return Array.isArray(args[0]) ? args[0].map(toText).join(args.length > 1 ? toText(args[1]) : ",") : toText(args[0]);
-        case "tojson":
-          return JSON.stringify(args[0], null, 2);
-        case "fromjson":
+          return format(toText(args[0]), args.slice(1).map(toText), budget);
+        case "join": {
+          if (!Array.isArray(args[0])) return toText(args[0]);
+          const parts = args[0].map(toText);
+          const separator = args.length > 1 ? toText(args[1]) : ",";
+          charge(budget, parts.reduce((n, p) => n + p.length, 0) + separator.length * Math.max(0, parts.length - 1));
+          return parts.join(separator);
+        }
+        case "tojson": {
+          const text = JSON.stringify(shallow(args[0]), null, 2) ?? "null";
+          charge(budget, text.length);
+          return text;
+        }
+        case "fromjson": {
+          let parsed: Value;
           try {
-            return JSON.parse(toText(args[0])) as Value;
+            parsed = JSON.parse(toText(args[0])) as Value;
           } catch {
             throw new Error(`fromJSON(): that isn't JSON`);
           }
+          return shallow(parsed);
+        }
       }
       throw new Error(`There's no function ${node.name}()`);
     }
@@ -319,16 +352,21 @@ function evaluate(node: Node, ctx: Context, status: Status): Value {
 
 const NO_STATUS: Status = { success: true, failure: false, cancelled: false };
 
-export const evalExpression = (source: string, ctx: Context, status: Status = NO_STATUS) => evaluate(parseExpression(source), ctx, status);
+const fresh = (): Budget => ({ left: MAX_PRODUCED });
+
+export const evalExpression = (source: string, ctx: Context, status: Status = NO_STATUS, budget = fresh()) => evaluate(parseExpression(source), ctx, status, budget);
 
 // The text with its `${{ }}` parts filled in. A text that's nothing but one part keeps that part's value.
 export function evalTemplate(text: string, ctx: Context, status: Status = NO_STATUS): Value {
   const parts = templates(text);
-  if (parts.length === 1 && parts[0].start === 0 && parts[0].end === text.length) return evalExpression(parts[0].source, ctx, status);
+  const budget = fresh();
+  if (parts.length === 1 && parts[0].start === 0 && parts[0].end === text.length) return evalExpression(parts[0].source, ctx, status, budget);
   let out = "";
   let from = 0;
   for (const p of parts) {
-    out += text.slice(from, p.start) + toText(evalExpression(p.source, ctx, status));
+    const filled = text.slice(from, p.start) + toText(evalExpression(p.source, ctx, status, budget));
+    charge(budget, filled.length);
+    out += filled;
     from = p.end;
   }
   return out + text.slice(from);
@@ -344,5 +382,5 @@ export function holds(condition: string | null, ctx: Context, status: Status): b
   walk(node, (n) => {
     if (n.kind === "call" && STATUS.has(n.name)) named = true;
   });
-  return (named || status.success) && truthy(evaluate(node, ctx, status));
+  return (named || status.success) && truthy(evaluate(node, ctx, status, fresh()));
 }

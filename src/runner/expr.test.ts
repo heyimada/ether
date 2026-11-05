@@ -115,3 +115,23 @@ test("step outputs", () => {
   expect(parseOutputs("open<<EOF\none\n")).toEqual({});
   expect(parseOutputs("value=a<<b")).toEqual({ value: "a<<b" });
 });
+
+test("an expression can't produce more than a few megabytes, however it nests", () => {
+  const level = (inner: string) => `format('${"{0}".repeat(300)}', ${inner})`;
+  const bomb = `contains(${level(level(level("'xxxxxxxx'")))}, 'y')`;
+  expect(bomb.length).toBeLessThan(4096);
+  const started = Date.now();
+  expect(() => run(bomb)).toThrow("at most");
+  expect(() => holds(bomb, ctx, { success: true, failure: false, cancelled: false })).toThrow("at most");
+  // Each part alone fits; the parts of one text share the allowance.
+  const part = `\${{ ${level(level(`'${"x".repeat(64)}'`))} }}`;
+  expect(fillTemplate(part, ctx).length).toBe(300 * 300 * 64);
+  expect(() => evalTemplate(part + part, ctx)).toThrow("at most");
+  expect(Date.now() - started).toBeLessThan(2000);
+  // join and toJSON count too, and toJSON can't be made to indent without end.
+  expect(() => run(`join(fromJSON('[${'"x",'.repeat(500)}"x"]'), ${level(level("' '"))})`)).toThrow("at most");
+  expect(() => run(`toJSON(fromJSON('${"[".repeat(100)}${"]".repeat(100)}'))`)).toThrow("nest");
+  // What workflows actually do still works.
+  expect(run(`format('{0}-{1}', 'a', 'b')`)).toBe("a-b");
+  expect(run(`join(matrix.list, ', ')`)).toBe("a, b");
+});

@@ -94,6 +94,17 @@ jobs:
         name: Find \${{ matrix.kind }} version
         shell: bash
         run: echo "value=1.\${{ github.run_id }}" >> "$CI_OUTPUT"
+      - id: never
+        if: false
+        run: echo "value=x" >> "$CI_OUTPUT"
+      - name: Unpack \${{ steps.never.outcome }}
+        if: steps.never.outcome == 'success'
+        env:
+          V: \${{ fromJSON(steps.never.outputs.value) }}
+        run: echo never
+      - name: Tree stays clean
+        shell: bash
+        run: test -z "$(git status --porcelain)"
   ship:
     needs: build
     if: github.ref == 'refs/heads/main' && startsWith(needs.build.outputs.version, '1.')
@@ -259,6 +270,10 @@ test("jobs wait for their needs, run side by side, fan out over a matrix and fol
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
     const expr = await finishedRun(owner.ctx, api, gitOk(src, ["rev-parse", "HEAD"]).trim());
     expect(expr.jobs["build (fast)"].log).toContain("▶ Find fast version");
+    // A step that's skipped can't fail on its env, and outputs and scripts stay out of the checkout.
+    expect(expr.jobs["build (fast)"].status).toBe("success");
+    expect(expr.jobs["build (fast)"].log).toContain("⊘ Unpack skipped (skipped)");
+    expect(expr.jobs["build (fast)"].log).toContain("✔ Tree stays clean");
     expect(expr.jobs.ship.status).toBe("success");
     expect(expr.jobs.ship.log).toContain(`shipping 1.${expr.run.id} on main by ${owner.username}`);
     expect(expr.jobs["other-branch"].status).toBe("skipped");
