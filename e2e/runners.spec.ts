@@ -199,13 +199,13 @@ test("a job's token opens its own repository, read-only, while the job runs; run
     expect((await owner.ctx.post("/api/admin/runners/registration", { headers: headers() })).status()).toBe(403);
     expect((await owner.ctx.get("/api/admin/runners")).status()).toBe(403);
     expect((await post("/runner/register", null, { token: "nope", name: "x", isolation: "host" })).status).toBe(401);
-    expect((await post("/runner/claim", "nope", { isolation: "host" })).status).toBe(401);
+    expect((await post("/runner/claim", "nope", {})).status).toBe(401);
 
     const { token: registration } = await (await admin.post("/api/admin/runners/registration", { headers: headers() })).json();
     expect((await post("/runner/register", null, { token: registration, name: "bad name!", isolation: "host" })).status).toBe(400);
     const { token: runnerToken } = await (await post("/runner/register", null, { token: registration, name: "by-hand", isolation: "host" })).json();
     expect(runnerToken).toBeTruthy();
-    expect((await post("/runner/claim", runnerToken, { isolation: "host" })).status).toBe(204);
+    expect((await post("/runner/claim", runnerToken, {})).status).toBe(204);
 
     const src = workdir();
     gitOk(src, ["init", "-q", "-b", "main"]);
@@ -218,7 +218,7 @@ test("a job's token opens its own repository, read-only, while the job runs; run
 
     let claimed: Response | null = null;
     await expect(async () => {
-      claimed = await post("/runner/claim", runnerToken, { isolation: "host" });
+      claimed = await post("/runner/claim", runnerToken, {});
       expect(claimed.status).toBe(200);
     }).toPass({ timeout: 10_000 });
     const { assignment, token } = await claimed!.json();
@@ -249,17 +249,18 @@ test("a job's token opens its own repository, read-only, while the job runs; run
 
     // A runner with containers gets the job's secrets, and what it reports is masked here as well.
     expect((await owner.ctx.put(`${api}/ci/secrets/DEPLOY_TOKEN`, { data: { value: "s3cret-value" }, headers: headers() })).ok()).toBe(true);
-    expect((await post("/runner/claim", runnerToken, { isolation: "container" })).status).toBe(204);
     const { token: secondRegistration } = await (await admin.post("/api/admin/runners/registration", { headers: headers() })).json();
-    const { token: hostToken } = await (await post("/runner/register", null, { token: secondRegistration, name: "on-host", isolation: "host" })).json();
+    const { token: containerToken } = await (await post("/runner/register", null, { token: secondRegistration, name: "in-containers", isolation: "container" })).json();
     writeFileSync(join(src, ".ether", "workflows", "w.yml"), SECRET);
     gitOk(src, ["commit", "-qam", "secret"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
     // A runner on its host leaves a job with secrets to the one with containers, whoever asks first.
     await runOf(owner.ctx, api, gitOk(src, ["rev-parse", "HEAD"]).trim(), ["queued"]);
-    expect((await post("/runner/claim", hostToken, { isolation: "host" })).status).toBe(204);
+    expect((await post("/runner/claim", runnerToken, {})).status).toBe(204);
+    // Saying it has containers doesn't make it so: a host runner's token is within reach of the jobs it runs.
+    expect((await post("/runner/claim", runnerToken, { isolation: "container" })).status).toBe(204);
     await expect(async () => {
-      claimed = await post("/runner/claim", runnerToken, { isolation: "container" });
+      claimed = await post("/runner/claim", containerToken, {});
       expect(claimed.status).toBe(200);
     }).toPass({ timeout: 10_000 });
     const withSecret = await claimed!.json();

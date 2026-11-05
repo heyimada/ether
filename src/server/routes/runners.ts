@@ -88,11 +88,12 @@ export const runnerRoutes = new Elysia()
     return { id: runner.id, token: own };
   })
   // Returns at once with a job or 204; a runner with nothing to do asks again a few seconds later.
-  .post("/runner/claim", ({ request, body }) => {
+  .post("/runner/claim", ({ request }) => {
     const runner = requireRunner(request);
-    const isolation = isolationOf((body as { isolation?: unknown } | null)?.isolation);
-    db.update(ciRunner).set({ lastSeenAt: new Date(), isolation }).where(eq(ciRunner.id, runner.id)).run();
-    return claimJob(runner, isolation) ?? new Response(null, { status: 204 });
+    db.update(ciRunner).set({ lastSeenAt: new Date() }).where(eq(ciRunner.id, runner.id)).run();
+    // The isolation it registered with, not what a request says: the jobs of a runner on its host can read
+    // its token, and mustn't be able to pass as a runner with containers to get secrets.
+    return claimJob(runner, runner.isolation) ?? new Response(null, { status: 204 });
   })
   .post("/runner/jobs/:id/report", ({ request, params, body }) => {
     const job = requireJob(request, params.id);

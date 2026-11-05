@@ -143,7 +143,7 @@ async function run(values: { jobs?: string; config?: string }) {
     while (!stopping) {
       let res: Response | null = null;
       try {
-        res = await call(config.url, "/runner/claim", config.token, { isolation: config.isolation });
+        res = await call(config.url, "/runner/claim", config.token, {});
         if (offline) console.log("Back in touch with the server");
         offline = false;
       } catch (e) {
