@@ -88,7 +88,7 @@ test("a runner on another machine registers, runs jobs, reports back and can be 
     expect(again.status).toBe(1);
     expect(again.stderr).toContain("isn't valid");
 
-    proc = spawn("bun", ["src/runner/main.ts", "run", "--config", config], { stdio: "ignore", env: { ...process.env, ETHER_RUNNER_HEARTBEAT_MS: "2000" } });
+    proc = spawn("bun", ["src/runner/main.ts", "run", "--config", config], { stdio: "ignore" });
     await expect(async () => {
       await page.reload();
       await expect(page.getByRole("list", { name: "Registered runners" })).toContainText("far-away");
@@ -249,9 +249,15 @@ test("a job's token opens its own repository, read-only, while the job runs; run
 
     // A runner with containers gets the job's secrets, and what it reports is masked here as well.
     expect((await owner.ctx.put(`${api}/ci/secrets/DEPLOY_TOKEN`, { data: { value: "s3cret-value" }, headers: headers() })).ok()).toBe(true);
+    expect((await post("/runner/claim", runnerToken, { isolation: "container" })).status).toBe(204);
+    const { token: secondRegistration } = await (await admin.post("/api/admin/runners/registration", { headers: headers() })).json();
+    const { token: hostToken } = await (await post("/runner/register", null, { token: secondRegistration, name: "on-host", isolation: "host" })).json();
     writeFileSync(join(src, ".ether", "workflows", "w.yml"), SECRET);
     gitOk(src, ["commit", "-qam", "secret"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
+    // A runner on its host leaves a job with secrets to the one with containers, whoever asks first.
+    await runOf(owner.ctx, api, gitOk(src, ["rev-parse", "HEAD"]).trim(), ["queued"]);
+    expect((await post("/runner/claim", hostToken, { isolation: "host" })).status).toBe(204);
     await expect(async () => {
       claimed = await post("/runner/claim", runnerToken, { isolation: "container" });
       expect(claimed.status).toBe(200);
@@ -266,6 +272,52 @@ test("a job's token opens its own repository, read-only, while the job runs; run
     const masked = await runOf(owner.ctx, api, gitOk(src, ["rev-parse", "HEAD"]).trim(), FINISHED);
     expect(masked.jobs.deploy.log).toContain("oops *** leaked");
   } finally {
+    const fresh = await loginAdmin();
+    await removeAllRunners(fresh);
+    await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+  }
+});
+
+test("a runner that gets removed ends what it runs before it exits", async () => {
+  test.setTimeout(2 * 60_000);
+  const admin = await loginAdmin();
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: headers() });
+  let proc: ChildProcess | null = null;
+  try {
+    const owner = await createUser(admin);
+    const repo = await createRepo(owner.ctx, unique("removed"));
+    const api = `/api/repos/${owner.username}/${repo}`;
+    await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() });
+    const { token } = await (await admin.post("/api/admin/runners/registration", { headers: headers() })).json();
+    const config = join(mkdtempSync(join(tmpdir(), "ether-runner-e2e-")), "config.json");
+    expect(runner(["register", "--url", baseURL(), "--token", token, "--name", "goes-away", "--isolation", "host", "--config", config]).status).toBe(0);
+    // Two slots: the idle one is the first to hear the runner is gone.
+    const started = spawn("bun", ["src/runner/main.ts", "run", "--jobs", "2", "--config", config], { stdio: "ignore" });
+    proc = started;
+    const exited = new Promise<number | null>((resolve) => started.on("exit", resolve));
+
+    const src = workdir();
+    gitOk(src, ["init", "-q", "-b", "main"]);
+    mkdirSync(join(src, ".ether", "workflows"), { recursive: true });
+    writeFileSync(join(src, ".ether", "workflows", "w.yml"), `on: push\njobs:\n  long:\n    steps:\n      - shell: bash\n        run: sleep 120 & echo "pid=$!"; wait\n`);
+    gitOk(src, ["add", "-A"]);
+    gitOk(src, ["commit", "-q", "-m", "w"]);
+    gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], { username: owner.username, token: owner.token });
+    const { run } = await runOf(owner.ctx, api, gitOk(src, ["rev-parse", "HEAD"]).trim(), ["running"]);
+    let pid = 0;
+    await expect(async () => {
+      const { jobs } = await (await owner.ctx.get(`${api}/ci/runs/${run.id}`)).json();
+      pid = Number(/pid=(\d+)/.exec(jobs[0].log)?.[1]);
+      expect(pid).toBeGreaterThan(0);
+    }).toPass({ timeout: 20_000 });
+
+    await removeAllRunners(admin);
+    expect(await exited).toBe(1);
+    expect(() => process.kill(pid, 0)).toThrow();
+    const { jobs } = await (await owner.ctx.get(`${api}/ci/runs/${run.id}`)).json();
+    expect(jobs[0].log).toContain("Runner goes-away was removed");
+  } finally {
+    proc?.kill("SIGKILL");
     const fresh = await loginAdmin();
     await removeAllRunners(fresh);
     await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });

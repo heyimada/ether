@@ -21,7 +21,6 @@ repository on the server this machine. The default is a container per job, with 
 
 const IDLE_MS = 2000;
 const REPORT_MS = 1000;
-const HEARTBEAT_MS = Math.max(1000, Number(process.env.ETHER_RUNNER_HEARTBEAT_MS) || 15_000);
 const MAX_REPORT = 200 * 1024;
 // More than the server keeps of a log, so a very chatty job can't fill this machine's memory.
 const MAX_BUFFER = 4 * 1024 * 1024;
@@ -61,7 +60,7 @@ async function register(values: { url?: string; token?: string; name?: string; i
 
 // Runs one job: streams its log, listens for "stop" in the answers, and says how it ended.
 async function work(config: Config, claim: Claim, instance: string, running: Set<RunningJob>) {
-  const { assignment, token } = claim;
+  const { assignment, token, heartbeatMs } = claim;
   const { jobId } = assignment;
   console.log(`Job ${jobId} (run ${assignment.runId}) started`);
   let buffer = "";
@@ -98,7 +97,7 @@ async function work(config: Config, claim: Claim, instance: string, running: Set
   while (!finished) {
     await Promise.race([done, Bun.sleep(REPORT_MS)]);
     if (finished) break;
-    if (buffer || Date.now() - reported >= HEARTBEAT_MS) await report();
+    if (buffer || Date.now() - reported >= heartbeatMs) await report();
     // The server has given up on this job: finished elsewhere, restarted, or this runner was removed.
     if (gone) job.stop();
   }
@@ -128,6 +127,7 @@ async function run(values: { jobs?: string; config?: string }) {
   await removeLeftoverContainers(instance).catch((e) => console.error("Removing leftover containers failed:", e));
   const running = new Set<RunningJob>();
   let stopping = false;
+  let unknown = false;
   const shutdown = () => {
     if (stopping) process.exit(1);
     stopping = true;
@@ -150,7 +150,13 @@ async function run(values: { jobs?: string; config?: string }) {
         if (!offline) console.error(`Can't reach the server: ${(e as Error).message}`);
         offline = true;
       }
-      if (res?.status === 401) die("The server no longer knows this runner. Register it again.");
+      if (res?.status === 401) {
+        // Jobs in other slots end first: host steps run in their own process group and would outlive this process.
+        unknown = true;
+        stopping = true;
+        for (const job of running) job.stop();
+        break;
+      }
       if (res?.status === 200) {
         await work(config, (await res.json()) as Claim, instance, running).catch((e) => console.error("Job failed to run:", e));
         continue;
@@ -159,6 +165,7 @@ async function run(values: { jobs?: string; config?: string }) {
     }
   };
   await Promise.all(Array.from({ length: slots }, slot));
+  if (unknown) die("The server no longer knows this runner. Register it again.");
 }
 
 const { values, positionals } = parseArgs({

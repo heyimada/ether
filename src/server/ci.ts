@@ -159,7 +159,7 @@ function supersede(run: RunRef, environment: string) {
 
 // The oldest queued job whose needs have all finished and whose if: holds. Jobs whose if: doesn't hold are
 // skipped on the way, which can free others, so it looks again until it finds one or nothing changes.
-function nextJob(): Job | null {
+function nextJob(accepts?: (job: Job) => boolean): Job | null {
   for (;;) {
     const queued = db
       .select({ job: ciJob })
@@ -184,6 +184,7 @@ function nextJob(): Job | null {
         skipped = true;
         break;
       }
+      if (accepts && !accepts(job)) continue;
       if (job.maxParallel && all.filter((j) => j.key === job.key && j.status === "running").length >= job.maxParallel) continue;
       if (job.environment) {
         const run = db.select({ id: ciRun.id, repoId: ciRun.repoId, ref: ciRun.ref, refType: ciRun.refType }).from(ciRun).where(eq(ciRun.id, job.runId)).get();
@@ -499,14 +500,17 @@ export const resumePump = () => pump();
 
 export const usesRunners = () => !!db.select({ id: ciRunner.id }).from(ciRunner).get();
 // A runner that hasn't reported for this long has lost the job it was running.
-const RUNNER_TIMEOUT = Math.max(1, Number(process.env.ETHER_CI_RUNNER_TIMEOUT) || 90) * 1000;
+const RUNNER_TIMEOUT = Math.max(5, Number(process.env.ETHER_CI_RUNNER_TIMEOUT) || 90) * 1000;
 export const RUNNER_ONLINE_MS = RUNNER_TIMEOUT;
 export const JOB_GIT_USER = "ether-job";
 
 // Hands the oldest job that may start to a runner, or null when there's none.
 export function claimJob(runner: { id: number; name: string }, isolation: Isolation): Claim | null {
+  // Which runner asks first shouldn't decide whether a job with secrets runs: a runner on its host leaves
+  // those to one with containers. With no such runner it takes them, so they end with the reason.
+  const leaveSecrets = isolation === "host" && !!db.select({ id: ciRunner.id }).from(ciRunner).where(eq(ciRunner.isolation, "container")).get();
   for (;;) {
-    const job = nextJob();
+    const job = nextJob(leaveSecrets ? (j) => secretNames(JSON.parse(j.steps) as Step[]).length === 0 : undefined);
     if (!job) return null;
     const begun = beginJob(job);
     if (!begun) continue;
@@ -524,7 +528,8 @@ export function claimJob(runner: { id: number; name: string }, isolation: Isolat
       const token = secret("ethj_");
       remote.set(job.id, { ...a, job: null, row: job, begun, runnerId: runner.id, runnerName: runner.name, repoId: begun.run.repoId, tokenHash: sha256(token), seen: Date.now(), masker: new LogMasker(assignment.mask), log });
       assignment.checkout.authorization = `Basic ${btoa(`${JOB_GIT_USER}:${token}`)}`;
-      return { assignment, token };
+      // Often enough that one lost report doesn't end a job that is just being quiet.
+      return { assignment, token, heartbeatMs: Math.round(RUNNER_TIMEOUT / 3) };
     } catch (e) {
       log.append(`\nRunner error: ${(e as Error).message}\n`);
       void finishJob(job, begun, a, "error", log.text(), () => {}).finally(pump);
@@ -560,7 +565,9 @@ export async function finishRemoteJob(job: RemoteJob, result: JobResult) {
 // Jobs of a runner that's gone: removed by an admin, or silent for too long.
 export async function abandonRemoteJobs(match: (job: RemoteJob) => boolean, why: (job: RemoteJob) => string) {
   for (const job of [...remote.values()].filter(match)) {
-    job.log.append(`\n✖ ${why(job)}\n`);
+    // Finished meanwhile (its runner reported, or another sweep got to it): leave it as it ended.
+    if (remote.get(job.row.id) !== job) continue;
+    job.log.append(`${job.masker.flush()}\n✖ ${why(job)}\n`);
     await finishRemoteJob(job, "error");
   }
 }

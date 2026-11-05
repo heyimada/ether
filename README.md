@@ -39,7 +39,7 @@ Development: run `bun run dev:server` and `bun run dev:web` together. The app is
 | `ETHER_CI_RUNTIME` | `docker`, else `podman` | Container CLI for CI jobs |
 | `ETHER_CI_IMAGE` | `oven/bun:1` | Image for CI jobs that don't name one |
 | `ETHER_CI_JOBS` | `2` | CI jobs that run at the same time, across all repositories |
-| `ETHER_CI_RUNNER_TIMEOUT` | `90` | Seconds an external runner may stay silent before it loses its job |
+| `ETHER_CI_RUNNER_TIMEOUT` | `90` | Seconds an external runner may stay silent before it loses its job (at least 5); runners report at a third of this |
 
 ## Example deployment: a Tailscale tailnet
 
@@ -140,7 +140,7 @@ ether-runner register --url https://ether.example.com --token <token> --name bui
 ether-runner run --jobs 2
 ```
 
-A runner only ever calls the server, so its machine needs no open port. Jobs run in a container per job with Docker or Podman on that machine; `--isolation host` runs them directly as the runner's user instead, which gives everyone who can push on the server that machine, and such a runner gets no secrets. Once a runner is registered, **all** jobs go to runners and the built-in one stops taking new ones, even while no runner is online, so jobs wait rather than land on the Ether machine; removing the last runner brings it back. Every job gets a token of its own that can read just its repository until the job ends, and its secrets, which the runner keeps in memory only. A runner silent for `ETHER_CI_RUNNER_TIMEOUT` seconds (90) loses its job. Use HTTPS: jobs carry their secrets over this connection.
+A runner only ever calls the server, so its machine needs no open port. Jobs run in a container per job with Docker or Podman on that machine; `--isolation host` runs them directly as the runner's user instead, which gives everyone who can push on the server that machine, and such a runner gets no secrets. A job with secrets waits for a runner with containers if there is one, and otherwise fails with the reason. Once a runner is registered, **all** jobs go to runners and the built-in one stops taking new ones, even while no runner is online, so jobs wait rather than land on the Ether machine; removing the last runner brings it back. Every job gets a token of its own that can read just its repository until the job ends, and its secrets, which the runner keeps in memory only. A runner silent for `ETHER_CI_RUNNER_TIMEOUT` seconds (90) loses its job. Use HTTPS: jobs carry their secrets over this connection.
 
 **Secrets.** Owners add them under **Settings → CI secrets**. Values are encrypted in the database with a key derived from the auth secret (so a backup restores them along with it), can't be read back through the API or the UI, and are masked as `***` in logs. They reach a job only as the environment variables it names, and only in a container. Masking only prevents accidents: anyone who can push to the repository can write a workflow that prints a secret in another form, so only store what everyone with write access may know. If the auth secret changes (for example a new `BETTER_AUTH_SECRET`), jobs report that a secret can't be decrypted until it's set again.
 
