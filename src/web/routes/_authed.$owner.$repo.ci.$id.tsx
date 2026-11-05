@@ -13,7 +13,7 @@ type JobDeployment = {
   notBefore: string | null;
   canReview: boolean;
 };
-type Job = { id: number; key: string; name: string; needs: string[]; condition: string | null; status: CiStatus; log: string; steps: { name: string }[]; startedAt: string | null; finishedAt: string | null; deployment: JobDeployment | null };
+type Job = { runner: string | null; id: number; key: string; name: string; needs: string[]; condition: string | null; status: CiStatus; log: string; steps: { name: string }[]; startedAt: string | null; finishedAt: string | null; deployment: JobDeployment | null };
 type RunDetail = {
   run: {
     id: number;
@@ -131,6 +131,7 @@ function RunPage() {
               </span>
             )}
             <span className="flex-1" />
+            {j.runner && <span className="text-muted text-xs">on {j.runner}</span>}
             <span className="text-muted tabular-nums">{duration(j.startedAt, j.finishedAt)}</span>
           </header>
           {j.deployment && <DeploymentNote job={j} deployment={j.deployment} base={repoApi(info.repo.owner, info.repo.name)} />}

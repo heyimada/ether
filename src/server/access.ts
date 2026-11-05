@@ -14,8 +14,8 @@ export class HttpError extends Error {
 export type Viewer = { id: string; username: string; isAdmin: boolean };
 export type Role = "owner" | "write" | "read";
 
-const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
-const secret = (prefix: string) => prefix + randomBytes(24).toString("base64url");
+export const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+export const secret = (prefix: string) => prefix + randomBytes(24).toString("base64url");
 
 export async function currentUser(req: Request): Promise<Viewer | null> {
   // API clients such as the ether CLI send a personal access token instead of a session cookie.

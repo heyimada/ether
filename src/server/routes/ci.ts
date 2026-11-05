@@ -108,6 +108,7 @@ export const ciRoutes = new Elysia()
         needs: JSON.parse(j.needs) as string[],
         condition: j.condition,
         status: j.status,
+        runner: j.runner,
         log: j.log,
         steps: JSON.parse(j.steps),
         startedAt: j.startedAt,

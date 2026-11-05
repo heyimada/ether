@@ -1,11 +1,12 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { CopyButton, ErrorNote, useAction } from "../components/ui";
-import { api, post, put, timeAgo } from "../lib/api";
+import { api, del, post, put, timeAgo } from "../lib/api";
 import { requireAccount } from "../lib/require-account";
 
 type Invite = { createdAt: string; expiresAt: string; usedBy: string | null };
 type UserRow = { username: string; isAdmin: boolean; isOrg: boolean };
+type Runner = { id: number; name: string; isolation: "container" | "host"; online: boolean; lastSeenAt: string | null };
 
 export const Route = createFileRoute("/_authed/site-admin")({
   beforeLoad: ({ context, location }) => {
@@ -14,20 +15,21 @@ export const Route = createFileRoute("/_authed/site-admin")({
     return { me };
   },
   loader: async () => {
-    const [invites, users, instance, ci] = await Promise.all([
+    const [invites, users, instance, ci, runners] = await Promise.all([
       api<{ invites: Invite[] }>("/api/invites"),
       api<{ users: UserRow[] }>("/api/users"),
       api<{ anonymousRead: boolean; ciEnabled: boolean; ciIsolation: "container" | "host" }>("/api/instance"),
       api<{ runtime: string | null }>("/api/admin/ci-runtime"),
+      api<{ runners: Runner[] }>("/api/admin/runners"),
     ]);
-    return { invites: invites.invites, users: users.users.filter((u) => !u.isOrg), instance, runtime: ci.runtime };
+    return { invites: invites.invites, users: users.users.filter((u) => !u.isOrg), instance, runtime: ci.runtime, runners: runners.runners };
   },
   component: Admin,
 });
 
 function Admin() {
   const router = useRouter();
-  const { invites, users, instance, runtime } = Route.useLoaderData();
+  const { invites, users, instance, runtime, runners } = Route.useLoaderData();
   const [saved, setSaved] = useState("");
   const [allowVisitors, setAllowVisitors] = useState(instance.anonymousRead);
   const [allowCi, setAllowCi] = useState(instance.ciEnabled);
@@ -143,6 +145,7 @@ function Admin() {
           </span>
         )}
       </section>
+      <Runners runners={runners} />
       <section className="card">
         <header>
           <h2 className="m-0">Invites</h2>
@@ -193,5 +196,65 @@ function Admin() {
         </ul>
       </section>
     </main>
+  );
+}
+
+// Machines that run CI jobs instead of this one.
+function Runners({ runners }: { runners: Runner[] }) {
+  const router = useRouter();
+  const [command, setCommand] = useState<string | null>(null);
+  const add = useAction(async () => {
+    const { token } = await post<{ token: string }>("/api/admin/runners/registration");
+    setCommand(`ether-runner register --url ${location.origin} --token ${token}`);
+  });
+  const remove = useAction(async (id: number) => {
+    await del(`/api/admin/runners/${id}`);
+    await router.invalidate();
+  });
+  return (
+    <section className="card" aria-label="Runners">
+      <header>
+        <h2 className="m-0">Runners</h2>
+        <span className="flex-1" />
+        <button onClick={() => add.run()} disabled={add.pending}>
+          Add runner
+        </button>
+      </header>
+      <div className="body">
+        <p className="mt-0 text-muted">
+          {runners.length ? "Jobs wait for these runners, even if none is online." : "Jobs run on this machine until you add a runner; from then on they run on your runners only."}
+        </p>
+        <ErrorNote error={add.error ?? remove.error} />
+        {command && (
+          <div className="notice mb-3">
+            <p className="mt-0">Run this on the other machine, then start it with ether-runner run. The token works once and expires in an hour.</p>
+            <div className="flex items-center gap-2">
+              <code aria-label="Runner registration command" className="wrap-anywhere">
+                {command}
+              </code>
+              <CopyButton text={command} />
+            </div>
+          </div>
+        )}
+        {runners.length > 0 && (
+          <ul className="list" aria-label="Registered runners">
+            {runners.map((r) => (
+              <li key={r.id}>
+                <span className="font-mono">{r.name}</span>
+                <span className="pill">{r.online ? "Online" : "Offline"}</span>
+                <span className="flex-1" />
+                <span className="text-muted">
+                  {r.isolation === "host" ? "on its host" : "in containers"}
+                  {r.lastSeenAt ? ` · seen ${timeAgo(r.lastSeenAt)}` : " · not seen yet"}
+                </span>
+                <button aria-label={`Remove runner ${r.name}`} onClick={() => remove.run(r.id)} disabled={remove.pending}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }

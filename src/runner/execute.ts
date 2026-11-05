@@ -65,7 +65,9 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
 
   // Held in `proc` like a step, so stopping the job ends a clone that's taking long.
   const git = async (args: string[]) => {
-    const running = Bun.spawn(["git", ...args], { stdout: "ignore", stderr: "pipe", stdin: "ignore", detached: process.platform !== "win32" });
+    // The token goes in through the environment: not visible in `ps`, and not left in the checkout's config.
+    const auth = job.checkout.authorization ? { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraHeader", GIT_CONFIG_VALUE_0: `Authorization: ${job.checkout.authorization}` } : {};
+    const running = Bun.spawn(["git", ...args], { stdout: "ignore", stderr: "pipe", stdin: "ignore", detached: process.platform !== "win32", env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...auth } });
     proc = running;
     const timer = setTimeout(() => killTree(running), 10 * 60_000);
     const output = await new Response(running.stderr as ReadableStream<Uint8Array>).text();
@@ -97,7 +99,7 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
 
       if (job.isolation === "container") {
         const runtime = containerRuntime();
-        if (!runtime) return fail("No container runtime found: install Docker or Podman on the server, or let an admin run CI on the host under Admin → Access (unsafe).");
+        if (!runtime) return fail("No container runtime found: install Docker or Podman on the machine that runs this job, or let it run jobs on the host (unsafe).");
         const image = job.image ?? DEFAULT_IMAGE;
         box = { runtime, name: `ether-ci-${job.runId}-${job.jobId}-${randomBytes(4).toString("hex")}` };
         append(`▶ Starting ${image} with ${basename(runtime)}\n`);

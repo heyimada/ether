@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { existsSync } from "node:fs";
-import { VISITOR, allows, anonymousRead, repoAccess, tokenUser, type RepoAccess, type Viewer } from "../access";
-import { onPush } from "../ci";
+import { VISITOR, allows, anonymousRead, findRepo, repoAccess, tokenUser, type RepoAccess, type Viewer } from "../access";
+import { JOB_GIT_USER, jobMayRead, onPush } from "../ci";
 import { recordPush } from "../contrib";
 import { recordPushEvents } from "../events";
 import { NAME_RE, ensureWiki, listRefs, newAuthorEmails, repoExists, wikiPath } from "../git";
@@ -19,6 +19,11 @@ async function authorize(req: Request, owner: string, repoParam: string, service
   if (!NAME_RE.test(owner) || !NAME_RE.test(name) || name.startsWith(".")) return new Response("Not found\n", { status: 404 });
 
   const creds = basicCredentials(req);
+  // A CI job on an external runner checks out its own repository with the token it got for that job.
+  if (creds?.username === JOB_GIT_USER && service === "git-upload-pack") {
+    const found = findRepo(owner, name);
+    if (found && repoExists(found.path) && jobMayRead(creds.secret, found.repo.id)) return { ...found, role: "read", viewer: VISITOR };
+  }
   // Without credentials, reads of public repositories may proceed as the visitor when the
   // admin allows it; anything else is challenged so git asks for a token.
   const viewer = creds ? tokenUser(creds.username, creds.secret) : service === "git-upload-pack" && anonymousRead() ? VISITOR : null;
