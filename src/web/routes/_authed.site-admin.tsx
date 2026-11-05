@@ -145,7 +145,7 @@ function Admin() {
           </span>
         )}
       </section>
-      <Runners base="/api/admin" runners={runners} empty="Jobs run on this machine until you add a runner; from then on they run on your runners only." filled="Jobs wait for these runners, even if none is online. A runner for one repository or organization takes over just those jobs." />
+      <Runners base="/api/admin" runners={runners} empty="Jobs run on this machine until you add a runner; from then on they run on your runners only." filled="Jobs wait for a runner, even if none is online. Server-wide runners take any repository's jobs; a repository's or organization's own runner only takes its own." />
       <section className="card">
         <header>
           <h2 className="m-0">Invites</h2>
