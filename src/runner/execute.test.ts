@@ -22,7 +22,7 @@ git("add", "-A");
 git("commit", "-q", "-m", "second");
 afterAll(() => rmSync(repo, { recursive: true, force: true }));
 
-const step = (run: string, more: Partial<RunnerStep> = {}): RunnerStep => ({ name: run, run, shell: "sh", timeoutMinutes: 1, env: {}, ...more });
+const step = (run: string, more: Partial<RunnerStep> = {}): RunnerStep => ({ id: null, name: run, run, shell: "sh", timeoutMinutes: 1, env: {}, if: null, continueOnError: false, ...more });
 const assignment = (steps: RunnerStep[], more: Partial<JobAssignment> = {}): JobAssignment => ({
   jobId: 1,
   runId: 1,
@@ -30,6 +30,8 @@ const assignment = (steps: RunnerStep[], more: Partial<JobAssignment> = {}): Job
   image: null,
   checkout: { url: repo, sha: first },
   vars: { CI: "true" },
+  context: {},
+  outputs: {},
   mask: [],
   steps,
   ...more,
@@ -91,6 +93,64 @@ test("a job stopped during its checkout ends there", async () => {
   job.stop();
   expect(await job.done).toBe("cancelled");
   expect(log).toBe("");
+});
+
+test("expressions fill in a step's name, script and env, secrets too, which stay masked", async () => {
+  const { result, log } = await run(
+    assignment([step("echo ${{ matrix.os }} $GREETING ${{ secrets.TOKEN }}", { name: "on ${{ matrix.os }}", env: { GREETING: "hello ${{ github.ref_name }}" } })], {
+      context: { github: { ref_name: "main" }, matrix: { os: "linux" }, secrets: { TOKEN: "hunter2-very-secret" } },
+      mask: ["hunter2-very-secret"],
+    }),
+  );
+  expect(result).toBe("success");
+  expect(log).toContain("▶ on linux\n");
+  expect(log).toContain("linux hello main ***");
+  expect(log).not.toContain("hunter2");
+});
+
+test("a step's if: decides whether it runs, and failure() and always() run after a failure", async () => {
+  const { result, log } = await run(
+    assignment([
+      step("echo one", { if: "github.event_name == 'tag'", name: "not this one" }),
+      step("exit 1", { name: "breaks" }),
+      step("echo two", { name: "normal" }),
+      step("echo three", { name: "on failure", if: "failure()" }),
+      step("echo four", { name: "always", if: "always()" }),
+    ], { context: { github: { event_name: "push" } } }),
+  );
+  expect(result).toBe("failure");
+  expect(log).toContain("⊘ not this one (skipped)");
+  expect(log).toContain("⊘ normal (skipped)");
+  expect(log).toContain("▶ on failure");
+  expect(log).toContain("▶ always");
+});
+
+test("steps pass outputs on, and a job's outputs come from them, unless they hold a secret", async () => {
+  let log = "";
+  const job = startJob(
+    assignment(
+      [
+        step(`echo "version=1.2" >> "$CI_OUTPUT"; printf 'notes<<EOF\\none\\ntwo\\nEOF\\n' >> "$CI_OUTPUT"`, { id: "build", name: "build" }),
+        step('echo "got ${{ steps.build.outputs.version }} ${{ steps.build.outcome }}"', { name: "use" }),
+        step("exit 1", { id: "flaky", name: "flaky", continueOnError: true }),
+        step('echo "after ${{ steps.flaky.outcome }}/${{ steps.flaky.conclusion }}"', { name: "after" }),
+      ],
+      { outputs: { version: "${{ steps.build.outputs.version }}", notes: "${{ steps.build.outputs.notes }}", gone: "${{ steps.nope.outputs.x }}" } },
+    ),
+    { log: (t) => void (log += t) },
+    "test",
+  );
+  expect(await job.done).toBe("success");
+  expect(log).toContain("got 1.2 success");
+  expect(log).toContain("after failure/success");
+  expect(job.outputs()).toEqual({ version: "1.2", notes: "one\ntwo", gone: "" });
+});
+
+test("an expression that fails at run time fails its step, not the runner", async () => {
+  const { result, log } = await run(assignment([step("echo ${{ fromJSON('nope') }}", { name: "bad" }), step("echo cleanup", { name: "cleanup", if: "always()" })]));
+  expect(result).toBe("failure");
+  expect(log).toContain("isn't JSON");
+  expect(log).toContain("▶ cleanup");
 });
 
 test("a step that runs out of time fails the job", async () => {

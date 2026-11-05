@@ -12,12 +12,24 @@ test("needs must name jobs of the workflow, without loops", () => {
   expect(() => wf("  a:\n    needs: a\n    steps: [{ run: x }]\n")).toThrow("loop");
 });
 
-test("if takes the status functions, plain, negated or in ${{ }}", () => {
+test("if takes an expression, plain or in ${{ }}, over what a job's condition can see", () => {
   expect(parseCondition("always()", "j")).toBe("always()");
   expect(parseCondition("${{ !cancelled() }}", "j")).toBe("!cancelled()");
   expect(parseCondition(" failure() ", "j")).toBe("failure()");
-  expect(() => parseCondition("github.ref == 'refs/heads/main'", "j")).toThrow("aren't supported yet");
-  expect(() => parseCondition("success() && failure()", "j")).toThrow("aren't supported yet");
+  expect(parseCondition("github.ref == 'refs/heads/main'", "j")).toBe("github.ref == 'refs/heads/main'");
+  expect(parseCondition("failure() && needs.build.result == 'failure'", "j")).toBe("failure() && needs.build.result == 'failure'");
+  expect(() => parseCondition("steps.a.outcome == 'success'", "j")).toThrow('"steps" isn\'t available here');
+  expect(() => parseCondition("secrets.TOKEN == 'x'", "j")).toThrow('"secrets" isn\'t available here');
+  expect(() => parseCondition("1 ==", "j")).toThrow("j: if:");
+});
+
+test("an if: can look at the run, on top of how its needs went", () => {
+  const context = { github: { ref: "refs/heads/main" }, needs: { build: { result: "failure", outputs: { v: "1" } } } };
+  expect(conditionHolds("github.ref == 'refs/heads/main'", ["success"], ["success"], context)).toBe(true);
+  expect(conditionHolds("github.ref == 'refs/heads/dev'", ["success"], ["success"], context)).toBe(false);
+  // Naming no status function means success() too.
+  expect(conditionHolds("github.ref == 'refs/heads/main'", ["failure"], ["failure"], context)).toBe(false);
+  expect(conditionHolds("always() && needs.build.outputs.v == '1'", ["failure"], ["failure"], context)).toBe(true);
 });
 
 test("without if a job runs only when all its needs succeeded", () => {

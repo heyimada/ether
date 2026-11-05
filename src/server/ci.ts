@@ -1,9 +1,10 @@
 import { and, asc, desc, eq, inArray, lt, or } from "drizzle-orm";
 import { resolve } from "node:path";
 import { removeLeftoverContainers, startJob } from "../runner/execute";
-import type { Claim, Isolation, JobAssignment, JobResult, RunningJob } from "../runner/protocol";
+import { evalTemplate, secretsIn, toText, type Context, type Value } from "../runner/expr";
+import { LABEL_RE, type Claim, type Isolation, type JobAssignment, type JobResult, type RunningJob } from "../runner/protocol";
 import { secret, sha256 } from "./access";
-import { instanceLabel } from "./ci-container";
+import { IMAGE_RE, instanceLabel } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
 import { conditionHolds, matrixEnvName, type MatrixValues, type NeedStatus } from "./ci-graph";
 import { inputEnvName, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
@@ -52,12 +53,63 @@ function ciVars(run: Run, owner: string, name: string): Record<string, string> {
   };
 }
 
+// What `github` and `inputs` say in expressions. A run isn't there yet when its runs-on is decided.
+function runContext(run: Pick<Run, "sha" | "ref" | "refType" | "event" | "workflowName" | "pullNumber" | "inputs" | "actorId" | "repoId"> & { id?: number }, owner: string, name: string): Context {
+  const actor = run.actorId ? (db.select({ u: user.username }).from(user).where(eq(user.id, run.actorId)).get()?.u ?? "") : "";
+  const base = run.pullNumber === null ? null : (db.select({ base: issue.baseRef }).from(issue).where(and(eq(issue.repoId, run.repoId), eq(issue.number, run.pullNumber))).get()?.base ?? "");
+  const inputs = Object.fromEntries(Object.entries(JSON.parse(run.inputs) as Record<string, string>).map(([k, v]): [string, Value] => [k, v === "true" ? true : v === "false" ? false : v]));
+  return {
+    github: {
+      repository: `${owner}/${name}`,
+      repository_owner: owner,
+      sha: run.sha,
+      ref: `refs/${run.refType === "tag" ? "tags" : "heads"}/${run.ref}`,
+      ref_name: run.ref,
+      ref_type: run.refType,
+      event_name: run.event,
+      workflow: run.workflowName,
+      actor,
+      run_id: run.id ?? null,
+      head_ref: run.pullNumber === null ? "" : run.ref,
+      base_ref: base ?? "",
+      event: { inputs, pull_request: run.pullNumber === null ? null : { number: run.pullNumber } },
+    },
+    inputs,
+  };
+}
+
+// needs.<job>.result and .outputs. Matrix jobs share a key: any failure counts, and later outputs win.
+function needsContext(job: Job, all: Job[]): Value {
+  const out: { [key: string]: { result: string; outputs: { [key: string]: Value } } } = {};
+  for (const need of needed(job, all)) {
+    const entry = (out[need.key] ??= { result: "success", outputs: {} });
+    Object.assign(entry.outputs, JSON.parse(need.outputValues) as Record<string, string>);
+    const result = need.status === "error" ? "failure" : need.status;
+    const rank = ["success", "skipped", "cancelled", "failure"];
+    if (rank.indexOf(result) > rank.indexOf(entry.result)) entry.result = result;
+  }
+  return out;
+}
+
+function jobContext(job: Job, run: Run, owner: string, name: string, all: Job[]): Context {
+  return { ...runContext(run, owner, name), matrix: JSON.parse(job.matrix) as Value, needs: needsContext(job, all) };
+}
+
+const repoNames = (repoId: number) => db.select({ owner: user.username, name: repo.name }).from(repo).innerJoin(user, eq(user.id, repo.ownerId)).where(eq(repo.id, repoId)).get();
+
 const pullBase = (run: Run) =>
   run.pullNumber === null ? null : (db.select({ base: issue.baseRef }).from(issue).where(and(eq(issue.repoId, run.repoId), eq(issue.number, run.pullNumber))).get()?.base ?? null);
 
-const secretNames = (steps: Step[]) => [...new Set(steps.flatMap((s) => Object.values(s.env ?? {}).flatMap((v) => (typeof v === "string" ? [] : [v.secret]))))];
-const resolveEnv = (env: Record<string, EnvValue> | undefined, secrets: Map<string, string>) =>
-  Object.fromEntries(Object.entries(env ?? {}).map(([k, v]) => [k, typeof v === "string" ? v : secrets.get(v.secret)!]));
+// The secrets a job's steps and outputs refer to; it gets those and no others.
+function secretNames(steps: Step[], outputs: Record<string, string> = {}) {
+  const names = steps.flatMap((s) => [
+    ...Object.values(s.env ?? {}).flatMap((v) => (typeof v === "string" ? secretsIn(v) : [v.secret])),
+    ...secretsIn(s.run),
+    ...secretsIn(s.name),
+    ...(s.if ? secretsIn(s.if, true) : []),
+  ]);
+  return [...new Set([...names, ...Object.values(outputs).flatMap((v) => secretsIn(v))])];
+}
 
 const instance = () => instanceLabel(resolve(config.dataDir));
 
@@ -72,7 +124,7 @@ type Active = { runId: number; job: RunningJob | null; stopped: boolean };
 const active = new Map<number, Active>();
 // A job on an external runner, which is told to stop the next time it reports. Its token lives only here, so
 // it ends with the job or with this process, and a runner told "no such job" stops working on it.
-type RemoteJob = Active & { job: null; row: Job; begun: Begun; runnerId: number; runnerName: string; repoId: number; tokenHash: string; seen: number; masker: LogMasker; log: JobLog };
+type RemoteJob = Active & { job: null; row: Job; begun: Begun; runnerId: number; runnerName: string; repoId: number; tokenHash: string; seen: number; masker: LogMasker; mask: string[]; log: JobLog };
 const remote = new Map<number, RemoteJob>();
 const DONE = new Set<Job["status"]>(["success", "failure", "error", "cancelled", "skipped"]);
 const FINISHED_RUN = new Set<Run["status"]>(["success", "failure", "cancelled", "error"]);
@@ -172,14 +224,30 @@ function nextJob(accepts?: (job: Job) => boolean): Job | null {
       const all = byRun.get(job.runId) ?? byRun.set(job.runId, runJobs(job.runId)).get(job.runId)!;
       const deps = needed(job, all);
       if (deps.some((d) => !DONE.has(d.status))) continue;
-      const ancestors = ancestorsOf(job, all);
-      if (job.key && !conditionHolds(job.condition, deps.map((d) => d.status as NeedStatus), ancestors.map((d) => d.status as NeedStatus))) {
-        // When the direct needs succeeded, it was a job further up that failed; name that one.
-        const failed = deps.filter((d) => d.status !== "success").map((d) => d.name);
-        const why = failed.length ? failed : ancestors.filter((d) => d.status === "failure" || d.status === "error").map((d) => d.name);
-        skipJob(job, job.condition ? `if: ${job.condition} is false` : `${why.join(", ")} didn't succeed`);
-        skipped = true;
-        break;
+      if (job.key) {
+        const ancestors = ancestorsOf(job, all);
+        let runs: boolean;
+        try {
+          const run = job.condition ? db.select().from(ciRun).where(eq(ciRun.id, job.runId)).get() : null;
+          const names = run ? repoNames(run.repoId) : null;
+          const context = run && names ? jobContext(job, run, names.owner!, names.name, all) : {};
+          runs = conditionHolds(job.condition, deps.map((d) => d.status as NeedStatus), ancestors.map((d) => d.status as NeedStatus), context);
+        } catch (e) {
+          // It can't say whether it should run, so it fails rather than guess; a deploy shouldn't go ahead on an error.
+          db.update(ciJob).set({ status: "failure", log: `${job.log}✖ if: ${(e as Error).message}\n`, finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
+          if (job.environment) setDeployment(job.id, { status: "cancelled", finishedAt: new Date() });
+          void refreshRun(job.runId);
+          skipped = true;
+          break;
+        }
+        if (!runs) {
+          // When the direct needs succeeded, it was a job further up that failed; name that one.
+          const failed = deps.filter((d) => d.status !== "success").map((d) => d.name);
+          const why = failed.length ? failed : ancestors.filter((d) => d.status === "failure" || d.status === "error").map((d) => d.name);
+          skipJob(job, job.condition ? `if: ${job.condition} is false` : `${why.join(", ")} didn't succeed`);
+          skipped = true;
+          break;
+        }
       }
       if (accepts && !accepts(job)) continue;
       if (job.maxParallel && all.filter((j) => j.key === job.key && j.status === "running").length >= job.maxParallel) continue;
@@ -228,6 +296,24 @@ function beginJob(job: Job): Begun | null {
   return { run, owner: r.owner!, name: r.repo.name, env };
 }
 
+const OUTPUT_NAME_RE = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
+const MAX_OUTPUTS_SIZE = 64 * 1024;
+
+// A job's outputs, as other jobs' expressions and the database will see them. Like on GitHub, one that holds a
+// secret is left out: a later job may not be meant to have that secret, and its log wouldn't mask it.
+function cleanOutputs(raw: unknown, mask: string[]): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  let size = 0;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!OUTPUT_NAME_RE.test(key) || typeof value !== "string" || mask.some((m) => m && value.includes(m))) continue;
+    size += key.length + value.length;
+    if (size > MAX_OUTPUTS_SIZE) break;
+    out[key] = value;
+  }
+  return out;
+}
+
 type JobLog = { text: () => string; append: (text: string) => void };
 
 // A deploy job already says whether it waited and who approved it.
@@ -250,10 +336,12 @@ async function runJob(job: Job) {
   active.set(job.id, a);
   const log = jobLog(job);
   let result: JobResult = "error";
+  let mask: string[] = [];
   try {
     const assignment = assignmentFor(job, begun, ciIsolation(), git.repoPath(begun.owner, begun.name), " An admin can switch CI to containers under Admin → Access.");
     if (typeof assignment === "string") log.append(`${assignment}\n`);
     else {
+      mask = assignment.mask;
       if (begun.env) log.append(`▶ Deploying to ${begun.env.name}${job.url ? ` (${job.url})` : ""}\n`);
       a.job = startJob(assignment, { log: log.append }, instance());
       result = await a.job.done;
@@ -261,13 +349,13 @@ async function runJob(job: Job) {
   } catch (e) {
     log.append(`\nRunner error: ${(e as Error).message}\n`);
   }
-  await finishJob(job, begun, a, result, log.text(), () => active.delete(job.id));
+  await finishJob(job, begun, a, result, log.text(), () => active.delete(job.id), cleanOutputs(a.job?.outputs(), mask));
 }
 
 // What's left once a runner is done with a job: its status, its deployment, fail-fast and its run.
-async function finishJob(job: Job, { run, env }: Begun, a: Active, result: JobResult, log: string, release: () => void) {
+async function finishJob(job: Job, { run, env }: Begun, a: Active, result: JobResult, log: string, release: () => void, outputValues: Record<string, string> = {}) {
   const cancelled = a.stopped || currentStatus(run.id) === "cancelled";
-  db.update(ciJob).set({ log, status: cancelled ? "cancelled" : result === "success" ? "success" : "failure", finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
+  db.update(ciJob).set({ log, outputValues: JSON.stringify(outputValues), status: cancelled ? "cancelled" : result === "success" ? "success" : "failure", finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
   release();
   const stopped = cancelled;
   if (env && !stopped) setDeployment(job.id, { status: result === "success" ? "success" : "failure", finishedAt: new Date() });
@@ -477,7 +565,8 @@ const currentStatus = (runId: number) => db.select({ s: ciRun.status }).from(ciR
 // All a runner needs for a job, secrets filled in, or why the job can't have one.
 function assignmentFor(job: Job, { run, owner, name, env }: Begun, isolation: Isolation, checkoutUrl: string, hostHint: string): JobAssignment | string {
   const steps = JSON.parse(job.steps) as Step[];
-  const wanted = secretNames(steps);
+  const outputs = JSON.parse(job.outputs) as Record<string, string>;
+  const wanted = secretNames(steps, outputs);
   if (wanted.length && isolation === "host") return `This job uses secrets (${wanted.join(", ")}), which are only passed to jobs that run in containers.${hostHint}`;
   const secrets = loadSecrets(run.repoId, wanted, env?.id ?? null);
   const matrix = Object.entries(JSON.parse(job.matrix) as MatrixValues).map(([k, v]) => [matrixEnvName(k), v]);
@@ -488,8 +577,19 @@ function assignmentFor(job: Job, { run, owner, name, env }: Begun, isolation: Is
     image: job.image,
     checkout: { url: checkoutUrl, sha: run.sha },
     vars: { ...ciVars(run, owner, name), CI_JOB: job.key || job.name, ...Object.fromEntries(matrix), ...(env ? { CI_ENVIRONMENT: env.name } : {}) },
+    context: { ...jobContext(job, run, owner, name, runJobs(run.id)), secrets: Object.fromEntries(secrets) },
+    outputs,
     mask: [...secrets.values()],
-    steps: steps.map((s) => ({ name: s.name, run: s.run, shell: s.shell, timeoutMinutes: s.timeoutMinutes, env: resolveEnv(s.env, secrets) })),
+    steps: steps.map((s) => ({
+      id: s.id ?? null,
+      name: s.name,
+      run: s.run,
+      shell: s.shell,
+      timeoutMinutes: s.timeoutMinutes,
+      if: s.if ?? null,
+      continueOnError: s.continueOnError ?? false,
+      env: Object.fromEntries(Object.entries(s.env ?? {}).map(([k, v]) => [k, typeof v === "string" ? v : `\${{ secrets.${v.secret} }}`])),
+    })),
   };
 }
 
@@ -560,7 +660,7 @@ export function claimJob(runner: Runner): Claim | null {
     if (!canRun(runner, labels, r)) return false;
     // Which runner asks first shouldn't decide whether a job with secrets runs: a runner on its host leaves
     // those to one with containers that can run them. With no such runner it takes them, so they end with the reason.
-    if (isolation !== "host" || secretNames(JSON.parse(job.steps) as Step[]).length === 0) return true;
+    if (isolation !== "host" || secretNames(JSON.parse(job.steps) as Step[], JSON.parse(job.outputs) as Record<string, string>).length === 0) return true;
     return !allRunners().some((other) => other.isolation === "container" && canRun(other, labels, r));
   };
   for (;;) {
@@ -580,7 +680,7 @@ export function claimJob(runner: Runner): Claim | null {
       }
       if (begun.env) log.append(`▶ Deploying to ${begun.env.name}${job.url ? ` (${job.url})` : ""}\n`);
       const token = secret("ethj_");
-      remote.set(job.id, { ...a, job: null, row: job, begun, runnerId: runner.id, runnerName: runner.name, repoId: begun.run.repoId, tokenHash: sha256(token), seen: Date.now(), masker: new LogMasker(assignment.mask), log });
+      remote.set(job.id, { ...a, job: null, row: job, begun, runnerId: runner.id, runnerName: runner.name, repoId: begun.run.repoId, tokenHash: sha256(token), seen: Date.now(), masker: new LogMasker(assignment.mask), mask: assignment.mask, log });
       assignment.checkout.authorization = `Basic ${btoa(`${JOB_GIT_USER}:${token}`)}`;
       // Often enough that one lost report doesn't end a job that is just being quiet, and that a cancel,
       // which travels in the answer to a report, reaches it within seconds.
@@ -611,11 +711,11 @@ export function reportJob(job: RemoteJob, text: string) {
   return { stop: job.stopped };
 }
 
-export async function finishRemoteJob(job: RemoteJob, result: JobResult) {
+export async function finishRemoteJob(job: RemoteJob, result: JobResult, outputs?: unknown) {
   job.log.append(job.masker.flush());
   // Nobody here asked it to stop, so its run isn't cancelled: the job just didn't finish, which counts as failed.
   if (result === "cancelled" && !job.stopped) job.log.append(`\n✖ Runner ${job.runnerName} stopped before this job finished\n`);
-  await finishJob(job.row, job.begun, job, result, job.log.text(), () => remote.delete(job.row.id));
+  await finishJob(job.row, job.begun, job, result, job.log.text(), () => remote.delete(job.row.id), cleanOutputs(outputs, job.mask));
   pump();
 }
 
@@ -653,7 +753,28 @@ export const isWorkflowPath = (path: string) => path === WORKFLOW || (path.start
 
 type RunMeta = { ref: string; refType: Run["refType"]; event: Run["event"]; pullNumber: number | null; inputs: Record<string, string> };
 
-function createRun(repoId: number, sha: string, actorId: string | null, path: string, wf: ParsedWorkflow, meta: RunMeta): number {
+// A job's runs-on and image can depend on the run and its matrix, and are settled before it's queued.
+function settleJobs(repoId: number, sha: string, actorId: string | null, wf: ParsedWorkflow, meta: RunMeta) {
+  const names = repoNames(repoId);
+  const base = runContext({ repoId, sha, actorId, workflowName: wf.name, ...meta, inputs: JSON.stringify(meta.inputs) }, names?.owner ?? "", names?.name ?? "");
+  return wf.jobs.map((j) => {
+    const context: Context = { ...base, matrix: j.matrix };
+    const label = (l: string) => toText(evalTemplate(l, context));
+    const runsOn = [...new Set(j.runsOn.map(label).filter(Boolean))];
+    for (const l of runsOn) if (!LABEL_RE.test(l)) throw new Error(`Job "${j.name}": runs-on came to "${l}", which isn't a runner label`);
+    const image = j.image === null ? null : label(j.image) || null;
+    if (image !== null && !IMAGE_RE.test(image)) throw new Error(`Job "${j.name}": image came to "${image}", which isn't a container image name`);
+    return { ...j, runsOn, image };
+  });
+}
+
+function createRun(repoId: number, sha: string, actorId: string | null, path: string, workflow: ParsedWorkflow, meta: RunMeta): number {
+  let wf = workflow;
+  try {
+    wf = { ...workflow, jobs: settleJobs(repoId, sha, actorId, workflow, meta) };
+  } catch (e) {
+    return db.insert(ciRun).values({ repoId, sha, actorId, status: "error", message: (e as Error).message, finishedAt: new Date(), workflowPath: path, workflowName: workflow.name, ...meta, inputs: JSON.stringify(meta.inputs) }).returning({ id: ciRun.id }).get().id;
+  }
   // Environments a job names are created on first use.
   const envs = new Map(wf.jobs.flatMap((j) => (j.environment ? [[j.environment.name, ensureEnvironment(repoId, j.environment.name)] as const] : [])));
   return db.transaction((tx) => {
@@ -676,6 +797,7 @@ function createRun(repoId: number, sha: string, actorId: string | null, path: st
           maxParallel: j.maxParallel,
           image: j.image,
           runsOn: JSON.stringify(j.runsOn),
+          outputs: JSON.stringify(j.outputs),
           environment: j.environment?.name ?? null,
           url: j.environment?.url ?? null,
           steps: JSON.stringify(j.steps),

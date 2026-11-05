@@ -1,6 +1,6 @@
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";
-import { LABEL_RE, MAX_LABELS, RESULTS, type Isolation, type JobResult } from "../../runner/protocol";
+import { LABEL_RE, MAX_LABELS, PROTOCOL, RESULTS, type Isolation, type JobResult } from "../../runner/protocol";
 import { HttpError, requireAdmin, requireRepo, requireUser, secret, sha256 } from "../access";
 import { abandonRemoteJobs, claimJob, finishRemoteJob, RUNNER_ONLINE_MS, remoteJob, reportJob, resumePump } from "../ci";
 import { db } from "../db/client";
@@ -121,8 +121,9 @@ export const runnerRoutes = new Elysia()
     return { id: runner.id, token: own };
   })
   // Returns at once with a job or 204; a runner with nothing to do asks again a few seconds later.
-  .post("/runner/claim", ({ request }) => {
+  .post("/runner/claim", ({ request, body }) => {
     const runner = requireRunner(request);
+    if ((body as { protocol?: unknown } | null)?.protocol !== PROTOCOL) return Response.json({ error: "This version of ether-runner doesn't go with this server" }, { status: 426 });
     db.update(ciRunner).set({ lastSeenAt: new Date() }).where(eq(ciRunner.id, runner.id)).run();
     // The isolation it registered with, not what a request says: the jobs of a runner on its host can read
     // its token, and mustn't be able to pass as a runner with containers to get secrets.
@@ -137,8 +138,8 @@ export const runnerRoutes = new Elysia()
   })
   .post("/runner/jobs/:id/finish", async ({ request, params, body }) => {
     const job = requireJob(request, params.id);
-    const result = (body as { result?: unknown } | null)?.result;
+    const { result, outputs } = (body ?? {}) as { result?: unknown; outputs?: unknown };
     if (!RESULTS.includes(result as JobResult)) throw new HttpError(400, `result must be one of ${RESULTS.join(", ")}`);
-    await finishRemoteJob(job, result as JobResult);
+    await finishRemoteJob(job, result as JobResult, outputs);
     return { ok: true };
   });

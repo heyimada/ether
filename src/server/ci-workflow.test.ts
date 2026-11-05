@@ -23,12 +23,14 @@ test("jobs may name an image, and job env is merged under step env", () => {
 test("a job without image or env still parses as before", () => {
   const [job] = parseWorkflow("jobs:\n  t:\n    steps:\n      - run: echo hi\n").jobs;
   expect(job.image).toBeNull();
-  expect(job.steps[0]).toEqual({ name: "echo hi", run: "echo hi", shell: null, timeoutMinutes: 10, env: {} });
+  expect(job.steps[0]).toEqual({ id: null, name: "echo hi", run: "echo hi", shell: null, timeoutMinutes: 10, env: {}, if: null, continueOnError: false });
 });
 
-test("secret references must be whole values with a valid name", () => {
+test("secret references need a valid name, wherever they are in a value", () => {
   const bad = (env: string) => () => parseWorkflow(`jobs:\n  t:\n    env:\n      ${env}\n    steps:\n      - run: x\n`);
-  expect(bad('URL: "https://\${{ secrets.HOST }}/x"')).toThrow("plain value or exactly");
+  expect(bad('URL: "https://\${{ secrets.HOST }}/x"')).not.toThrow();
+  expect(bad('URL: "https://\${{ secrets }}/x"')).toThrow("have to be named");
+  expect(bad('URL: "\${{ secrets.lower-case }}"')).toThrow();
   expect(bad("K: ${{ secrets.lower }}")).toThrow("isn't a valid secret name");
   expect(bad("K: ${{ secrets.CI_TOKEN }}")).toThrow("isn't a valid secret name");
   expect(bad("K: ${{secrets.OK}}")).not.toThrow();
@@ -92,6 +94,22 @@ test("runs-on takes a label or a list of them", () => {
   expect(wf("gpu")).toEqual(["gpu"]);
   expect(wf("[linux, gpu, linux]")).toEqual(["linux", "gpu"]);
   expect(parseWorkflow("on: push\njobs:\n  a:\n    steps: [{ run: x }]\n", ".ether/workflows/t.yml").jobs[0].runsOn).toEqual([]);
-  expect(() => wf("'${{ matrix.os }}'")).toThrow("expressions aren't supported yet");
+  expect(wf("'${{ matrix.os }}'")).toEqual(["${{ matrix.os }}"]);
+  expect(() => wf("'${{ steps.a.outputs.b }}'")).toThrow('"steps" isn\'t available here');
+  expect(() => wf("'${{ secrets.A }}'")).toThrow('"secrets" isn\'t available here');
   expect(() => wf("[a b]")).toThrow("runs-on must be");
+});
+
+test("steps and outputs are checked when the workflow is read", () => {
+  const wf = (steps: string, more = "") => parseWorkflow(`on: push\njobs:\n  a:\n${more}    steps:\n${steps}`, ".ether/workflows/t.yml").jobs[0];
+  const job = wf("      - id: build\n        name: on ${{ matrix.os }}\n        if: ${{ github.ref == 'x' }}\n        continue-on-error: true\n        run: echo ${{ github.sha }}\n");
+  expect(job.steps[0]).toMatchObject({ id: "build", name: "on ${{ matrix.os }}", if: "github.ref == 'x'", continueOnError: true, run: "echo ${{ github.sha }}" });
+  expect(wf("      - run: echo ${{ github.sha }} and more\n").steps[0].name).toBe("echo … and more");
+  expect(wf("      - run: x\n", "    outputs:\n      v: ${{ steps.b.outputs.v }}\n").outputs).toEqual({ v: "${{ steps.b.outputs.v }}" });
+  expect(() => wf("      - run: echo ${{ nope.x }}\n")).toThrow('"nope" isn\'t available here');
+  expect(() => wf("      - run: echo ${{ 1 == }}\n")).toThrow("Step 1 of");
+  expect(() => wf("      - run: x\n        if: 1 ==\n")).toThrow("if:");
+  expect(() => wf("      - run: x\n        id: a b\n")).toThrow("id must be");
+  expect(() => wf("      - run: x\n        id: a\n      - run: y\n        id: a\n")).toThrow("already a step");
+  expect(() => wf("      - run: x\n", "    outputs:\n      a b: x\n")).toThrow("isn't a valid output name");
 });

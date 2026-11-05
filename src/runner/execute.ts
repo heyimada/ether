@@ -1,10 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { chownWorkspaceArgs, cli, collect, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, shellCommand } from "../server/ci-container";
 import { LogMasker } from "../server/log-mask";
+import { evalTemplate, fillTemplate, holds, toText, type Context, type Status, type Value } from "./expr";
 import type { JobAssignment, JobChannel, JobResult, RunningJob, Shell } from "./protocol";
+import { parseOutputs } from "./step-output";
 
 // Runs a job from its assignment: a fresh checkout, then its steps, in a container of its own or on the host.
 // By default each job runs in a container (see ci-container.ts) and sees nothing of the machine. Everything
@@ -34,6 +36,8 @@ function hostEnv() {
   return env;
 }
 
+const MAX_OUTPUT_FILE = 1024 * 1024;
+
 const removeContainer = (runtime: string, name: string) => Bun.spawn([runtime, "rm", "--force", name], { stdout: "ignore", stderr: "ignore" }).exited;
 
 // A host step runs in its own process group, so stopping it also stops what it started (a `sleep`, a
@@ -62,6 +66,7 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
   let stopped = false;
   let proc: ReturnType<typeof Bun.spawn> | null = null;
   let box: { runtime: string; name: string } | null = null;
+  let outputs: Record<string, string> = {};
 
   // Held in `proc` like a step, so stopping the job ends a clone that's taking long.
   const git = async (args: string[]) => {
@@ -118,22 +123,51 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
       }
 
       let result: JobResult = "success";
-      for (const step of job.steps) {
+      // Whether a step that counts has failed, which is what success() and failure() look at.
+      let failed = false;
+      const steps: { [id: string]: Value } = {};
+      const status = (): Status => ({ success: !failed, failure: failed, cancelled: false });
+      const context = (env: Record<string, string>): Context => ({ ...job.context, steps, env });
+      const failStep = (id: string | null) => {
+        failed = true;
+        result = "failure";
+        if (id) steps[id] = { outcome: "failure", conclusion: "failure", outputs: {} };
+      };
+      for (const [index, step] of job.steps.entries()) {
         if (stopped) break;
-        append(masked(`▶ ${step.name}\n`));
+        let name: string;
+        let script: string;
+        const env: Record<string, string> = {};
+        try {
+          for (const [key, value] of Object.entries(step.env)) env[key] = toText(evalTemplate(value, context(env), status()));
+          name = fillTemplate(step.name, context(env), status());
+          if (!holds(step.if, context(env), status())) {
+            append(masked(`⊘ ${name} (skipped)\n\n`));
+            if (step.id) steps[step.id] = { outcome: "skipped", conclusion: "skipped", outputs: {} };
+            continue;
+          }
+          script = fillTemplate(step.run, context(env), status());
+        } catch (e) {
+          append(masked(`✖ ${step.name}: ${(e as Error).message}\n\n`));
+          failStep(step.id);
+          continue;
+        }
+        append(masked(`▶ ${name}\n`));
         const started = Date.now();
-        const vars = { ...job.vars, ...step.env };
+        // Steps write their outputs to this file, a fresh one each.
+        const outputFile = box ? `/tmp/ether-ci-output-${index}` : join(dir, `.ether-ci-output-${randomBytes(6).toString("hex")}`);
+        const vars = { ...job.vars, ...env, CI_OUTPUT: outputFile };
         let running: ReturnType<typeof Bun.spawn>;
         try {
           if (box) {
             // The job's variables go in on stdin; the CLI keeps Ether's own environment.
-            const script = envScript(vars);
-            const exec = Bun.spawn([box.runtime, ...execArgs(box.name, shellCommand(step.shell, step.run))], { stdout: "pipe", stderr: "pipe", stdin: "pipe" });
-            exec.stdin.write(script);
+            const variables = envScript(vars);
+            const exec = Bun.spawn([box.runtime, ...execArgs(box.name, shellCommand(step.shell, script))], { stdout: "pipe", stderr: "pipe", stdin: "pipe" });
+            exec.stdin.write(variables);
             await exec.stdin.end();
             running = exec;
           } else
-            running = Bun.spawn(command(step.shell, step.run), {
+            running = Bun.spawn(command(step.shell, script), {
               cwd: dir,
               env: { ...hostEnv(), ...vars },
               stdout: "pipe",
@@ -142,7 +176,7 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
               detached: process.platform !== "win32",
             });
         } catch (e) {
-          return fail(masked(`✖ ${step.name}: ${(e as Error).message}`));
+          return fail(masked(`✖ ${name}: ${(e as Error).message}`));
         }
         proc = running;
         const timer = setTimeout(() => {
@@ -160,10 +194,28 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
         const code = await running.exited;
         clearTimeout(timer);
         proc = null;
-        append(masked(`${code === 0 ? "✔" : "✖"} ${step.name} (exit ${code}, ${((Date.now() - started) / 1000).toFixed(1)}s)\n\n`));
-        if (code !== 0) {
+        append(masked(`${code === 0 ? "✔" : "✖"} ${name} (exit ${code}, ${((Date.now() - started) / 1000).toFixed(1)}s)\n\n`));
+        // The file belongs to the step's own user and may be anything a step wrote, so it's read like any other output.
+        let written = "";
+        if (box) {
+          const read = await collect(box.runtime, ["exec", box.name, "sh", "-c", `cat ${outputFile} 2>/dev/null; rm -f ${outputFile}`], 30_000, MAX_OUTPUT_FILE);
+          if (read.code === 0) written = read.output;
+        } else if (existsSync(outputFile)) {
+          written = readFileSync(outputFile, "utf8").slice(0, MAX_OUTPUT_FILE);
+          rmSync(outputFile, { force: true });
+        }
+        const outcome = code === 0 ? "success" : "failure";
+        if (step.id) steps[step.id] = { outcome, conclusion: code === 0 || step.continueOnError ? "success" : "failure", outputs: parseOutputs(written) };
+        if (code !== 0 && !step.continueOnError) {
+          failed = true;
           result = "failure";
-          break;
+        }
+      }
+      for (const [key, value] of Object.entries(job.outputs)) {
+        try {
+          outputs[key] = fillTemplate(value, context({}), status());
+        } catch (e) {
+          append(masked(`Output ${key}: ${(e as Error).message}\n`));
         }
       }
       return result;
@@ -183,6 +235,7 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
 
   return {
     done: execute().then((result) => (stopped ? "cancelled" : result)),
+    outputs: () => outputs,
     stop() {
       stopped = true;
       if (proc) killTree(proc);
