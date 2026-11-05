@@ -129,7 +129,7 @@ function OrgSettings() {
 
       <Teams org={org.name} teams={teams} repos={repos} />
 
-      <Runners base={`/api/orgs/${encodeURIComponent(org.name)}`} runners={runners} empty="This organization's jobs run on the server's runners until you add one here; from then on they run on its own runners only." filled="This organization's jobs wait for these runners, even if none is online." />
+      <Runners base={`/api/orgs/${encodeURIComponent(org.name)}`} runners={runners} empty="Runners added here run only this organization's jobs. From then on its jobs no longer run on the Ether machine itself, though the server's own runners can still take them; use runs-on to keep them on yours." filled="This organization's jobs wait for a runner, even if none is online. The server's own runners can take them too; use runs-on to keep them on these." />
 
       <section className="card body stack-sm">
         <h2 className="m-0">Base permission</h2>
