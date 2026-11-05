@@ -14,7 +14,8 @@ export type JobAssignment = {
   isolation: Isolation;
   // null is the runner's default image.
   image: string | null;
-  checkout: { url: string; sha: string };
+  // A path on this machine, or for an external runner a path on the server and the header that opens it.
+  checkout: { url: string; sha: string; authorization?: string };
   // What every step is told about the run.
   vars: Record<string, string>;
   // Values to keep out of the log.
@@ -28,3 +29,9 @@ export type JobResult = "success" | "failure" | "error" | "cancelled";
 export type JobChannel = { log: (text: string) => void };
 
 export type RunningJob = { done: Promise<JobResult>; stop: () => void };
+
+// What goes over the wire to an external runner (see ../server/routes/runners.ts for the routes).
+export const RESULTS: JobResult[] = ["success", "failure", "error", "cancelled"];
+// A runner reports at least every heartbeatMs while it runs the job, or the server gives up on it.
+export type Claim = { assignment: JobAssignment; token: string; heartbeatMs: number };
+export type Progress = { stop: boolean };

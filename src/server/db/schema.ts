@@ -519,12 +519,33 @@ export const ciJob = sqliteTable("ci_job", {
   // The environment the job deploys to (see deploy.ts), and the link it names for the deployment.
   environment: text("environment"),
   url: text("url"),
+  // The name of the external runner it ran on; null for the built-in one.
+  runner: text("runner"),
   // While a deploy job waits for its environment's wait timer: when it may start.
   notBefore: integer("not_before", { mode: "timestamp_ms" }),
   status: text("status", { enum: ["queued", "waiting", "running", "success", "failure", "cancelled", "error", "skipped"] }).notNull(),
   log: text("log").notNull().default(""),
   startedAt: integer("started_at", { mode: "timestamp_ms" }),
   finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+});
+
+// Machines that run CI jobs for this server (see ci-runners.ts and ../runner/main.ts).
+export const ciRunner = sqliteTable("ci_runner", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  isolation: text("isolation", { enum: ["container", "host"] }).notNull().default("container"),
+  createdAt: createdAt(),
+  lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }),
+});
+
+// One-time tokens an admin creates so a machine can register as a runner.
+export const ciRunnerRegistration = sqliteTable("ci_runner_registration", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  usedAt: integer("used_at", { mode: "timestamp_ms" }),
+  createdAt: createdAt(),
 });
 
 // What happened in a repository, for activity feeds. Payloads describe the event in the repository

@@ -6,6 +6,7 @@
     "dev:server": "bun --watch src/server/main.ts",
     "dev:web": "vite",
     "build": "vite build",
+    "build:runner": "bun build --compile src/runner/main.ts --outfile dist/ether-runner",
     "start": "bun src/server/main.ts",
     "ether": "bun src/server/cli.ts",
     "typecheck": "tsc --noEmit",

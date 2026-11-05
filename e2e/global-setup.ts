@@ -32,7 +32,7 @@ export default async function globalSetup() {
   const webDir = join(dataDir, "web");
   cpSync(built, webDir, { recursive: true });
   const sshPort = await freePort();
-  const env = { ...process.env, ETHER_DATA: dataDir, ETHER_PORT: String(port), ETHER_HOST: "127.0.0.1", ETHER_WEB_DIST: webDir, ETHER_SSH_PORT: String(sshPort) };
+  const env = { ...process.env, ETHER_DATA: dataDir, ETHER_PORT: String(port), ETHER_HOST: "127.0.0.1", ETHER_WEB_DIST: webDir, ETHER_SSH_PORT: String(sshPort), ETHER_CI_RUNNER_TIMEOUT: "8" };
 
   const admin = spawnSync("bun", ["src/server/cli.ts", "create-admin", ADMIN.username, "--password", ADMIN.password], {
     cwd: root,

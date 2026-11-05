@@ -39,6 +39,7 @@ Development: run `bun run dev:server` and `bun run dev:web` together. The app is
 | `ETHER_CI_RUNTIME` | `docker`, else `podman` | Container CLI for CI jobs |
 | `ETHER_CI_IMAGE` | `oven/bun:1` | Image for CI jobs that don't name one |
 | `ETHER_CI_JOBS` | `2` | CI jobs that run at the same time, across all repositories |
+| `ETHER_CI_RUNNER_TIMEOUT` | `90` | Seconds an external runner may stay silent before it loses its job (at least 5); runners report at a third of this |
 
 ## Example deployment: a Tailscale tailnet
 
@@ -131,6 +132,15 @@ Each run is one workflow for one commit. Steps get `CI`, `CI_REPOSITORY`, `CI_CO
 **Where jobs run.** By default each job gets its own container, from Docker or Podman on the Ether machine (whichever is installed, or `ETHER_CI_RUNTIME`). The checkout is copied in, not mounted, so a job can't see Ether's data folder or anything else on the host. The container runs with `no-new-privileges`, without raw sockets, and capped at `ETHER_CI_MEMORY` (default `4g`), `ETHER_CI_CPUS` (`2`) and `ETHER_CI_PIDS` (`1024`) processes, and it is removed when the job ends. Jobs still have network access, for example to install packages. The default image is `ETHER_CI_IMAGE`, or `oven/bun:1`. Without a container runtime, jobs fail with a message saying so.
 
 An admin can instead choose **On this machine, as the user Ether runs as** (the behaviour before containers, and the only option without Docker or Podman, for example on Windows without Docker Desktop). Those jobs can read Ether's data folder, including the database and auth secret, so everyone with write access to a repository with CI controls the server. Jobs that use secrets are refused in this mode.
+
+**Runners on other machines.** Under **Admin → Runners**, **Add runner** shows a one-time command for the other machine. Build the program with `bun run build:runner` (`dist/ether-runner`, a single file for the platform it's built on), then:
+
+```bash
+ether-runner register --url https://ether.example.com --token <token> --name build-1
+ether-runner run --jobs 2
+```
+
+A runner only ever calls the server, so its machine needs no open port. Jobs run in a container per job with Docker or Podman on that machine; `--isolation host` runs them directly as the runner's user instead, which gives everyone who can push on the server that machine, including the runner's token and with it the code of other repositories' jobs. Such a runner gets no secrets, but use it only if you trust everyone who can push. A runner keeps the isolation it registered with; to change it, remove it and register again. A job with secrets waits for a runner with containers if there is one, and otherwise fails with the reason. Once a runner is registered, **all** jobs go to runners and the built-in one stops taking new ones, even while no runner is online, so jobs wait rather than land on the Ether machine; removing the last runner brings it back. Every job gets a token of its own that can read just its repository until the job ends, and its secrets, which the runner keeps in memory only. A runner silent for `ETHER_CI_RUNNER_TIMEOUT` seconds (90) loses its job. Use HTTPS: jobs carry their secrets over this connection.
 
 **Secrets.** Owners add them under **Settings → CI secrets**. Values are encrypted in the database with a key derived from the auth secret (so a backup restores them along with it), can't be read back through the API or the UI, and are masked as `***` in logs. They reach a job only as the environment variables it names, and only in a container. Masking only prevents accidents: anyone who can push to the repository can write a workflow that prints a secret in another form, so only store what everyone with write access may know. If the auth secret changes (for example a new `BETTER_AUTH_SECRET`), jobs report that a secret can't be decrypted until it's set again.
 
