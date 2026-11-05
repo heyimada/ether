@@ -399,6 +399,8 @@ const waitingFor = (repoId: number, environmentName: string) =>
 // Approved jobs waiting on a timer are included, so a shorter, longer or removed timer applies to them too.
 export function reconsiderEnvironment(repoId: number, environmentName: string) {
   for (const job of waitingFor(repoId, environmentName)) requeue(job.id);
+  // Its queued jobs may no longer need a runner with labels, which only this tells the built-in one.
+  pump();
 }
 
 // Before an environment is deleted: its waiting deploy jobs fail instead of waiting for good.
@@ -523,6 +525,12 @@ const allRunners = () => db.select().from(ciRunner).all();
 function builtinTakes(job: Job) {
   const r = repoOfJob(job);
   return !!r && labelsOf(job, r).length === 0 && !allRunners().some((runner) => covers(runner, r));
+}
+
+// What a job's runner has to have, for showing on its run.
+export function runnerLabels(job: Job) {
+  const r = repoOfJob(job);
+  return r ? labelsOf(job, r) : [];
 }
 
 // Why a queued job can't get a runner right now, if that's the reason.

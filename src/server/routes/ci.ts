@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
-import { cancel, dispatch, DispatchError, isWorkflowPath, rerun, runnerProblem, workflowFiles } from "../ci";
+import { cancel, dispatch, DispatchError, isWorkflowPath, rerun, runnerLabels, runnerProblem, workflowFiles } from "../ci";
 import { deleteSecret, listSecrets, MAX_SECRET, SECRET_NAME_RE, setSecret } from "../ci-secrets";
 import { db } from "../db/client";
 import { ciJob, ciRun, user } from "../db/schema";
@@ -109,7 +109,7 @@ export const ciRoutes = new Elysia()
         condition: j.condition,
         status: j.status,
         runner: j.runner,
-        runsOn: JSON.parse(j.runsOn) as string[],
+        runsOn: runnerLabels(j),
         runnerProblem: runnerProblem(j),
         log: j.log,
         steps: JSON.parse(j.steps),

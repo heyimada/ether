@@ -455,6 +455,17 @@ test("runs-on, an environment's labels and a runner's scope decide who takes a j
     await runOf(owner.ctx, ownApi, held, ["queued"]);
     await onlyFor(repoOnly, [], ownApi, held);
 
+    // The run shows all a job waits for, its environment's labels too; clearing those lets the built-in one take it.
+    const gated = push(plain, "    environment: production\n");
+    const gatedRun = await runOf(owner.ctx, plainApi, gated, ["queued"]);
+    const gatedJobs = (await (await owner.ctx.get(`${plainApi}/ci/runs/${gatedRun.run.id}`)).json()).jobs;
+    expect(gatedJobs[0].runsOn).toEqual(["secure"]);
+    expect(gatedJobs[0].runnerProblem).toBe("none");
+    await page.goto(`${baseURL()}/${owner.username}/${plain}/ci/${gatedRun.run.id}`);
+    await expect(page.getByRole("region", { name: "Job job" })).toContainText("Waiting for a runner with secure: none that can take this job is registered.");
+    expect((await owner.ctx.put(`${plainApi}/environments/production`, { data: { runners: [] }, headers: headers() })).ok()).toBe(true);
+    expect((await runOf(owner.ctx, plainApi, gated, FINISHED)).jobs.job.runner).toBeNull();
+
     // Deleting a repository takes its runners along.
     expect((await owner.ctx.delete(ownApi, { headers: headers() })).ok()).toBe(true);
     expect((await claim(repoOnly)).status).toBe(401);
