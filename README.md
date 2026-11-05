@@ -39,7 +39,7 @@ Development: run `bun run dev:server` and `bun run dev:web` together. The app is
 | `ETHER_CI_RUNTIME` | `docker`, else `podman` | Container CLI for CI jobs |
 | `ETHER_CI_IMAGE` | `oven/bun:1` | Image for CI jobs that don't name one |
 | `ETHER_CI_JOBS` | `2` | CI jobs that run at the same time, across all repositories |
-| `ETHER_CI_RUNNER_TIMEOUT` | `90` | Seconds an external runner may stay silent before it loses its job (at least 5); runners report at a third of this |
+| `ETHER_CI_RUNNER_TIMEOUT` | `90` | Seconds an external runner may stay silent before it loses its job (at least 5) |
 
 ## Example deployment: a Tailscale tailnet
 

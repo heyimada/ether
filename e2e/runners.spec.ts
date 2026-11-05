@@ -272,6 +272,20 @@ test("a job's token opens its own repository, read-only, while the job runs; run
     await post(`/runner/jobs/${withSecret.assignment.jobId}/finish`, withSecret.token, { result: "success" });
     const masked = await runOf(owner.ctx, api, gitOk(src, ["rev-parse", "HEAD"]).trim(), FINISHED);
     expect(masked.jobs.deploy.log).toContain("oops *** leaked");
+
+    // A runner shutting down doesn't cancel the run: the job didn't finish, so the check mustn't pass.
+    gitOk(src, ["commit", "-q", "--allow-empty", "-m", "runner stops"]);
+    gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
+    await expect(async () => {
+      claimed = await post("/runner/claim", containerToken, {});
+      expect(claimed.status).toBe(200);
+    }).toPass({ timeout: 10_000 });
+    const stopping = await claimed!.json();
+    await post(`/runner/jobs/${stopping.assignment.jobId}/finish`, stopping.token, { result: "cancelled" });
+    const unfinished = await runOf(owner.ctx, api, gitOk(src, ["rev-parse", "HEAD"]).trim(), FINISHED);
+    expect(unfinished.run.status).toBe("failure");
+    expect(unfinished.jobs.deploy.status).toBe("failure");
+    expect(unfinished.jobs.deploy.log).toContain("Runner in-containers stopped before this job finished");
   } finally {
     const fresh = await loginAdmin();
     await removeAllRunners(fresh);
