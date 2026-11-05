@@ -2,6 +2,10 @@
 // and it reports back through a channel, so a runner knows nothing of Ether's database or disk. Assignments
 // are plain data, ready to go over the wire to a runner on another machine.
 
+// What `runs-on:` and an environment's rules ask of a runner, and what it offers with `--labels`.
+export const LABEL_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+export const MAX_LABELS = 10;
+
 export type Shell = "bash" | "sh" | "pwsh" | "powershell" | "cmd";
 export type Isolation = "container" | "host";
 

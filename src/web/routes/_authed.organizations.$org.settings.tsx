@@ -2,6 +2,7 @@ import { Link, createFileRoute, redirect, useRouter } from "@tanstack/react-rout
 import { useState } from "react";
 import { Avatar, ErrorNote, Field, onSubmit, ROW, useAction } from "../components/ui";
 import { Teams, type Team } from "../components/teams";
+import { Runners, type RunnerInfo } from "../components/runners";
 import { api, del, patch, put } from "../lib/api";
 import { requireAccount } from "../lib/require-account";
 
@@ -13,14 +14,15 @@ export const Route = createFileRoute("/_authed/organizations/$org/settings")({
   beforeLoad: ({ context, location }) => requireAccount(context.me, location.href),
   loader: async ({ params }) => {
     const base = `/api/orgs/${encodeURIComponent(params.org)}`;
-    const [org, prof, teams, repos] = await Promise.all([
+    const [org, prof, teams, repos, runners] = await Promise.all([
       api<Org>(base),
       api<OrgProfile>(`/api/users/${encodeURIComponent(params.org)}/profile`),
       api<{ teams: Team[] }>(`${base}/teams`).catch(() => ({ teams: [] as Team[] })),
       api<{ repos: { owner: string; name: string }[] }>("/api/repos"),
+      api<{ runners: RunnerInfo[] }>(`${base}/runners`).catch(() => ({ runners: [] as RunnerInfo[] })),
     ]);
     if (org.viewerRole !== "owner") throw redirect({ to: "/$owner", params: { owner: params.org } });
-    return { org, profile: prof.profile, teams: teams.teams, repos: repos.repos.filter((r) => r.owner === org.name).map((r) => r.name) };
+    return { org, profile: prof.profile, teams: teams.teams, repos: repos.repos.filter((r) => r.owner === org.name).map((r) => r.name), runners: runners.runners };
   },
   component: OrgSettings,
 });
@@ -34,7 +36,7 @@ const Status = ({ text }: { text: string }) =>
 
 function OrgSettings() {
   const router = useRouter();
-  const { org, profile, teams, repos } = Route.useLoaderData();
+  const { org, profile, teams, runners, repos } = Route.useLoaderData();
   const base = `/api/orgs/${encodeURIComponent(org.name)}`;
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<"member" | "owner">("member");
@@ -126,6 +128,8 @@ function OrgSettings() {
       </section>
 
       <Teams org={org.name} teams={teams} repos={repos} />
+
+      <Runners base={`/api/orgs/${encodeURIComponent(org.name)}`} runners={runners} empty="This organization's jobs run on the server's runners until you add one here; from then on they run on its own runners only." filled="This organization's jobs wait for these runners, even if none is online." />
 
       <section className="card body stack-sm">
         <h2 className="m-0">Base permission</h2>

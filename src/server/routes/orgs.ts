@@ -17,7 +17,7 @@ function requireOrg(name: string) {
 const roleIn = (orgId: string, userId: string) =>
   db.select({ role: orgMember.role }).from(orgMember).where(and(eq(orgMember.orgId, orgId), eq(orgMember.userId, userId))).get()?.role ?? null;
 
-function requireOrgOwner(viewer: Viewer, name: string) {
+export function requireOrgOwner(viewer: Viewer, name: string) {
   const org = requireOrg(name);
   if (roleIn(org.id, viewer.id) !== "owner") throw new HttpError(403, "Only organization owners can do that");
   return org;

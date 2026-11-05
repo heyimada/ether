@@ -13,8 +13,11 @@ import type { Claim, Isolation, JobResult, Progress, RunningJob } from "./protoc
 type Config = { url: string; id: number; token: string; name: string; isolation: Isolation };
 
 const USAGE = `Usage:
-  ether-runner register --url <server> --token <registration token> [--name <name>] [--isolation container|host] [--config <file>]
+  ether-runner register --url <server> --token <registration token> [--name <name>] [--isolation container|host] [--labels <a,b>] [--config <file>]
   ether-runner run [--jobs <n>] [--config <file>]
+
+--labels names what workflows can ask for with runs-on. Isolation and labels are fixed when a runner
+registers; to change them, remove it on the server and register again.
 
 --isolation host runs jobs directly on this machine as this user, which gives whoever can push to a
 repository on the server this machine. The default is a container per job, with Docker or Podman.`;
@@ -39,7 +42,7 @@ const call = (url: string, path: string, token: string | null, body: unknown) =>
     body: JSON.stringify(body),
   });
 
-async function register(values: { url?: string; token?: string; name?: string; isolation?: string; config?: string }) {
+async function register(values: { url?: string; token?: string; name?: string; isolation?: string; labels?: string; config?: string }) {
   if (!values.url || !values.token) die(`--url and --token are required\n\n${USAGE}`);
   const url = new URL(values.url!).origin;
   const { protocol, hostname: host } = new URL(url);
@@ -47,7 +50,7 @@ async function register(values: { url?: string; token?: string; name?: string; i
   if (protocol !== "https:" && host !== "localhost" && host !== "127.0.0.1") console.error(`Warning: ${url} isn't HTTPS, so job secrets and tokens would cross the network unencrypted.`);
   const isolation = (values.isolation ?? "container") as Isolation;
   const name = values.name ?? hostname().split(".")[0];
-  const res = await call(url, "/runner/register", null, { token: values.token, name, isolation });
+  const res = await call(url, "/runner/register", null, { token: values.token, name, isolation, labels: (values.labels ?? "").split(",").map((l) => l.trim()).filter(Boolean) });
   const data = (await res.json().catch(() => ({}))) as { id?: number; token?: string; error?: string };
   if (!res.ok || !data.token) die(data.error ?? `The server answered ${res.status}`);
   const file = values.config ?? defaultConfig();
@@ -175,6 +178,7 @@ const { values, positionals } = parseArgs({
     token: { type: "string" },
     name: { type: "string" },
     isolation: { type: "string" },
+    labels: { type: "string" },
     config: { type: "string" },
     jobs: { type: "string" },
     help: { type: "boolean", short: "h" },

@@ -1,3 +1,4 @@
+import { LABEL_RE, MAX_LABELS } from "../../runner/protocol";
 import { Elysia } from "elysia";
 import { allows, findUser, HttpError, isOrg, readerOrVisitor, repoAccess, requireRepo, requireUser, type RepoAccess } from "../access";
 import { patternProblem } from "../branch-rules";
@@ -28,7 +29,7 @@ export const deploymentRoutes = new Elysia()
   .put("/repos/:owner/:repo/environments/:name", async ({ request, params, body }) => {
     const a = requireRepo(await requireUser(request), params.owner, params.repo, "owner");
     if (!ENVIRONMENT_RE.test(params.name)) throw new HttpError(400, "Environment names are letters, digits, '.', '_' or '-', up to 64 characters");
-    const b = (body ?? {}) as { branches?: unknown; reviewers?: unknown; waitMinutes?: unknown };
+    const b = (body ?? {}) as { branches?: unknown; reviewers?: unknown; waitMinutes?: unknown; runners?: unknown };
     // Everything is checked before the environment is created, so a refused request leaves nothing behind.
     const existing = findEnvironment(a.repo.id, params.name);
 
@@ -64,7 +65,13 @@ export const deploymentRoutes = new Elysia()
       waitMinutes = b.waitMinutes as number;
     }
 
-    setEnvironmentRules(existing ?? ensureEnvironment(a.repo.id, params.name), { branches, reviewers, waitMinutes });
+    let runners = existing ? (JSON.parse(existing.runners) as string[]) : [];
+    if (b.runners !== undefined) {
+      if (!Array.isArray(b.runners) || b.runners.length > MAX_LABELS || b.runners.some((l) => typeof l !== "string" || !LABEL_RE.test(l))) throw new HttpError(400, `runners must be a list of up to ${MAX_LABELS} runner labels`);
+      runners = [...new Set(b.runners as string[])];
+    }
+
+    setEnvironmentRules(existing ?? ensureEnvironment(a.repo.id, params.name), { branches, reviewers, waitMinutes, runners });
     reconsiderEnvironment(a.repo.id, params.name);
     return { ok: true };
   })

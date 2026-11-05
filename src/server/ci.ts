@@ -85,11 +85,8 @@ let swept = true;
 function pump() {
   // The sweep selects by label, which a job started now would share, so it has to finish first.
   if (!swept) return void sweep.then(() => ((swept = true), pump()));
-  // Once a runner is registered, jobs wait for runners, even if none is online right now; a job that may
-  // use secrets or deploy shouldn't land on this machine just because a runner is restarting.
-  if (usesRunners()) return;
   while (active.size < MAX_ACTIVE) {
-    const job = nextJob();
+    const job = nextJob(builtinTakes);
     if (!job) return;
     void runJob(job)
       .catch((e) => console.error(`CI job ${job.id} failed to run:`, e))
@@ -498,19 +495,68 @@ function assignmentFor(job: Job, { run, owner, name, env }: Begun, isolation: Is
 
 export const resumePump = () => pump();
 
-export const usesRunners = () => !!db.select({ id: ciRunner.id }).from(ciRunner).get();
+type Runner = typeof ciRunner.$inferSelect;
+type JobRepo = { id: number; ownerId: string };
+
+const repoOfJob = (job: Job): JobRepo | undefined =>
+  db.select({ id: repo.id, ownerId: repo.ownerId }).from(ciRun).innerJoin(repo, eq(repo.id, ciRun.repoId)).where(eq(ciRun.id, job.runId)).get();
+
+const covers = (runner: Runner, r: JobRepo) => (runner.repoId === null || runner.repoId === r.id) && (runner.orgId === null || runner.orgId === r.ownerId);
+
+// What a job asks of its runner: its own `runs-on:`, plus what its environment demands, which a workflow can't drop.
+function labelsOf(job: Job, r: JobRepo): string[] {
+  const env = environmentOfJob(job, r.id);
+  return [...new Set([...(JSON.parse(job.runsOn) as string[]), ...(env ? (JSON.parse(env.runners) as string[]) : [])])];
+}
+
+const canRun = (runner: Runner, labels: string[], r: JobRepo) => {
+  if (!covers(runner, r)) return false;
+  const has = JSON.parse(runner.labels) as string[];
+  return labels.every((l) => has.includes(l));
+};
+
+const allRunners = () => db.select().from(ciRunner).all();
+
+// This machine takes a job only if no runner covers its repository, even if none of them is online right now:
+// a job that may use secrets or deploy shouldn't land here just because a runner is restarting. A job that
+// asks for labels waits for a runner that has them.
+function builtinTakes(job: Job) {
+  const r = repoOfJob(job);
+  return !!r && labelsOf(job, r).length === 0 && !allRunners().some((runner) => covers(runner, r));
+}
+
+// Why a queued job can't get a runner right now, if that's the reason.
+export function runnerProblem(job: Job): "none" | "offline" | null {
+  const r = repoOfJob(job);
+  if (!r || job.status !== "queued") return null;
+  const labels = labelsOf(job, r);
+  const runners = allRunners();
+  if (labels.length === 0 && !runners.some((runner) => covers(runner, r))) return null;
+  const fit = runners.filter((runner) => canRun(runner, labels, r));
+  if (fit.length === 0) return "none";
+  return fit.some((runner) => runner.lastSeenAt && Date.now() - runner.lastSeenAt.getTime() < RUNNER_ONLINE_MS) ? null : "offline";
+}
+
 // A runner that hasn't reported for this long has lost the job it was running.
 const RUNNER_TIMEOUT = Math.max(5, Number(process.env.ETHER_CI_RUNNER_TIMEOUT) || 90) * 1000;
 export const RUNNER_ONLINE_MS = RUNNER_TIMEOUT;
 export const JOB_GIT_USER = "ether-job";
 
 // Hands the oldest job that may start to a runner, or null when there's none.
-export function claimJob(runner: { id: number; name: string }, isolation: Isolation): Claim | null {
-  // Which runner asks first shouldn't decide whether a job with secrets runs: a runner on its host leaves
-  // those to one with containers. With no such runner it takes them, so they end with the reason.
-  const leaveSecrets = isolation === "host" && !!db.select({ id: ciRunner.id }).from(ciRunner).where(eq(ciRunner.isolation, "container")).get();
+export function claimJob(runner: Runner): Claim | null {
+  const { isolation } = runner;
+  const accepts = (job: Job) => {
+    const r = repoOfJob(job);
+    if (!r) return false;
+    const labels = labelsOf(job, r);
+    if (!canRun(runner, labels, r)) return false;
+    // Which runner asks first shouldn't decide whether a job with secrets runs: a runner on its host leaves
+    // those to one with containers that can run them. With no such runner it takes them, so they end with the reason.
+    if (isolation !== "host" || secretNames(JSON.parse(job.steps) as Step[]).length === 0) return true;
+    return !allRunners().some((other) => other.isolation === "container" && canRun(other, labels, r));
+  };
   for (;;) {
-    const job = nextJob(leaveSecrets ? (j) => secretNames(JSON.parse(j.steps) as Step[]).length === 0 : undefined);
+    const job = nextJob(accepts);
     if (!job) return null;
     const begun = beginJob(job);
     if (!begun) continue;
@@ -621,6 +667,7 @@ function createRun(repoId: number, sha: string, actorId: string | null, path: st
           failFast: j.failFast,
           maxParallel: j.maxParallel,
           image: j.image,
+          runsOn: JSON.stringify(j.runsOn),
           environment: j.environment?.name ?? null,
           url: j.environment?.url ?? null,
           steps: JSON.stringify(j.steps),

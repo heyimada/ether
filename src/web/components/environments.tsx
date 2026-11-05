@@ -7,14 +7,15 @@ import { CiSecrets, type CiSecret } from "./ci-secrets";
 import { ErrorNote, Field, onSubmit, ROW, useAction } from "./ui";
 
 export type DeploymentRow = { id: number; runId: number; sha: string; ref: string; status: string; url: string | null; actor: string | null; createdAt: string };
-export type EnvironmentInfo = { name: string; branches: string[]; waitMinutes: number; reviewers: string[]; latest: DeploymentRow | null; active: DeploymentRow | null };
+export type EnvironmentInfo = { name: string; branches: string[]; waitMinutes: number; reviewers: string[]; runners: string[]; latest: DeploymentRow | null; active: DeploymentRow | null };
 
 // What an environment's rules amount to, in words.
-export function rulesSummary(e: Pick<EnvironmentInfo, "branches" | "reviewers" | "waitMinutes">) {
+export function rulesSummary(e: Pick<EnvironmentInfo, "branches" | "reviewers" | "waitMinutes" | "runners">) {
   return [
     e.branches.length ? `only ${e.branches.join(", ")}` : "any branch",
     e.reviewers.length ? `approval by ${e.reviewers.join(" or ")}` : "no approval",
     e.waitMinutes ? `waits ${e.waitMinutes} min` : null,
+    e.runners.length ? `on runners with ${e.runners.join(", ")}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -28,6 +29,7 @@ function EnvironmentEditor({ base, env, candidates, isolation }: { base: string;
   const [branches, setBranches] = useState(env.branches.join(", "));
   const [reviewers, setReviewers] = useState(env.reviewers);
   const [wait, setWait] = useState(String(env.waitMinutes));
+  const [runnerLabels, setRunnerLabels] = useState(env.runners.join(", "));
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [secrets, setSecrets] = useState<CiSecret[] | null>(null);
   useEffect(() => {
@@ -38,6 +40,7 @@ function EnvironmentEditor({ base, env, candidates, isolation }: { base: string;
       branches: branches.split(",").map((b) => b.trim()).filter(Boolean),
       reviewers,
       waitMinutes: Number(wait || 0),
+      runners: runnerLabels.split(",").map((l) => l.trim()).filter(Boolean),
     });
     await router.invalidate();
   });
@@ -66,6 +69,9 @@ function EnvironmentEditor({ base, env, candidates, isolation }: { base: string;
             <ErrorNote error={save.error} />
             <Field id={`${uid}-branches`} label="Branches that may deploy" hint="Comma-separated names or patterns such as main or release/*. Empty means any branch.">
               <input id={`${uid}-branches`} className="font-mono" value={branches} onChange={(e) => setBranches(e.target.value)} />
+            </Field>
+            <Field id={`${uid}-runners`} label="Runner labels" hint="Comma-separated. Deployments here only run on runners with all of these, whatever the workflow says. Empty means any runner.">
+              <input id={`${uid}-runners`} className="font-mono" value={runnerLabels} onChange={(e) => setRunnerLabels(e.target.value)} />
             </Field>
             <fieldset className="stack-sm border-0 p-0 m-0">
               <legend>Required reviewers</legend>

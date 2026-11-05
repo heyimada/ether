@@ -13,7 +13,7 @@ type JobDeployment = {
   notBefore: string | null;
   canReview: boolean;
 };
-type Job = { runner: string | null; id: number; key: string; name: string; needs: string[]; condition: string | null; status: CiStatus; log: string; steps: { name: string }[]; startedAt: string | null; finishedAt: string | null; deployment: JobDeployment | null };
+type Job = { runner: string | null; runsOn: string[]; runnerProblem: "none" | "offline" | null; id: number; key: string; name: string; needs: string[]; condition: string | null; status: CiStatus; log: string; steps: { name: string }[]; startedAt: string | null; finishedAt: string | null; deployment: JobDeployment | null };
 type RunDetail = {
   run: {
     id: number;
@@ -131,7 +131,7 @@ function RunPage() {
               </span>
             )}
             <span className="flex-1" />
-            {j.runner && <span className="text-muted text-xs">on {j.runner}</span>}
+            {j.runner ? <span className="text-muted text-xs">on {j.runner}</span> : j.runsOn.length > 0 && <span className="text-muted text-xs">runs on {j.runsOn.join(", ")}</span>}
             <span className="text-muted tabular-nums">{duration(j.startedAt, j.finishedAt)}</span>
           </header>
           {j.deployment && <DeploymentNote job={j} deployment={j.deployment} base={repoApi(info.repo.owner, info.repo.name)} />}
@@ -147,7 +147,11 @@ function RunPage() {
 // What a queued job is waiting for: the jobs it needs that haven't finished, else a free runner.
 function waitingFor(job: Job, jobs: Job[]) {
   const pending = [...new Set(jobs.filter((o) => job.needs.includes(o.key) && !ciDone(o.status)).map((o) => o.key))];
-  return pending.length ? `Waiting for ${pending.join(", ")}…` : "Waiting for a runner…";
+  if (pending.length) return `Waiting for ${pending.join(", ")}…`;
+  const wanted = job.runsOn.length ? `a runner with ${job.runsOn.join(", ")}` : "a runner";
+  if (job.runnerProblem === "none") return `Waiting for ${wanted}: none that can take this job is registered.`;
+  if (job.runnerProblem === "offline") return `Waiting for ${wanted}: none that can take this job is online.`;
+  return `Waiting for ${wanted}…`;
 }
 
 // What a manual run was started with.
