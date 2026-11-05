@@ -769,20 +769,22 @@ function settleJobs(repoId: number, sha: string, actorId: string | null, wf: Par
   return wf.jobs.map((j) => {
     const context: Context = { ...base, matrix: j.matrix };
     const label = (l: string) => toText(evalTemplate(l, context));
-    const runsOn = [...new Set(j.runsOn.map(label).filter(Boolean))];
+    // A label or image that comes to nothing is refused, not dropped: a job that asked for a runner mustn't
+    // end up on any, the built-in one included, nor run in the default image instead of the one it named.
+    const runsOn = [...new Set(j.runsOn.map(label))];
     for (const l of runsOn) if (!LABEL_RE.test(l)) throw new Error(`Job "${j.name}": runs-on came to "${l}", which isn't a runner label`);
-    const image = j.image === null ? null : label(j.image) || null;
+    const image = j.image === null ? null : label(j.image);
     if (image !== null && !IMAGE_RE.test(image)) throw new Error(`Job "${j.name}": image came to "${image}", which isn't a container image name`);
     return { ...j, runsOn, image };
   });
 }
 
-function createRun(repoId: number, sha: string, actorId: string | null, path: string, workflow: ParsedWorkflow, meta: RunMeta): number {
+async function createRun(repoId: number, repoPath: string, sha: string, actorId: string | null, path: string, workflow: ParsedWorkflow, meta: RunMeta): Promise<number> {
   let wf = workflow;
   try {
     wf = { ...workflow, jobs: settleJobs(repoId, sha, actorId, workflow, meta) };
   } catch (e) {
-    return db.insert(ciRun).values({ repoId, sha, actorId, status: "error", message: (e as Error).message, finishedAt: new Date(), workflowPath: path, workflowName: workflow.name, ...meta, inputs: JSON.stringify(meta.inputs) }).returning({ id: ciRun.id }).get().id;
+    return erroredRun(repoId, repoPath, sha, actorId, path, (e as Error).message, meta, workflow.name);
   }
   // Environments a job names are created on first use.
   const envs = new Map(wf.jobs.flatMap((j) => (j.environment ? [[j.environment.name, ensureEnvironment(repoId, j.environment.name)] as const] : [])));
@@ -821,9 +823,9 @@ function createRun(repoId: number, sha: string, actorId: string | null, path: st
   });
 }
 
-// A workflow file that doesn't parse becomes a run that errored, so its author sees why nothing ran.
-async function erroredRun(repoId: number, repoPath: string, sha: string, actorId: string | null, path: string, message: string, meta: RunMeta) {
-  const values = { repoId, sha, actorId, status: "error" as const, message, finishedAt: new Date(), workflowPath: path, workflowName: defaultWorkflowName(path), ...meta, inputs: JSON.stringify(meta.inputs) };
+// A workflow file that doesn't parse, or whose jobs can't be settled, becomes a run that errored, so its author sees why nothing ran.
+async function erroredRun(repoId: number, repoPath: string, sha: string, actorId: string | null, path: string, message: string, meta: RunMeta, workflowName = defaultWorkflowName(path)) {
+  const values = { repoId, sha, actorId, status: "error" as const, message, finishedAt: new Date(), workflowPath: path, workflowName, ...meta, inputs: JSON.stringify(meta.inputs) };
   const id = db.insert(ciRun).values(values).returning({ id: ciRun.id }).get().id;
   await reportFailure({ id, repoId, sha, ref: meta.ref, actorId }, repoPath, "error");
   return id;
@@ -842,7 +844,7 @@ async function startWorkflows(repoId: number, repoPath: string, sha: string, tri
       if (trigger.event === "push") ids.push(await erroredRun(repoId, repoPath, sha, actorId, file.path, (e as Error).message, meta));
       continue;
     }
-    if (starts(wf.on, trigger)) ids.push(createRun(repoId, sha, actorId, file.path, wf, meta));
+    if (starts(wf.on, trigger)) ids.push(await createRun(repoId, repoPath, sha, actorId, file.path, wf, meta));
   }
   pump();
   return ids;
@@ -920,7 +922,7 @@ export async function dispatch(repoId: number, repoPath: string, path: string, b
     const wf = parseWorkflow(file.content, path);
     if (!wf.on.workflow_dispatch) throw new Error(`${wf.name} can't be run by hand on ${branch}: its "on" doesn't include workflow_dispatch`);
     const inputs = resolveInputs(wf.on.workflow_dispatch.inputs, given);
-    id = createRun(repoId, sha, actorId, path, wf, { ref: branch, refType: "branch", event: "workflow_dispatch", pullNumber: null, inputs });
+    id = await createRun(repoId, repoPath, sha, actorId, path, wf, { ref: branch, refType: "branch", event: "workflow_dispatch", pullNumber: null, inputs });
   } catch (e) {
     throw new DispatchError((e as Error).message);
   }
@@ -940,7 +942,7 @@ export async function rerun(run: Run, repoPath: string, actorId: string): Promis
   } catch (e) {
     return erroredRun(run.repoId, repoPath, run.sha, actorId, run.workflowPath, (e as Error).message, meta);
   }
-  const id = createRun(run.repoId, run.sha, actorId, run.workflowPath, wf, meta);
+  const id = await createRun(run.repoId, repoPath, run.sha, actorId, run.workflowPath, wf, meta);
   pump();
   return id;
 }

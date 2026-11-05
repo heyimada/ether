@@ -135,3 +135,12 @@ test("an expression can't produce more than a few megabytes, however it nests", 
   expect(run(`format('{0}-{1}', 'a', 'b')`)).toBe("a-b");
   expect(run(`join(matrix.list, ', ')`)).toBe("a, b");
 });
+
+test("toJSON writes what JSON.stringify would, and pays for its indentation as it goes", () => {
+  for (const v of [null, 1, "a\"b", [], {}, [1, [2, { a: [] }]], { b: { c: "x", d: [null, true] } }])
+    expect(evalExpression("toJSON(fromJSON(matrix.json))", { matrix: { json: JSON.stringify(v) } })).toBe(JSON.stringify(v, null, 2));
+  // Sixty levels deep, each element is indented 120 spaces: far more text than the value it comes from.
+  const deep = `${"[".repeat(60)}${Array(70_000).fill("1").join(",")}${"]".repeat(60)}`;
+  expect(deep.length).toBeLessThan(200_000);
+  expect(() => evalExpression("toJSON(fromJSON(matrix.json))", { matrix: { json: deep } })).toThrow("at most");
+});

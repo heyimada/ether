@@ -258,6 +258,31 @@ function shallow(v: Value, depth = 0): Value {
   return v;
 }
 
+// JSON.stringify(v, null, 2), written piece by piece so that each piece is paid for before it's made: the
+// indentation can make the text many times the size of the value.
+function toJSON(v: Value, budget: Budget): string {
+  const pieces: string[] = [];
+  const put = (piece: string) => {
+    charge(budget, piece.length);
+    pieces.push(piece);
+  };
+  const write = (value: Value, indent: string) => {
+    if (value === null || typeof value !== "object") return put(JSON.stringify(value) ?? "null");
+    const entries: [string | null, Value][] = Array.isArray(value) ? value.map((x) => [null, x]) : Object.entries(value);
+    const [open, close] = Array.isArray(value) ? ["[", "]"] : ["{", "}"];
+    if (!entries.length) return put(open + close);
+    const inner = `${indent}  `;
+    put(open);
+    entries.forEach(([key, x], i) => {
+      put(`${i ? "," : ""}\n${inner}${key === null ? "" : `${JSON.stringify(key)}: `}`);
+      write(x, inner);
+    });
+    put(`\n${indent}${close}`);
+  };
+  write(shallow(v), "");
+  return pieces.join("");
+}
+
 function format(template: string, args: string[], budget: Budget) {
   let out = "";
   for (let i = 0; i < template.length; i++) {
@@ -330,11 +355,8 @@ function evaluate(node: Node, ctx: Context, status: Status, budget: Budget): Val
           charge(budget, parts.reduce((n, p) => n + p.length, 0) + separator.length * Math.max(0, parts.length - 1));
           return parts.join(separator);
         }
-        case "tojson": {
-          const text = JSON.stringify(shallow(args[0]), null, 2) ?? "null";
-          charge(budget, text.length);
-          return text;
-        }
+        case "tojson":
+          return toJSON(args[0], budget);
         case "fromjson": {
           let parsed: Value;
           try {

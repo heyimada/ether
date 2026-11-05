@@ -470,6 +470,15 @@ test("runs-on, an environment's labels and a runner's scope decide who takes a j
     expect((await owner.ctx.put(`${plainApi}/environments/production`, { data: { runners: [] }, headers: headers() })).ok()).toBe(true);
     expect((await runOf(owner.ctx, plainApi, gated, FINISHED)).jobs.job.runner).toBeNull();
 
+    // A label that comes to nothing is refused, not dropped: the built-in runner mustn't take a job that asked
+    // for another. The run errors, and whoever pushed hears of it.
+    const empty = push(plain, "    runs-on: ${{ inputs.target }}\n");
+    const refused = await runOf(owner.ctx, plainApi, empty, ["error"]);
+    expect(refused.run.message).toContain('runs-on came to ""');
+    expect(refused.jobs).toEqual({});
+    const feed = (await (await owner.ctx.get("/api/feed")).json()).events as { kind: string; payload: { sha?: string } }[];
+    expect(feed.some((e) => e.kind === "ci_failed" && e.payload.sha === empty)).toBe(true);
+
     // Deleting a repository takes its runners along.
     expect((await owner.ctx.delete(ownApi, { headers: headers() })).ok()).toBe(true);
     expect((await claim(repoOnly)).status).toBe(401);

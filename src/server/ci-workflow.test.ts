@@ -34,6 +34,11 @@ test("secret references need a valid name, wherever they are in a value", () => 
   expect(bad("K: ${{ secrets.lower }}")).toThrow("isn't a valid secret name");
   expect(bad("K: ${{ secrets.CI_TOKEN }}")).toThrow("isn't a valid secret name");
   expect(bad("K: ${{secrets.OK}}")).not.toThrow();
+  // A step's if: is held to the same rule.
+  const condition = (c: string) => () => parseWorkflow(`jobs:\n  t:\n    steps:\n      - run: x\n        if: ${c}\n`);
+  expect(condition("secrets.lower != ''")).toThrow("isn't a valid secret name");
+  expect(condition("secrets.CI_TOKEN")).toThrow("isn't a valid secret name");
+  expect(condition("secrets.OK != ''")).not.toThrow();
 });
 
 test("variables can't shadow what Ether sets, and values must be scalars", () => {

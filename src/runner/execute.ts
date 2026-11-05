@@ -1,12 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { chownWorkspaceArgs, cli, collect, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, scriptExtension, shellCommand } from "../server/ci-container";
 import { LogMasker } from "../server/log-mask";
 import { evalTemplate, fillTemplate, holds, toText, type Context, type Status, type Value } from "./expr";
 import type { JobAssignment, JobChannel, JobResult, RunningJob, Shell } from "./protocol";
-import { parseOutputs } from "./step-output";
+import { parseOutputs, readOutputFile } from "./step-output";
 
 // Runs a job from its assignment: a fresh checkout, then its steps, in a container of its own or on the host.
 // By default each job runs in a container (see ci-container.ts) and sees nothing of the machine. Everything
@@ -41,6 +41,7 @@ function hostEnv() {
 }
 
 const MAX_OUTPUT_FILE = 1024 * 1024;
+
 
 const removeContainer = (runtime: string, name: string) => Bun.spawn([runtime, "rm", "--force", name], { stdout: "ignore", stderr: "ignore" }).exited;
 
@@ -231,7 +232,7 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
           const read = await collect(box.runtime, ["exec", box.name, "sh", "-c", `cat ${outputFile} 2>/dev/null; rm -f ${outputFile} ${scriptFile}`], 30_000, MAX_OUTPUT_FILE);
           if (read.code === 0) written = read.output;
         } else {
-          if (existsSync(outputFile)) written = readFileSync(outputFile, "utf8").slice(0, MAX_OUTPUT_FILE);
+          written = readOutputFile(outputFile, MAX_OUTPUT_FILE);
           rmSync(outputFile, { force: true });
           rmSync(scriptFile, { force: true });
         }

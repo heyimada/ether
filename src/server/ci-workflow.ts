@@ -171,6 +171,7 @@ export function parseWorkflow(text: string, path = WORKFLOW): ParsedWorkflow {
         if (condition !== null)
           try {
             checkExpression(condition, STEP_CONTEXTS);
+            for (const secret of secretsIn(condition, true)) if (!SECRET_NAME_RE.test(secret)) throw new Error(`"${secret}" isn't a valid secret name`);
           } catch (e) {
             throw new Error(`${where}: if: ${(e as Error).message}`);
           }
