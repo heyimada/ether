@@ -50,12 +50,8 @@ test("stacked pull requests show their stack, move down when the one below merge
   await info.attach("stack", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 
   // Merging the bottom one moves the next one onto main; its diff is still just its own change.
-  // A pull request bringing main back into a would end up going from main into main, so it stays where it is.
-  const back = await open("Back-merge", "a", "main");
   const merged = await (await author.ctx.post(`${api}/pulls/${one}/merge`, { data: { deleteBranch: true }, headers: headers() })).json();
   expect([merged.deletedBranch, merged.retargeted]).toEqual([true, [two]]);
-  expect((await get(back)).pull.base).toBe("a");
-  await author.ctx.patch(`${api}/issues/${back}`, { data: { state: "closed" }, headers: headers() });
   const after = await get(two);
   expect(after.pull.base).toBe("main");
   expect(after.commits.map((c: { subject: string }) => c.subject)).toEqual(["add b"]);
@@ -102,6 +98,8 @@ test("merging without deleting the branch, or out of a long-lived one, moves not
   await author.ctx.post(`${api}/branch-protection`, { data: { pattern: "develop", requirePullRequest: false, allowForcePush: false, allowDeletion: false }, headers: headers() });
   const open = async (title: string, base: string, head: string) =>
     (await (await author.ctx.post(`${api}/pulls`, { data: { title, body: "", base, head }, headers: headers() })).json()).pull.number as number;
+  // An open back-merge (develop into feat) would go from develop into itself, so feat isn't deleted with it there.
+  const back = await open("Back-merge", "feat", "develop");
   const release = await open("Release", "main", "develop");
   const feat = await open("Feature", "develop", "feat");
   const get = async (n: number) => (await author.ctx.get(`${api}/pulls/${n}`)).json();
@@ -110,4 +108,8 @@ test("merging without deleting the branch, or out of a long-lived one, moves not
   const merged = await (await author.ctx.post(`${api}/pulls/${release}/merge`, { data: { deleteBranch: true }, headers: headers() })).json();
   expect([merged.deletedBranch, merged.retargeted]).toEqual([false, []]);
   expect((await get(feat)).pull.base).toBe("develop");
+  expect((await get(feat)).headDeletable).toBe(false);
+  const kept = await (await author.ctx.post(`${api}/pulls/${feat}/merge`, { data: { deleteBranch: true }, headers: headers() })).json();
+  expect([kept.deletedBranch, kept.retargeted]).toEqual([false, []]);
+  expect((await get(back)).missing).toBe(false);
 });

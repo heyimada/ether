@@ -229,10 +229,11 @@ export function stackOf(repoId: number, row: NonNullable<IssueRow>, longLived: (
   for (const queue = longLived(self.head) ? [] : [self.head]; queue.length && above.length < MAX_STACK; ) {
     const head = queue.shift()!;
     for (const p of open)
-      if (p.base === head && !seen.has(p.number) && above.length < MAX_STACK) {
+      // One coming from a long-lived branch (a back-merge of develop into a feature) isn't stacked on it.
+      if (p.base === head && !longLived(p.head) && !seen.has(p.number) && above.length < MAX_STACK) {
         seen.add(p.number);
         above.push(p);
-        if (!longLived(p.head)) queue.push(p.head);
+        queue.push(p.head);
       }
   }
   return below.length || above.length ? [...below, self, ...above] : [];
@@ -250,7 +251,17 @@ async function stackInfo(a: RepoAccess, row: NonNullable<IssueRow>) {
       .from(issue)
       .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.headRef, head), ne(issue.id, row.issue.id)))
       .get();
-  return { stack: stackOf(a.repo.id, row, longLived), headDeletable: !!head && !longLived(head) && !shared };
+  // Nor while a pull request into it couldn't move to this one's base: one coming from that base (a back-merge)
+  // would end up going into itself, and would be left on a branch that no longer exists.
+  const stranded =
+    !!head &&
+    !!row.issue.baseRef &&
+    !!db
+      .select({ n: issue.number })
+      .from(issue)
+      .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.baseRef, head), eq(issue.headRef, row.issue.baseRef)))
+      .get();
+  return { stack: stackOf(a.repo.id, row, longLived), headDeletable: !!head && !longLived(head) && !shared && !stranded };
 }
 
 export const issueRoutes = new Elysia()
