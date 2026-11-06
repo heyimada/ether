@@ -269,7 +269,7 @@ async function runJob(job: Job) {
 
 // What's left once a runner is done with a job: its status, its deployment, fail-fast and its run.
 async function finishJob(job: Job, { run, env }: Begun, a: Active, result: JobResult, log: string, release: () => void) {
-  const cancelled = a.stopped || result === "cancelled" || currentStatus(run.id) === "cancelled";
+  const cancelled = a.stopped || currentStatus(run.id) === "cancelled";
   db.update(ciJob).set({ log, status: cancelled ? "cancelled" : result === "success" ? "success" : "failure", finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
   release();
   const stopped = cancelled;
@@ -528,8 +528,9 @@ export function claimJob(runner: { id: number; name: string }, isolation: Isolat
       const token = secret("ethj_");
       remote.set(job.id, { ...a, job: null, row: job, begun, runnerId: runner.id, runnerName: runner.name, repoId: begun.run.repoId, tokenHash: sha256(token), seen: Date.now(), masker: new LogMasker(assignment.mask), log });
       assignment.checkout.authorization = `Basic ${btoa(`${JOB_GIT_USER}:${token}`)}`;
-      // Often enough that one lost report doesn't end a job that is just being quiet.
-      return { assignment, token, heartbeatMs: Math.round(RUNNER_TIMEOUT / 3) };
+      // Often enough that one lost report doesn't end a job that is just being quiet, and that a cancel,
+      // which travels in the answer to a report, reaches it within seconds.
+      return { assignment, token, heartbeatMs: Math.min(5000, Math.round(RUNNER_TIMEOUT / 3)) };
     } catch (e) {
       log.append(`\nRunner error: ${(e as Error).message}\n`);
       void finishJob(job, begun, a, "error", log.text(), () => {}).finally(pump);
@@ -558,6 +559,8 @@ export function reportJob(job: RemoteJob, text: string) {
 
 export async function finishRemoteJob(job: RemoteJob, result: JobResult) {
   job.log.append(job.masker.flush());
+  // Nobody here asked it to stop, so its run isn't cancelled: the job just didn't finish, which counts as failed.
+  if (result === "cancelled" && !job.stopped) job.log.append(`\n✖ Runner ${job.runnerName} stopped before this job finished\n`);
   await finishJob(job.row, job.begun, job, result, job.log.text(), () => remote.delete(job.row.id));
   pump();
 }
