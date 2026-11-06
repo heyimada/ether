@@ -49,4 +49,9 @@ test("what can't be read is refused with the reason, and so is anything more oft
     expect(() => parseCron(cron), cron).toThrow(why);
   expect(() => parseCron("*/5 * * * *")).not.toThrow();
   expect(() => parseCron("0,55 * * * *")).not.toThrow();
+  // Across the hour only counts when the next hour runs too.
+  expect(() => parseCron("0,58 3 * * *")).not.toThrow();
+  expect(() => parseCron("0,57 9,11 * * MON")).not.toThrow();
+  expect(() => parseCron("0,58 3-4 * * *")).toThrow("every 5 minutes");
+  expect(() => parseCron("0,58 0,23 * * *")).toThrow("every 5 minutes");
 });

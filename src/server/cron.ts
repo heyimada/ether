@@ -63,7 +63,9 @@ export function parseCron(text: string): Cron {
   if (parts.length !== 5 || text.length > 200) throw new Error(`"${text}" must have five fields: minute, hour, day of month, month and day of week`);
   const [minutes, hours, days, months, weekdays] = parts.map((p, i) => field(p, FIELDS[i]));
   const sorted = [...minutes].sort((a, b) => a - b);
-  const gaps = sorted.map((m, i) => (i === sorted.length - 1 ? sorted[0] + 60 : sorted[i + 1]) - m);
+  // Across the hour only when the next hour can run too: 0,58 3 * * * runs 58 minutes apart, not 2.
+  const wraps = [...hours].some((h) => hours.has((h + 1) % 24));
+  const gaps = sorted.map((m, i) => (i === sorted.length - 1 ? (wraps ? sorted[0] + 60 : Infinity) : sorted[i + 1]) - m);
   // A single minute in each hour is fine; several are only if they're far enough apart, across the hour too.
   if (sorted.length > 1 && Math.min(...gaps) < MIN_INTERVAL_MINUTES) throw new Error(`"${text}" runs more often than every ${MIN_INTERVAL_MINUTES} minutes, which is the shortest interval`);
   // As in Vixie cron, a day field that starts with * (*/2 too) counts as unrestricted for the rule below.
