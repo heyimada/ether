@@ -210,3 +210,48 @@ test("workflows in .ether/workflows run on the events their on: names", async ({
     await (await loginAdmin()).put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
   }
 });
+
+test("a run sees whether its pull request was a draft when it started, and ready_for_review runs when asked for", async () => {
+  test.setTimeout(2 * 60_000);
+  const admin = await loginAdmin();
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: headers() });
+  try {
+    const owner = await createUser(admin);
+    const repo = await createRepo(owner.ctx, unique("wfdraft"));
+    const api = `/api/repos/${owner.username}/${repo}`;
+    const auth = { username: owner.username, token: owner.token };
+    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() })).ok()).toBe(true);
+    const src = workdir();
+    gitOk(src, ["init", "-q", "-b", "main"]);
+    mkdirSync(join(src, ".ether", "workflows"), { recursive: true });
+    // The second job's context is built once the first is done, after the pull request was marked ready.
+    writeFileSync(
+      join(src, ".ether", "workflows", "pr.yml"),
+      `name: PR\non: pull_request\njobs:\n  slow:\n    steps:\n      - run: sleep 3\n  report:\n    needs: slow\n    steps:\n      - shell: bash\n        run: echo "draft=\${{ github.event.pull_request.draft }}"\n`,
+    );
+    writeFileSync(
+      join(src, ".ether", "workflows", "ready.yml"),
+      `name: Ready\non:\n  pull_request:\n    types: [ready_for_review]\njobs:\n  go:\n    steps:\n      - shell: bash\n        run: echo "ready draft=\${{ github.event.pull_request.draft }}"\n`,
+    );
+    gitOk(src, ["add", "-A"]);
+    gitOk(src, ["commit", "-q", "-m", "workflows"]);
+    gitOk(src, ["checkout", "-q", "-b", "wip"]);
+    writeFileSync(join(src, "a.txt"), "a\n");
+    gitOk(src, ["add", "-A"]);
+    gitOk(src, ["commit", "-q", "-m", "wip"]);
+    gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main", "wip"], auth);
+    const head = gitOk(src, ["rev-parse", "HEAD"]).trim();
+
+    const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "WIP", body: "", base: "main", head: "wip", draft: true }, headers: headers() })).json();
+    await expect.poll(async () => (await runsOf(owner.ctx, api)).some((r) => r.workflowName === "PR" && r.status === "running")).toBe(true);
+    expect((await owner.ctx.patch(`${api}/issues/${pull.number}`, { data: { draft: false }, headers: headers() })).ok()).toBe(true);
+
+    const runs = await finished(owner.ctx, api, head, 2);
+    const byName = Object.fromEntries(runs.map((r) => [r.workflowName, r]));
+    expect([byName.PR.status, byName.Ready.status]).toEqual(["success", "success"]);
+    expect(await log(owner.ctx, api, byName.PR.id)).toContain("draft=true");
+    expect(await log(owner.ctx, api, byName.Ready.id)).toContain("ready draft=false");
+  } finally {
+    await (await loginAdmin()).put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+  }
+});

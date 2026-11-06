@@ -222,7 +222,7 @@ export const issueRoutes = new Elysia()
     // Ready (or reopened) and not a draft: the code owners of its files are asked for a review.
     if (row.issue.isPull && (set.draft === false || set.state === "open")) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
     // Marked ready on an open pull request (one being reopened gets its own run below): workflows that listen for it run.
-    if (set.draft === false && !set.state && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "ready_for_review", viewer.id).catch(() => {});
+    if (set.draft === false && (!set.state || set.state === row.issue.state) && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "ready_for_review", viewer.id).catch(() => {});
     if (set.state && set.state !== row.issue.state) {
       const ref = { number: row.issue.number, title: set.title ?? row.issue.title };
       if (row.issue.isPull) {

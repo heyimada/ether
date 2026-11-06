@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d1e1d034-b012-4dad-afa3-6dcf7e8289dc",
+  "id": "fc4d0f33-7d75-461e-9d7c-c90860e7efb4",
   "prevId": "a5372311-1764-4af9-9eba-f2f563003e74",
   "tables": {
     "access_token": {
@@ -431,6 +431,13 @@
         "schedule": {
           "name": "schedule",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pull_draft": {
+          "name": "pull_draft",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
