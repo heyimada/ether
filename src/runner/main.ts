@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { instanceLabel } from "../server/ci-container";
 import { removeLeftoverContainers, startJob } from "./execute";
-import type { Claim, Isolation, JobResult, Progress, RunningJob } from "./protocol";
+import { PROTOCOL, type Claim, type Isolation, type JobResult, type Progress, type RunningJob } from "./protocol";
 
 // ether-runner: runs an Ether server's CI jobs on another machine. It only ever calls the server, so the
 // machine needs no open port. Secrets come with each job and stay in memory.
@@ -114,7 +114,7 @@ async function work(config: Config, claim: Claim, instance: string, running: Set
       continue;
     }
     if (buffer) continue;
-    const res = await call(config.url, `/runner/jobs/${jobId}/finish`, token, { result }).catch(() => null);
+    const res = await call(config.url, `/runner/jobs/${jobId}/finish`, token, { result, outputs: job.outputs() }).catch(() => null);
     if (res && (res.ok || res.status === 404)) break;
     await Bun.sleep(5000);
   }
@@ -131,6 +131,7 @@ async function run(values: { jobs?: string; config?: string }) {
   const running = new Set<RunningJob>();
   let stopping = false;
   let unknown = false;
+  let unsupported = false;
   const shutdown = () => {
     if (stopping) process.exit(1);
     stopping = true;
@@ -146,12 +147,17 @@ async function run(values: { jobs?: string; config?: string }) {
     while (!stopping) {
       let res: Response | null = null;
       try {
-        res = await call(config.url, "/runner/claim", config.token, {});
+        res = await call(config.url, "/runner/claim", config.token, { protocol: PROTOCOL });
         if (offline) console.log("Back in touch with the server");
         offline = false;
       } catch (e) {
         if (!offline) console.error(`Can't reach the server: ${(e as Error).message}`);
         offline = true;
+      }
+      if (res?.status === 426) {
+        unsupported = true;
+        stopping = true;
+        break;
       }
       if (res?.status === 401) {
         // Jobs in other slots end first: host steps run in their own process group and would outlive this process.
@@ -168,6 +174,7 @@ async function run(values: { jobs?: string; config?: string }) {
     }
   };
   await Promise.all(Array.from({ length: slots }, slot));
+  if (unsupported) die("This version of ether-runner is too old or too new for the server. Build the one that goes with it.");
   if (unknown) die("The server no longer knows this runner. Register it again.");
 }
 

@@ -521,6 +521,9 @@ export const ciJob = sqliteTable("ci_job", {
   url: text("url"),
   // JSON: the labels from its `runs-on:`, all of which its runner has to have.
   runsOn: text("runs_on").notNull().default("[]"),
+  // JSON: its `outputs:` as written, and what they came to once it finished, for the jobs that need it.
+  outputs: text("outputs").notNull().default("{}"),
+  outputValues: text("output_values").notNull().default("{}"),
   // The name of the external runner it ran on; null for the built-in one.
   runner: text("runner"),
   // While a deploy job waits for its environment's wait timer: when it may start.

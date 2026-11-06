@@ -79,6 +79,51 @@ jobs:
       - run: echo deployed
 `;
 
+// Expressions end to end: a job's outputs reach the jobs that need it, and if: and runs-on can look at the run.
+const EXPRESSIONS = `name: Expressions
+on: push
+jobs:
+  build:
+    outputs:
+      version: \${{ steps.version.outputs.value }}
+    strategy:
+      matrix:
+        kind: [fast]
+    steps:
+      - id: version
+        name: Find \${{ matrix.kind }} version
+        shell: bash
+        run: echo "value=1.\${{ github.run_id }}" >> "$CI_OUTPUT"
+      - id: never
+        if: false
+        run: echo "value=x" >> "$CI_OUTPUT"
+      - name: Unpack \${{ steps.never.outcome }}
+        if: steps.never.outcome == 'success'
+        env:
+          V: \${{ fromJSON(steps.never.outputs.value) }}
+        run: echo never
+      - name: Tree stays clean
+        shell: bash
+        run: test -z "$(git status --porcelain)"
+  ship:
+    needs: build
+    if: github.ref == 'refs/heads/main' && startsWith(needs.build.outputs.version, '1.')
+    steps:
+      - shell: bash
+        env:
+          VERSION: \${{ needs.build.outputs.version }}
+        run: echo "shipping $VERSION on \${{ github.ref_name }} by \${{ github.actor }}"
+  other-branch:
+    needs: build
+    if: github.ref == 'refs/heads/dev'
+    steps:
+      - run: echo never
+  bad-if:
+    if: fromJSON('nope')
+    steps:
+      - run: echo never
+`;
+
 const FAST = `name: Fast
 on: push
 jobs:
@@ -217,6 +262,24 @@ test("jobs wait for their needs, run side by side, fan out over a matrix and fol
     const superseded = (await finishedRun(owner.ctx, api, stale)).jobs.deploy;
     expect(superseded.status).toBe("skipped");
     expect(superseded.log).toContain("a newer run of main deploys to production");
+
+    // Expressions: outputs across jobs, conditions on the run, and an if: that can't be decided fails its job.
+    await owner.ctx.delete(`${api}/environments/production`, { headers: headers() });
+    writeFileSync(join(src, ".ether", "workflows", "graph.yml"), EXPRESSIONS);
+    gitOk(src, ["commit", "-qam", "expressions"]);
+    gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
+    const expr = await finishedRun(owner.ctx, api, gitOk(src, ["rev-parse", "HEAD"]).trim());
+    expect(expr.jobs["build (fast)"].log).toContain("▶ Find fast version");
+    // A step that's skipped can't fail on its env, and outputs and scripts stay out of the checkout.
+    expect(expr.jobs["build (fast)"].status).toBe("success");
+    expect(expr.jobs["build (fast)"].log).toContain("⊘ Unpack skipped (skipped)");
+    expect(expr.jobs["build (fast)"].log).toContain("✔ Tree stays clean");
+    expect(expr.jobs.ship.status).toBe("success");
+    expect(expr.jobs.ship.log).toContain(`shipping 1.${expr.run.id} on main by ${owner.username}`);
+    expect(expr.jobs["other-branch"].status).toBe("skipped");
+    expect(expr.jobs["bad-if"].status).toBe("failure");
+    expect(expr.jobs["bad-if"].log).toContain("isn't JSON");
+    expect(expr.run.status).toBe("failure");
 
     // fail-fast (the default): one shard failing cancels the others instead of letting them run out.
     writeFileSync(join(src, ".ether", "workflows", "graph.yml"), FAST);

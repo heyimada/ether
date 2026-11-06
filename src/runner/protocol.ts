@@ -1,3 +1,5 @@
+import type { Context } from "./expr";
+
 // What Ether and a runner say to each other about a job. The assignment holds everything the runner needs
 // and it reports back through a channel, so a runner knows nothing of Ether's database or disk. Assignments
 // are plain data, ready to go over the wire to a runner on another machine.
@@ -9,8 +11,11 @@ export const MAX_LABELS = 10;
 export type Shell = "bash" | "sh" | "pwsh" | "powershell" | "cmd";
 export type Isolation = "container" | "host";
 
-// A step's env has its secrets filled in already.
-export type RunnerStep = { name: string; run: string; shell: Shell | null; timeoutMinutes: number; env: Record<string, string> };
+// Which assignments a runner understands; a runner of another version is told to update.
+export const PROTOCOL = 2;
+
+// Its texts can hold `${{ }}` expressions, which the runner fills in right before the step, when earlier steps' outputs are known.
+export type RunnerStep = { id: string | null; name: string; run: string; shell: Shell | null; timeoutMinutes: number; env: Record<string, string>; if: string | null; continueOnError: boolean };
 
 export type JobAssignment = {
   jobId: number;
@@ -22,6 +27,10 @@ export type JobAssignment = {
   checkout: { url: string; sha: string; authorization?: string };
   // What every step is told about the run.
   vars: Record<string, string>;
+  // What expressions can see: github, inputs, matrix, needs and the job's secrets.
+  context: Context;
+  // The job's `outputs:`, filled in when its steps are done.
+  outputs: Record<string, string>;
   // Values to keep out of the log.
   mask: string[];
   steps: RunnerStep[];
@@ -32,7 +41,7 @@ export type JobResult = "success" | "failure" | "error" | "cancelled";
 
 export type JobChannel = { log: (text: string) => void };
 
-export type RunningJob = { done: Promise<JobResult>; stop: () => void };
+export type RunningJob = { done: Promise<JobResult>; stop: () => void; outputs: () => Record<string, string> };
 
 // What goes over the wire to an external runner (see ../server/routes/runners.ts for the routes).
 export const RESULTS: JobResult[] = ["success", "failure", "error", "cancelled"];

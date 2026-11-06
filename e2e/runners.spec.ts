@@ -3,6 +3,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PROTOCOL } from "../src/runner/protocol";
 import { baseURL, cloneUrl, createRepo, createUser, git, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
 
 const headers = () => ({ Origin: baseURL() });
@@ -204,13 +205,15 @@ test("a job's token opens its own repository, read-only, while the job runs; run
     expect((await owner.ctx.post("/api/admin/runners/registration", { headers: headers() })).status()).toBe(403);
     expect((await owner.ctx.get("/api/admin/runners")).status()).toBe(403);
     expect((await post("/runner/register", null, { token: "nope", name: "x", isolation: "host" })).status).toBe(401);
-    expect((await post("/runner/claim", "nope", {})).status).toBe(401);
+    expect((await post("/runner/claim", "nope", { protocol: PROTOCOL })).status).toBe(401);
 
     const { token: registration } = await (await admin.post("/api/admin/runners/registration", { headers: headers() })).json();
     expect((await post("/runner/register", null, { token: registration, name: "bad name!", isolation: "host" })).status).toBe(400);
     const { token: runnerToken } = await (await post("/runner/register", null, { token: registration, name: "by-hand", isolation: "host" })).json();
     expect(runnerToken).toBeTruthy();
-    expect((await post("/runner/claim", runnerToken, {})).status).toBe(204);
+    // A runner of another version is told so rather than handed work it would get wrong.
+    expect((await post("/runner/claim", runnerToken, {})).status).toBe(426);
+    expect((await post("/runner/claim", runnerToken, { protocol: PROTOCOL })).status).toBe(204);
 
     const src = workdir();
     gitOk(src, ["init", "-q", "-b", "main"]);
@@ -223,7 +226,7 @@ test("a job's token opens its own repository, read-only, while the job runs; run
 
     let claimed: Response | null = null;
     await expect(async () => {
-      claimed = await post("/runner/claim", runnerToken, {});
+      claimed = await post("/runner/claim", runnerToken, { protocol: PROTOCOL });
       expect(claimed.status).toBe(200);
     }).toPass({ timeout: 10_000 });
     const { assignment, token } = await claimed!.json();
@@ -261,16 +264,17 @@ test("a job's token opens its own repository, read-only, while the job runs; run
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
     // A runner on its host leaves a job with secrets to the one with containers, whoever asks first.
     await runOf(owner.ctx, api, gitOk(src, ["rev-parse", "HEAD"]).trim(), ["queued"]);
-    expect((await post("/runner/claim", runnerToken, {})).status).toBe(204);
+    expect((await post("/runner/claim", runnerToken, { protocol: PROTOCOL })).status).toBe(204);
     // Saying it has containers doesn't make it so: a host runner's token is within reach of the jobs it runs.
-    expect((await post("/runner/claim", runnerToken, { isolation: "container" })).status).toBe(204);
+    expect((await post("/runner/claim", runnerToken, { isolation: "container", protocol: PROTOCOL })).status).toBe(204);
     await expect(async () => {
-      claimed = await post("/runner/claim", containerToken, {});
+      claimed = await post("/runner/claim", containerToken, { protocol: PROTOCOL });
       expect(claimed.status).toBe(200);
     }).toPass({ timeout: 10_000 });
     const withSecret = await claimed!.json();
     expect(withSecret.assignment.isolation).toBe("container");
-    expect(withSecret.assignment.steps[0].env.TOKEN).toBe("s3cret-value");
+    expect(withSecret.assignment.steps[0].env.TOKEN).toBe("${{ secrets.DEPLOY_TOKEN }}");
+    expect(withSecret.assignment.context.secrets).toEqual({ DEPLOY_TOKEN: "s3cret-value" });
     expect(withSecret.assignment.mask).toEqual(["s3cret-value"]);
     await post(`/runner/jobs/${withSecret.assignment.jobId}/report`, withSecret.token, { text: "oops s3cret-" });
     await post(`/runner/jobs/${withSecret.assignment.jobId}/report`, withSecret.token, { text: "value leaked\n" });
@@ -282,7 +286,7 @@ test("a job's token opens its own repository, read-only, while the job runs; run
     gitOk(src, ["commit", "-q", "--allow-empty", "-m", "runner stops"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
     await expect(async () => {
-      claimed = await post("/runner/claim", containerToken, {});
+      claimed = await post("/runner/claim", containerToken, { protocol: PROTOCOL });
       expect(claimed.status).toBe(200);
     }).toPass({ timeout: 10_000 });
     const stopping = await claimed!.json();
@@ -375,7 +379,7 @@ test("runs-on, an environment's labels and a runner's scope decide who takes a j
       gitOk(src, ["push", "-q", "--force", cloneUrl(namespace, repo), "main"], auth);
       return gitOk(src, ["rev-parse", "HEAD"]).trim();
     };
-    const claim = (token: string) => post("/runner/claim", token);
+    const claim = (token: string) => post("/runner/claim", token, { protocol: PROTOCOL });
     // The runner that should get the job takes it and finishes it; the others are offered nothing.
     const onlyFor = async (winner: string, losers: string[], api: string, sha: string) => {
       await runOf(owner.ctx, api, sha, ["queued"]);
@@ -466,6 +470,15 @@ test("runs-on, an environment's labels and a runner's scope decide who takes a j
     expect((await owner.ctx.put(`${plainApi}/environments/production`, { data: { runners: [] }, headers: headers() })).ok()).toBe(true);
     expect((await runOf(owner.ctx, plainApi, gated, FINISHED)).jobs.job.runner).toBeNull();
 
+    // A label that comes to nothing is refused, not dropped: the built-in runner mustn't take a job that asked
+    // for another. The run errors, and whoever pushed hears of it.
+    const empty = push(plain, "    runs-on: ${{ inputs.target }}\n");
+    const refused = await runOf(owner.ctx, plainApi, empty, ["error"]);
+    expect(refused.run.message).toContain('runs-on came to ""');
+    expect(refused.jobs).toEqual({});
+    const feed = (await (await owner.ctx.get("/api/feed")).json()).events as { kind: string; payload: { sha?: string } }[];
+    expect(feed.some((e) => e.kind === "ci_failed" && e.payload.sha === empty)).toBe(true);
+
     // Deleting a repository takes its runners along.
     expect((await owner.ctx.delete(ownApi, { headers: headers() })).ok()).toBe(true);
     expect((await claim(repoOnly)).status).toBe(401);
@@ -503,7 +516,7 @@ test("the built program runs a job in a container, with its secret masked", asyn
     gitOk(src, ["init", "-q", "-b", "main"]);
     mkdirSync(join(src, ".ether", "workflows"), { recursive: true });
     writeFileSync(join(src, "a.txt"), "from the repository\n");
-    writeFileSync(join(src, ".ether", "workflows", "w.yml"), `on: push\njobs:\n  build:\n    steps:\n      - shell: sh\n        env:\n          TOKEN: \${{ secrets.DEPLOY_TOKEN }}\n        run: cat a.txt; pwd; echo "token=$TOKEN"\n`);
+    writeFileSync(join(src, ".ether", "workflows", "w.yml"), `on: push\njobs:\n  build:\n    steps:\n      - shell: sh\n        env:\n          TOKEN: \${{ secrets.DEPLOY_TOKEN }}\n        run: cat a.txt; pwd; echo "token=$TOKEN"; echo "made=in-a-container" >> "$CI_OUTPUT"\n        id: first\n      - shell: sh\n        run: echo "from before \${{ steps.first.outputs.made }}"\n`);
     gitOk(src, ["add", "-A"]);
     gitOk(src, ["commit", "-q", "-m", "w"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], { username: owner.username, token: owner.token });
@@ -513,6 +526,7 @@ test("the built program runs a job in a container, with its secret masked", asyn
     expect(jobs.build.log).toContain("from the repository");
     expect(jobs.build.log).toContain("/workspace");
     expect(jobs.build.log).toContain("token=***");
+    expect(jobs.build.log).toContain("from before in-a-container");
     expect(jobs.build.log).not.toContain("s3cret-value");
   } finally {
     proc?.kill("SIGTERM");
