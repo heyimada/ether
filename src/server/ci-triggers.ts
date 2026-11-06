@@ -4,8 +4,10 @@ import { cronMatches, parseCron } from "./cron";
 
 export const EVENTS = ["push", "pull_request", "workflow_dispatch", "schedule"] as const;
 export type EventName = (typeof EVENTS)[number];
-export const PULL_ACTIONS = ["opened", "synchronize", "reopened"] as const;
+export const PULL_ACTIONS = ["opened", "synchronize", "reopened", "ready_for_review"] as const;
 export type PullAction = (typeof PULL_ACTIONS)[number];
+// What `on: pull_request` without `types:` listens to, as on GitHub.
+export const DEFAULT_PULL_ACTIONS: PullAction[] = ["opened", "synchronize", "reopened"];
 
 // `branches:` (an ordered list where a later `!pattern` takes a match back) or `branches-ignore:`.
 export type Filter = { ignore: boolean; patterns: string[] };
@@ -132,7 +134,7 @@ export function parseOn(raw: unknown): Triggers {
   }
   if ("pull_request" in map) {
     const s = eventSpec(map.pull_request, "pull_request");
-    const types = s.types === undefined ? [...PULL_ACTIONS] : list(s.types, "on.pull_request.types");
+    const types = s.types === undefined ? [...DEFAULT_PULL_ACTIONS] : list(s.types, "on.pull_request.types");
     for (const t of types) if (!PULL_ACTIONS.includes(t as PullAction)) throw new Error(`on.pull_request.types: "${t}" isn't supported; use ${PULL_ACTIONS.join(", ")}`);
     triggers.pull_request = { branches: filter(s, "branches", "on.pull_request"), paths: filter(s, "paths", "on.pull_request"), types: types as PullAction[] };
   }

@@ -54,6 +54,7 @@ export type Issue = {
   body: string;
   state: "open" | "closed" | "merged";
   isPull: boolean;
+  draft: boolean;
   base: string | null;
   head: string | null;
   mergeCommit: string | null;

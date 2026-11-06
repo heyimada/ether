@@ -32,8 +32,8 @@ function NewPull() {
     };
   }, [base, baseRef, headRef]);
 
-  const create = useAction(async () => {
-    const { pull } = await post<{ pull: { number: number } }>(`${base}/pulls`, { title, body, base: baseRef, head: headRef });
+  const create = useAction(async (draft: boolean) => {
+    const { pull } = await post<{ pull: { number: number } }>(`${base}/pulls`, { title, body, base: baseRef, head: headRef, draft });
     await router.invalidate();
     await router.navigate({ to: "/$owner/$repo/pull/$number", params: { owner: info.repo.owner, repo: info.repo.name, number: String(pull.number) } });
   });
@@ -71,7 +71,7 @@ function NewPull() {
       </div>
       {baseRef === headRef && <p className="notice">Choose two different branches to compare.</p>}
       <ErrorNote error={compareError} />
-      <form className="card body" onSubmit={onSubmit(create.run)}>
+      <form className="card body" onSubmit={onSubmit(() => create.run(false))}>
         <ErrorNote error={create.error} />
         <Field id="title" label="Title">
           <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={256} />
@@ -79,9 +79,19 @@ function NewPull() {
         <Field id="body" label="Body" hint="Markdown is supported.">
           <textarea id="body" value={body} onChange={(e) => setBody(e.target.value)} />
         </Field>
-        <button className="primary" disabled={create.pending || !compare}>
-          Create pull request
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button className="primary" disabled={create.pending || !compare}>
+            Create pull request
+          </button>
+          <button
+            type="button"
+            disabled={create.pending || !compare}
+            onClick={(e) => e.currentTarget.form?.reportValidity() && create.run(true)}
+            title="A draft can't be merged until it's marked ready for review"
+          >
+            Create draft
+          </button>
+        </div>
       </form>
       {compare && (
         <>
