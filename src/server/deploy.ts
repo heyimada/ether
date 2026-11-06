@@ -27,9 +27,9 @@ export const rulesOf = (env: Environment): EnvironmentRules => ({
   waitMinutes: env.waitMinutes,
 });
 
-export function setEnvironmentRules(env: Environment, rules: { branches: string[]; waitMinutes: number; reviewers: string[] }) {
+export function setEnvironmentRules(env: Environment, rules: { branches: string[]; waitMinutes: number; reviewers: string[]; runners: string[] }) {
   db.transaction((tx) => {
-    tx.update(environment).set({ branches: JSON.stringify(rules.branches), waitMinutes: rules.waitMinutes }).where(eq(environment.id, env.id)).run();
+    tx.update(environment).set({ branches: JSON.stringify(rules.branches), waitMinutes: rules.waitMinutes, runners: JSON.stringify(rules.runners) }).where(eq(environment.id, env.id)).run();
     tx.delete(environmentReviewer).where(eq(environmentReviewer.environmentId, env.id)).run();
     if (rules.reviewers.length) tx.insert(environmentReviewer).values(rules.reviewers.map((userId) => ({ environmentId: env.id, userId }))).run();
   });
@@ -102,6 +102,7 @@ export function environmentsOverview(repoId: number) {
       name: env.name,
       branches: JSON.parse(env.branches) as string[],
       waitMinutes: env.waitMinutes,
+      runners: JSON.parse(env.runners) as string[],
       reviewers,
       latest: recent[0] ?? null,
       active,

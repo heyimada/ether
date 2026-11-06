@@ -4,6 +4,7 @@ import { BranchProtection, type BranchRule } from "../components/branch-protecti
 import { CiSecrets, type CiSecret } from "../components/ci-secrets";
 import { DeployKeys, type DeployKey } from "../components/deploy-keys";
 import { Environments, type EnvironmentInfo } from "../components/environments";
+import { Runners, type RunnerInfo } from "../components/runners";
 import { ErrorNote, Field, onSubmit, ROW, useAction } from "../components/ui";
 import { api, del, patch, put, repoApi } from "../lib/api";
 
@@ -15,13 +16,14 @@ export const Route = createFileRoute("/_authed/$owner/$repo/settings")({
   },
   loader: async ({ context: { info } }) => {
     const base = repoApi(info.repo.owner, info.repo.name);
-    const [collabs, users, deploy, protection, secrets, envs] = await Promise.all([
+    const [collabs, users, deploy, protection, secrets, envs, runners] = await Promise.all([
       api<{ collaborators: Collaborator[] }>(`${base}/collaborators`),
       api<{ users: { username: string; isOrg: boolean }[] }>("/api/users"),
       api<{ keys: DeployKey[] }>(`${base}/deploy-keys`),
       api<{ rules: BranchRule[] }>(`${base}/branch-protection`),
       api<{ secrets: CiSecret[] }>(`${base}/ci/secrets`),
       api<{ environments: EnvironmentInfo[] }>(`${base}/environments`),
+      api<{ runners: RunnerInfo[] }>(`${base}/runners`),
     ]);
     return {
       collaborators: collabs.collaborators,
@@ -30,6 +32,7 @@ export const Route = createFileRoute("/_authed/$owner/$repo/settings")({
       branchRules: protection.rules,
       secrets: secrets.secrets,
       environments: envs.environments,
+      runners: runners.runners,
     };
   },
   component: RepoSettings,
@@ -38,7 +41,7 @@ export const Route = createFileRoute("/_authed/$owner/$repo/settings")({
 function RepoSettings() {
   const router = useRouter();
   const { info } = Route.useRouteContext();
-  const { collaborators, users, deployKeys, branchRules, secrets, environments } = Route.useLoaderData();
+  const { collaborators, users, deployKeys, branchRules, secrets, environments, runners } = Route.useLoaderData();
   const base = repoApi(info.repo.owner, info.repo.name);
   const [description, setDescription] = useState(info.repo.description);
   const [defaultBranch, setDefaultBranch] = useState(info.repo.defaultBranch);
@@ -131,6 +134,8 @@ function RepoSettings() {
         candidates={[...(me ? [me.username] : []), ...(users.includes(info.repo.owner) ? [info.repo.owner] : []), ...collaborators.filter((c) => c.role === "write").map((c) => c.username)]}
         isolation={instance.ciIsolation}
       />
+
+      <Runners base={base} runners={runners} empty="Runners added here run only this repository's jobs. From then on its jobs no longer run on the Ether machine itself, though the server's own runners can still take them; use runs-on to keep them on yours." filled="This repository's jobs wait for a runner, even if none is online. The server's own runners can take them too; use runs-on to keep them on these." />
 
       <section className="card body stack-sm">
         <h2 className="m-0">Pull requests</h2>

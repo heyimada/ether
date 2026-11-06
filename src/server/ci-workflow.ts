@@ -1,5 +1,6 @@
 // Parsing workflow files into triggers, jobs and steps. Pure, so it can be tested without a database.
 import { parse as parseYaml } from "yaml";
+import { LABEL_RE, MAX_LABELS } from "../runner/protocol";
 import { IMAGE_RE } from "./ci-container";
 import { checkGraph, comboName, parseCondition, parseNeeds, parseStrategy, type MatrixValues } from "./ci-graph";
 import { LEGACY_TRIGGERS, parseOn, type Triggers } from "./ci-triggers";
@@ -25,6 +26,15 @@ const ENV_NAME_RE = /^(?!CI$|CI_)[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const SECRET_REF_RE = /^\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}$/;
 
 // An env map from the workflow: literal values, or exactly `${{ secrets.NAME }}`.
+// A label or a list of them, all of which the job's runner has to have.
+function parseRunsOn(raw: unknown, job: string): string[] {
+  if (raw === undefined || raw === null) return [];
+  const list = typeof raw === "string" ? [raw] : raw;
+  if (!Array.isArray(list) || list.length > MAX_LABELS || list.some((l) => typeof l !== "string" || !LABEL_RE.test(l)))
+    throw new Error(`Job "${job}": runs-on must be a runner label or a list of up to ${MAX_LABELS}; expressions aren't supported yet`);
+  return [...new Set(list as string[])];
+}
+
 function parseEnv(raw: unknown, where: string): Record<string, EnvValue> {
   if (raw === undefined || raw === null) return {};
   if (typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${where}: env must be a map of NAME: value`);
@@ -61,6 +71,7 @@ export type ParsedJob = {
   key: string;
   name: string;
   image: string | null;
+  runsOn: string[];
   environment: { name: string; url: string | null } | null;
   steps: Step[];
   needs: string[];
@@ -96,7 +107,7 @@ export function parseWorkflow(text: string, path = WORKFLOW): ParsedWorkflow {
   if (defs.length === 0 || defs.length > 20) throw new Error(`${path} needs between 1 and 20 jobs`);
   const parsed = defs.map(([name, job]) => {
     if (!NAME_RE.test(name)) throw new Error(`Job name "${name}" must be letters, digits, spaces, '.', '_' or '-'`);
-    const spec = (job ?? {}) as { steps?: unknown; image?: unknown; env?: unknown; environment?: unknown; name?: unknown; needs?: unknown; if?: unknown; strategy?: unknown };
+    const spec = (job ?? {}) as { steps?: unknown; image?: unknown; env?: unknown; environment?: unknown; name?: unknown; needs?: unknown; if?: unknown; strategy?: unknown; "runs-on"?: unknown };
     const { steps, image, env, environment } = spec;
     if (spec.name !== undefined && (typeof spec.name !== "string" || !spec.name.trim() || spec.name.length > 100)) throw new Error(`Job "${name}": name must be text of up to 100 characters`);
     if (!Array.isArray(steps) || steps.length === 0) throw new Error(`Job "${name}" needs a list of steps`);
@@ -109,6 +120,7 @@ export function parseWorkflow(text: string, path = WORKFLOW): ParsedWorkflow {
       condition: parseCondition(spec.if, `Job "${name}"`),
       strategy: parseStrategy(spec.strategy, `Job "${name}"`),
       image: (image as string | undefined) ?? null,
+      runsOn: parseRunsOn(spec["runs-on"], name),
       environment: parseEnvironment(environment, name),
       steps: steps.map((s, i): Step => {
         const step = s as { name?: unknown; run?: unknown; shell?: unknown; "timeout-minutes"?: unknown; env?: unknown };
@@ -126,11 +138,12 @@ export function parseWorkflow(text: string, path = WORKFLOW): ParsedWorkflow {
     };
   });
   checkGraph(new Map(parsed.map((j) => [j.key, j.needs])));
-  const out = parsed.flatMap(({ key, title, needs, condition, strategy, image, environment, steps }): ParsedJob[] =>
+  const out = parsed.flatMap(({ key, title, needs, condition, strategy, image, runsOn, environment, steps }): ParsedJob[] =>
     (strategy?.combos ?? [{}]).map((matrix) => ({
       key,
       name: comboName(title, matrix),
       image,
+      runsOn,
       environment,
       steps,
       needs,

@@ -519,6 +519,8 @@ export const ciJob = sqliteTable("ci_job", {
   // The environment the job deploys to (see deploy.ts), and the link it names for the deployment.
   environment: text("environment"),
   url: text("url"),
+  // JSON: the labels from its `runs-on:`, all of which its runner has to have.
+  runsOn: text("runs_on").notNull().default("[]"),
   // The name of the external runner it ran on; null for the built-in one.
   runner: text("runner"),
   // While a deploy job waits for its environment's wait timer: when it may start.
@@ -535,6 +537,11 @@ export const ciRunner = sqliteTable("ci_runner", {
   name: text("name").notNull(),
   tokenHash: text("token_hash").notNull().unique(),
   isolation: text("isolation", { enum: ["container", "host"] }).notNull().default("container"),
+  // JSON: what `runs-on:` can ask of it. Like its isolation, fixed when it registers.
+  labels: text("labels").notNull().default("[]"),
+  // Whose jobs it runs: one repository's, one organization's, or with neither all of this server's.
+  repoId: integer("repo_id").references(() => repo.id, { onDelete: "cascade" }),
+  orgId: text("org_id").references(() => user.id, { onDelete: "cascade" }),
   createdAt: createdAt(),
   lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }),
 });
@@ -545,6 +552,9 @@ export const ciRunnerRegistration = sqliteTable("ci_runner_registration", {
   tokenHash: text("token_hash").notNull().unique(),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
   usedAt: integer("used_at", { mode: "timestamp_ms" }),
+  // The scope the runner gets; see ciRunner.
+  repoId: integer("repo_id").references(() => repo.id, { onDelete: "cascade" }),
+  orgId: text("org_id").references(() => user.id, { onDelete: "cascade" }),
   createdAt: createdAt(),
 });
 
@@ -601,6 +611,8 @@ export const environment = sqliteTable(
     // JSON array of branch patterns.
     branches: text("branches").notNull().default("[]"),
     waitMinutes: integer("wait_minutes").notNull().default(0),
+    // JSON array of labels a runner needs to deploy here.
+    runners: text("runners").notNull().default("[]"),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("environment_repo_name_idx").on(t.repoId, t.name)],

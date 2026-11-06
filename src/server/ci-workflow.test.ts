@@ -86,3 +86,12 @@ test("workflows have a name, and only the older .ether/ci.yml may leave out on:"
   expect(parseWorkflow("on: push\njobs:\n  t:\n    steps: [{ run: x }]\n", ".ether/workflows/lint.yaml").name).toBe("lint");
   expect(() => parseWorkflow("on: schedule\njobs:\n  t:\n    steps: [{ run: x }]\n", ".ether/workflows/x.yml")).toThrow('.ether/workflows/x.yml: on: "schedule" isn\'t supported');
 });
+
+test("runs-on takes a label or a list of them", () => {
+  const wf = (runsOn: string) => parseWorkflow(`on: push\njobs:\n  a:\n    runs-on: ${runsOn}\n    steps: [{ run: x }]\n`, ".ether/workflows/t.yml").jobs[0].runsOn;
+  expect(wf("gpu")).toEqual(["gpu"]);
+  expect(wf("[linux, gpu, linux]")).toEqual(["linux", "gpu"]);
+  expect(parseWorkflow("on: push\njobs:\n  a:\n    steps: [{ run: x }]\n", ".ether/workflows/t.yml").jobs[0].runsOn).toEqual([]);
+  expect(() => wf("'${{ matrix.os }}'")).toThrow("expressions aren't supported yet");
+  expect(() => wf("[a b]")).toThrow("runs-on must be");
+});
