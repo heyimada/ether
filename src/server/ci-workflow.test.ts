@@ -91,7 +91,7 @@ test("workflows have a name, and only the older .ether/ci.yml may leave out on:"
   expect(named.name).toBe("Tests");
   expect(named.on.pull_request?.types).toEqual(["opened", "synchronize", "reopened"]);
   expect(parseWorkflow("on: push\njobs:\n  t:\n    steps: [{ run: x }]\n", ".ether/workflows/lint.yaml").name).toBe("lint");
-  expect(() => parseWorkflow("on: schedule\njobs:\n  t:\n    steps: [{ run: x }]\n", ".ether/workflows/x.yml")).toThrow('.ether/workflows/x.yml: on: "schedule" isn\'t supported');
+  expect(() => parseWorkflow("on: release\njobs:\n  t:\n    steps: [{ run: x }]\n", ".ether/workflows/x.yml")).toThrow('.ether/workflows/x.yml: on: "release" isn\'t supported');
 });
 
 test("runs-on takes a label or a list of them", () => {

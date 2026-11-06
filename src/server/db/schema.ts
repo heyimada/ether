@@ -479,8 +479,10 @@ export const ciRun = sqliteTable(
     // their own files ran .ether/ci.yml on a push.
     workflowPath: text("workflow_path").notNull().default(".ether/ci.yml"),
     workflowName: text("workflow_name").notNull().default("CI"),
-    event: text("event", { enum: ["push", "pull_request", "workflow_dispatch"] }).notNull().default("push"),
+    event: text("event", { enum: ["push", "pull_request", "workflow_dispatch", "schedule"] }).notNull().default("push"),
     pullNumber: integer("pull_number"),
+    // The cron expression that started a scheduled run, as github.event.schedule.
+    schedule: text("schedule"),
     // JSON: a manual run's inputs by name.
     inputs: text("inputs").notNull().default("{}"),
     status: text("status", { enum: ["queued", "waiting", "running", "success", "failure", "cancelled", "error"] }).notNull(),

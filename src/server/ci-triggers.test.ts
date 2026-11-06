@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseOn, resolveInputs, starts, type Trigger } from "./ci-triggers";
+import { dueCron, parseOn, resolveInputs, starts, type Trigger } from "./ci-triggers";
 
 const push = (ref: string, changed: string[] | null = ["src/a.ts"]): Trigger => ({ event: "push", refType: "branch", ref, changed });
 const tag = (ref: string): Trigger => ({ event: "push", refType: "tag", ref, changed: null });
@@ -104,4 +104,25 @@ test("path globs match in linear time, even for patterns built to backtrack", ()
   expect(starts(evil, push("main", ["a".repeat(4000), "/".repeat(2000) + "y", `${"x/".repeat(1500)}y`]))).toBe(false);
   expect(performance.now() - started).toBeLessThan(2000);
   expect(starts(evil, push("main", [`${"a".repeat(70)}b`]))).toBe(true);
+});
+
+test("schedule takes a list of crons, and starts the workflow in the minutes one of them names", () => {
+  const t = parseOn({ push: null, schedule: [{ cron: "0 3 * * *" }, { cron: " 30 12 * * MON " }] });
+  expect(t.schedule).toEqual(["0 3 * * *", "30 12 * * MON"]);
+  const at = (iso: string): Trigger => ({ event: "schedule", at: new Date(`${iso}Z`) });
+  expect(starts(t, at("2026-11-06T03:00:00"))).toBe(true);
+  expect(starts(t, at("2026-11-06T03:01:00"))).toBe(false);
+  expect(dueCron(t, new Date("2026-11-09T12:30:00Z"))).toBe("30 12 * * MON");
+  // A schedule doesn't make a workflow run on anything else, nor a push on a schedule.
+  expect(starts(parseOn({ schedule: [{ cron: "0 3 * * *" }] }), push("main"))).toBe(false);
+  expect(starts(parseOn("push"), at("2026-11-06T03:00:00"))).toBe(false);
+  for (const [raw, why] of [
+    [{ schedule: null }, "must be a list"],
+    [{ schedule: [] }, "must be a list"],
+    [{ schedule: ["0 3 * * *"] }, "cron:"],
+    [{ schedule: [{ cron: "0 3 * * *", tz: "Europe/Berlin" }] }, "cron:"],
+    [{ schedule: [{ cron: "* * * * *" }] }, "on.schedule:"],
+    [{ schedule: Array(11).fill({ cron: "0 3 * * *" }) }, "at most 10"],
+  ] as const)
+    expect(() => parseOn(raw), JSON.stringify(raw)).toThrow(why);
 });
