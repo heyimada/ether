@@ -55,6 +55,8 @@ export const repo = sqliteTable(
     ciEnabled: integer("ci_enabled", { mode: "boolean" }).notNull().default(false),
     // Branch protection: the head commit's CI run must have passed to merge.
     requireChecks: integer("require_checks", { mode: "boolean" }).notNull().default(false),
+    // Branch protection: every changed file with code owners needs an approval from one of them.
+    requireCodeOwnerReview: integer("require_code_owner_review", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("repo_owner_name_idx").on(t.ownerId, t.name)],
@@ -406,6 +408,20 @@ export const reviewRequest = sqliteTable(
       .references(() => user.id, { onDelete: "cascade" }),
   },
   (t) => [primaryKey({ columns: [t.issueId, t.userId] }), index("review_request_user_idx").on(t.userId)],
+);
+
+// A review asked of an organization's team, by CODEOWNERS or by hand; any member's review answers it.
+export const teamReviewRequest = sqliteTable(
+  "team_review_request",
+  {
+    issueId: integer("issue_id")
+      .notNull()
+      .references(() => issue.id, { onDelete: "cascade" }),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => team.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.issueId, t.teamId] }), index("team_review_request_team_idx").on(t.teamId)],
 );
 
 // Public keys for git over SSH. `blob` is the base64 key data; one key belongs to one account.

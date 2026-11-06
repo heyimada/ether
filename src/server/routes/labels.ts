@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, findUser, readerOrVisitor, repoAccess, requireRepo, requireUser, type RepoAccess } from "../access";
 import { db } from "../db/client";
-import { issue, issueAssignee, issueLabel, label, user } from "../db/schema";
+import { issue, issueAssignee, issueLabel, label, team, user } from "../db/schema";
 
 const LABEL_RE = /^[^\s,][^,]{0,49}$/;
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
@@ -91,6 +91,14 @@ export const labelRoutes = new Elysia()
         .all()
         .filter((u) => u.role !== "org" && repoAccess({ id: u.id }, a.owner, a.repo.name))
         .map((u) => u.username!),
+      // Teams that can be asked for a review: those of the organization that owns the repository.
+      teams: db
+        .select({ name: team.name })
+        .from(team)
+        .where(eq(team.orgId, a.repo.ownerId))
+        .orderBy(team.name)
+        .all()
+        .map((t) => `${a.owner}/${t.name}`),
     };
   })
   .put("/repos/:owner/:repo/issues/:number/assignees", async ({ request, params, body }) => {

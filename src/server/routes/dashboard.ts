@@ -3,10 +3,10 @@ import { Elysia } from "elysia";
 import { readableRepos, readerOrVisitor, requireUser } from "../access";
 import { commitChecks } from "../ci";
 import { db } from "../db/client";
-import { issue, issueAssignee, orgMember, organization, reviewRequest, star, user } from "../db/schema";
+import { issue, issueAssignee, orgMember, organization, star, user } from "../db/schema";
 import { listEvents } from "../events";
 import * as git from "../git";
-import { reviewSummary } from "./reviews";
+import { requestedOf, reviewSummary } from "./reviews";
 
 const LIMIT = 8;
 
@@ -54,17 +54,12 @@ export const dashboardRoutes = new Elysia()
       }),
     );
 
-    const reviews = ids.length
-      ? db
-          .select({ number: issue.number, title: issue.title, repoId: issue.repoId, author: user.username })
-          .from(reviewRequest)
-          .innerJoin(issue, eq(issue.id, reviewRequest.issueId))
-          .innerJoin(user, eq(user.id, issue.authorId))
-          .where(and(eq(reviewRequest.userId, viewer.id), eq(issue.state, "open"), inArray(issue.repoId, ids)))
-          .limit(LIMIT)
-          .all()
-          .map((p) => ({ ...at(p.repoId), number: p.number, title: p.title, author: p.author! }))
-      : [];
+    const reviews = requestedOf(viewer.id, ids, LIMIT).map((p) => ({
+      ...at(p.repoId),
+      number: p.number,
+      title: p.title,
+      author: db.select({ u: user.username }).from(user).where(eq(user.id, p.authorId)).get()?.u ?? "",
+    }));
 
     const starred = db
       .select({ repoId: star.repoId })

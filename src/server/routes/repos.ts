@@ -1,6 +1,8 @@
 import { and, count, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, findUser, isOrg, readableRepos, requireRepo, requireUser, readerOrVisitor } from "../access";
+import { ownerText, ownersFor } from "../codeowners";
+import { readCodeOwners } from "../owners";
 import { db } from "../db/client";
 import { collaborator, orgMember, repo, star, user } from "../db/schema";
 import * as git from "../git";
@@ -108,6 +110,7 @@ export const repoRoutes = new Elysia()
         requireApproval: a.repo.requireApproval,
         ciEnabled: a.repo.ciEnabled,
         requireChecks: a.repo.requireChecks,
+        requireCodeOwnerReview: a.repo.requireCodeOwnerReview,
         defaultBranch,
         empty: refs.length === 0,
       },
@@ -121,7 +124,8 @@ export const repoRoutes = new Elysia()
   .patch("/repos/:owner/:repo", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "owner");
-    const { description, defaultBranch, visibility, requireApproval, ciEnabled, requireChecks } = (body ?? {}) as {
+    const { description, defaultBranch, visibility, requireApproval, ciEnabled, requireChecks, requireCodeOwnerReview } = (body ?? {}) as {
+      requireCodeOwnerReview?: unknown;
       description?: unknown;
       defaultBranch?: unknown;
       visibility?: unknown;
@@ -133,6 +137,7 @@ export const repoRoutes = new Elysia()
     if (typeof ciEnabled === "boolean") db.update(repo).set({ ciEnabled }).where(eq(repo.id, a.repo.id)).run();
     if (typeof requireChecks === "boolean") db.update(repo).set({ requireChecks }).where(eq(repo.id, a.repo.id)).run();
     if (typeof requireApproval === "boolean") db.update(repo).set({ requireApproval }).where(eq(repo.id, a.repo.id)).run();
+    if (typeof requireCodeOwnerReview === "boolean") db.update(repo).set({ requireCodeOwnerReview }).where(eq(repo.id, a.repo.id)).run();
     if (visibility !== undefined) {
       if (visibility !== "private" && visibility !== "public") throw new HttpError(400, "Visibility must be private or public");
       db.update(repo).set({ visibility }).where(eq(repo.id, a.repo.id)).run();
@@ -227,7 +232,11 @@ export const repoRoutes = new Elysia()
     const path = cleanPath(q.path);
     const blob = await git.readBlob(a.path, sha, path);
     if (!blob) throw new HttpError(404, "No such file");
-    return { sha, path, ...blob };
+    // Who owns the file by CODEOWNERS at this commit, and on the CODEOWNERS file itself, the lines it can't use.
+    const loaded = await readCodeOwners(a.path, sha).catch(() => null);
+    const owners = loaded?.co ? ownersFor(loaded.co, path).map(ownerText) : [];
+    const ownerProblems = loaded && loaded.path === path ? (loaded.co ? loaded.co.problems : loaded.problems) : [];
+    return { sha, path, ...blob, owners, ownerProblems };
   })
   .get("/repos/:owner/:repo/raw", async ({ request, params, query }) => {
     const viewer = await readerOrVisitor(request);

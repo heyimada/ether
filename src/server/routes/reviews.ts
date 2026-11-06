@@ -1,11 +1,12 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, allows, findUser, readableRepos, repoAccess, requireRepo, requireUser } from "../access";
 import { db } from "../db/client";
-import { issue, review, reviewComment, reviewRequest, user } from "../db/schema";
+import { issue, review, reviewComment, reviewRequest, team, teamMember, teamReviewRequest, user } from "../db/schema";
 import * as git from "../git";
 import { record } from "../events";
 import { findIssue, pullStatus } from "./issues";
+import { answerTeamRequests } from "../owners";
 
 export type Decision = "approved" | "changes_requested" | null;
 
@@ -57,7 +58,17 @@ export function reviewSummary(issueId: number) {
     .orderBy(user.username)
     .all()
     .map((x) => x.username!);
+  const teamRequests = db
+    .select({ org: user.username, name: team.name })
+    .from(teamReviewRequest)
+    .innerJoin(team, eq(team.id, teamReviewRequest.teamId))
+    .innerJoin(user, eq(user.id, team.orgId))
+    .where(eq(teamReviewRequest.issueId, issueId))
+    .orderBy(team.name)
+    .all()
+    .map((t) => `${t.org}/${t.name}`);
   return {
+    teamRequests,
     reviews: rows.map(({ r, author }) => ({
       id: r.id,
       author,
@@ -73,13 +84,56 @@ export function reviewSummary(issueId: number) {
   };
 }
 
+// Open pull requests waiting for someone's review in the given repositories: asked directly, or through one of
+// their teams if they haven't reviewed yet. Drafts and their own pull requests wait. Most recently updated first.
+export function requestedOf(userId: string, repoIds: number[], limit = 100) {
+  if (!repoIds.length) return [];
+  const cols = { id: issue.id, number: issue.number, title: issue.title, repoId: issue.repoId, authorId: issue.authorId, updatedAt: issue.updatedAt };
+  const open = and(eq(issue.state, "open"), eq(issue.draft, false), inArray(issue.repoId, repoIds));
+  const direct = db
+    .select(cols)
+    .from(reviewRequest)
+    .innerJoin(issue, eq(issue.id, reviewRequest.issueId))
+    .where(and(eq(reviewRequest.userId, userId), open))
+    .all();
+  const reviewed = db.select({ id: review.issueId }).from(review).where(eq(review.authorId, userId));
+  const viaTeam = db
+    .select(cols)
+    .from(teamReviewRequest)
+    .innerJoin(teamMember, and(eq(teamMember.teamId, teamReviewRequest.teamId), eq(teamMember.userId, userId)))
+    .innerJoin(issue, eq(issue.id, teamReviewRequest.issueId))
+    .where(and(open, notInArray(issue.id, reviewed)))
+    .all();
+  const seen = new Set<number>();
+  return [...direct, ...viaTeam]
+    .filter((p) => p.authorId !== userId && !seen.has(p.id) && !!seen.add(p.id))
+    .sort((a, b) => +b.updatedAt - +a.updatedAt)
+    .slice(0, limit);
+}
+
 export const reviewRoutes = new Elysia()
   .put("/repos/:owner/:repo/pulls/:number/reviewers", async ({ request, params, body }) => {
     const a = requireRepo(await requireUser(request), params.owner, params.repo, "write");
     const row = findIssue(a, params.number);
     if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
     const names = (body as { reviewers?: unknown } | null)?.reviewers;
+    const teamNames = (body as { teams?: unknown } | null)?.teams;
     if (!Array.isArray(names) || names.length > 15 || names.some((n) => typeof n !== "string")) throw new HttpError(400, "reviewers must be a list of usernames");
+    if (teamNames !== undefined && (!Array.isArray(teamNames) || teamNames.length > 15 || teamNames.some((n) => typeof n !== "string")))
+      throw new HttpError(400, "teams must be a list of org/team names");
+    // Teams of the organization that owns the repository, which is the only one whose teams can reach it.
+    const teamIds =
+      teamNames === undefined
+        ? null
+        : [...new Set(teamNames as string[])].map((n) => {
+            const [org, name, ...rest] = n.toLowerCase().replace(/^@/, "").split("/");
+            const t =
+              !rest.length && org === a.owner.toLowerCase() && name
+                ? db.select({ id: team.id }).from(team).where(and(eq(team.orgId, a.repo.ownerId), eq(team.name, name))).get()
+                : undefined;
+            if (!t) throw new HttpError(400, `${n} isn't a team of ${a.owner}`);
+            return t.id;
+          });
     const ids = [...new Set(names as string[])].map((n) => {
       const u = findUser(n);
       if (!u || !repoAccess({ id: u.id }, a.owner, a.repo.name)) throw new HttpError(400, `${n} can't see this repository`);
@@ -89,6 +143,11 @@ export const reviewRoutes = new Elysia()
     db.transaction((tx) => {
       tx.delete(reviewRequest).where(eq(reviewRequest.issueId, row.issue.id)).run();
       if (ids.length) tx.insert(reviewRequest).values(ids.map((userId) => ({ issueId: row.issue.id, userId }))).run();
+      // Leaving `teams` out keeps the team requests as they are.
+      if (teamIds) {
+        tx.delete(teamReviewRequest).where(eq(teamReviewRequest.issueId, row.issue.id)).run();
+        if (teamIds.length) tx.insert(teamReviewRequest).values(teamIds.map((teamId) => ({ issueId: row.issue.id, teamId }))).run();
+      }
     });
     return { ok: true };
   })
@@ -123,6 +182,7 @@ export const reviewRoutes = new Elysia()
       // A submitted review answers the request.
       tx.delete(reviewRequest).where(and(eq(reviewRequest.issueId, row.issue.id), eq(reviewRequest.userId, viewer.id))).run();
     });
+    answerTeamRequests(row.issue.id, viewer.id);
     record(a.repo.id, viewer.id, "review", { number: row.issue.number, title: row.issue.title, state });
     return { ok: true };
   })
@@ -130,12 +190,7 @@ export const reviewRoutes = new Elysia()
     const viewer = await requireUser(request);
     const readable = new Map(readableRepos(viewer.id).map((r) => [r.id, r]));
     return {
-      pulls: db
-        .select({ number: issue.number, title: issue.title, repoId: issue.repoId })
-        .from(reviewRequest)
-        .innerJoin(issue, eq(issue.id, reviewRequest.issueId))
-        .where(and(eq(reviewRequest.userId, viewer.id), eq(issue.state, "open")))
-        .all()
+      pulls: requestedOf(viewer.id, [...readable.keys()])
         .flatMap((p) => {
           const r = readable.get(p.repoId);
           return r ? [{ owner: r.owner, repo: r.name, number: p.number, title: p.title }] : [];

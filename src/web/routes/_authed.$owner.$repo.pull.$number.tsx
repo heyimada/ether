@@ -10,6 +10,12 @@ import { api, patch, post, repoApi, shortSha, type Comment, type Commit, type Is
 type PullData = ReviewData & {
   pull: Issue;
   requireChecks: boolean;
+  requireCodeOwnerReview: boolean;
+  codeOwners: {
+    path: string;
+    groups: { pattern: string; line: number; owners: { name: string; valid: boolean }[]; files: string[]; approvedBy: string | null }[];
+    incomplete: boolean;
+  } | null;
   checks: { status: CiStatus; runs: { id: number; workflow: string; event: CiEvent; status: CiStatus }[] } | null;
   deployments: { environment: string; url: string | null; runId: number }[];
   comments: Comment[];
@@ -125,6 +131,8 @@ function MergeBox({ data }: { data: PullData }) {
   const canMerge = data.role !== "read";
   const needsApproval = data.requireApproval && data.reviewDecision !== "approved";
   const needsChecks = data.requireChecks && !!data.checks && data.checks.status !== "success";
+  const owners = data.codeOwners;
+  const needsOwners = data.requireCodeOwnerReview && !!owners && (owners.incomplete || owners.groups.some((g) => !g.approvedBy));
   const blocked = !data.mergeable;
   return (
     <section className={`card body merge-box ${blocked ? "blocked conflict" : ""}`}>
@@ -190,6 +198,32 @@ function MergeBox({ data }: { data: PullData }) {
           )}
         </p>
       ))}
+      {owners && (owners.incomplete || owners.groups.length > 0) && (
+        <div className="m-0 mb-3 stack-sm">
+          <p className="m-0">
+            <strong>{owners.incomplete ? "Code owners can't be worked out for this pull request" : owners.groups.every((g) => g.approvedBy) ? "Code owners approved" : "Waiting on code owners"}</strong>
+            {needsOwners && " · merging requires their review"}
+          </p>
+          <ul className="m-0 p-0 list-none stack-sm" aria-label="Code owners">
+            {owners.groups.map((g) => (
+              <li key={g.line}>
+                <span className={g.approvedBy ? "text-open" : "text-muted"}>{g.approvedBy ? "✓" : "○"}</span> <code>{g.pattern}</code>{" "}
+                {g.owners.map((o, i) => (
+                  <span key={o.name} className={o.valid ? "" : "text-muted line-through"} title={o.valid ? undefined : "Can't approve: not a user with write access or a team of this organization"}>
+                    {i > 0 && ", "}
+                    {o.name}
+                  </span>
+                ))}
+                {g.owners.length === 0 && <span className="text-muted">no owners</span>}
+                <span className="text-muted">
+                  {" "}
+                  · {g.approvedBy ? `approved by ${g.approvedBy}` : `${g.files.length === 20 ? "20+" : g.files.length} file${g.files.length === 1 ? "" : "s"}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {needsApproval && (
         <p className="m-0 mb-3">
           <strong>Merging requires an approving review</strong> because this repository protects its pull requests.
@@ -198,7 +232,7 @@ function MergeBox({ data }: { data: PullData }) {
       <ErrorNote error={setDraft.error} />
       <div className="flex flex-wrap items-center gap-2">
         {canMerge ? (
-          <button className="primary" onClick={() => merge.run()} disabled={blocked || needsApproval || needsChecks || merge.pending}>
+          <button className="primary" onClick={() => merge.run()} disabled={blocked || needsApproval || needsChecks || needsOwners || merge.pending}>
             Merge pull request
           </button>
         ) : (

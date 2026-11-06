@@ -161,6 +161,13 @@ export async function readBlob(repo: string, rev: string, path: string) {
   return { size, binary, tooLarge: false, content: binary ? null : new TextDecoder().decode(blob.stdout) };
 }
 
+// The paths a diff between revisions touches (`a b` or `a...b`), or null if git can't tell.
+export async function diffNames(repo: string, range: string[]): Promise<string[] | null> {
+  const res = await git(repo, ["diff", "--name-only", "-z", "--no-renames", "--end-of-options", ...range]);
+  if (res.code !== 0) return null;
+  return new TextDecoder().decode(res.stdout).split("\0").filter(Boolean);
+}
+
 export async function rawBlob(repo: string, rev: string, path: string): Promise<Uint8Array | null> {
   const res = await git(repo, ["cat-file", "blob", "--end-of-options", `${rev}:${path}`]);
   return res.code === 0 ? res.stdout : null;

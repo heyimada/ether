@@ -7,6 +7,7 @@ import { secret, sha256 } from "./access";
 import { IMAGE_RE, instanceLabel } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
 import { conditionHolds, matrixEnvName, type MatrixValues, type NeedStatus } from "./ci-graph";
+import { requestCodeOwners } from "./owners";
 import { dueCron, inputEnvName, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
 import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type EnvValue, type ParsedWorkflow, type Step } from "./ci-workflow";
 import { config } from "./config";
@@ -857,10 +858,8 @@ const MAX_TAGS_PER_PUSH = 3;
 
 // The files a push or pull request changes, for path filters; null when there are too many or git can't tell, which lets every filter through.
 async function changedFiles(repoPath: string, range: string[]): Promise<string[] | null> {
-  const res = await git.git(repoPath, ["diff", "--name-only", "-z", "--no-renames", "--end-of-options", ...range]);
-  if (res.code !== 0) return null;
-  const files = new TextDecoder().decode(res.stdout).split("\0").filter(Boolean);
-  return files.length > MAX_CHANGED ? null : files;
+  const files = await git.diffNames(repoPath, range);
+  return files && files.length > MAX_CHANGED ? null : files;
 }
 
 // A new branch changed what it has beyond the default branch; the default branch's own first push changed everything.
@@ -893,7 +892,11 @@ export async function onPush(repoId: number, repoPath: string, before: git.Ref[]
       .from(issue)
       .where(and(eq(issue.repoId, repoId), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.headRef, ref.name)))
       .all();
-    for (const p of pulls) await onPullRequest(repoId, repoPath, p.number, "synchronize", actorId);
+    for (const p of pulls) {
+      // New files may have new code owners to ask.
+      await requestCodeOwners(repoId, p.number).catch(() => {});
+      await onPullRequest(repoId, repoPath, p.number, "synchronize", actorId);
+    }
   }
 }
 

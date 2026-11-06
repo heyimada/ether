@@ -10,6 +10,7 @@ import { commitChecks, onPullRequest, onPush } from "../ci";
 import { deployedAt } from "../deploy";
 import { excerpt, record } from "../events";
 import { reviewSummary } from "./reviews";
+import { missingOwners, ownerStatus, requestCodeOwners } from "../owners";
 
 const merges = new Mutex();
 const mergedByUser = alias(user, "merged_by_user");
@@ -218,6 +219,8 @@ export const issueRoutes = new Elysia()
       set.draft = b.draft;
     }
     if (Object.keys(set).length) db.update(issue).set(set).where(eq(issue.id, row.issue.id)).run();
+    // Ready (or reopened) and not a draft: the code owners of its files are asked for a review.
+    if (row.issue.isPull && (set.draft === false || set.state === "open")) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
     // Marked ready on an open pull request (one being reopened gets its own run below): workflows that listen for it run.
     if (set.draft === false && !set.state && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "ready_for_review", viewer.id).catch(() => {});
     if (set.state && set.state !== row.issue.state) {
@@ -260,6 +263,7 @@ export const issueRoutes = new Elysia()
       if (!(await git.resolveCommit(a.path, `refs/heads/${branch}`))) throw new HttpError(400, `No branch named ${branch}`);
     const number = insertIssue(a, viewer, { title, body: str(b?.body, 65536), isPull: true, draft: b?.draft === true, baseRef: base, headRef: head });
     record(a.repo.id, viewer.id, "pull_opened", { number, title, base, head });
+    await requestCodeOwners(a.repo.id, number).catch(() => {});
     await onPullRequest(a.repo.id, a.path, number, "opened", viewer.id).catch(() => {});
     return { pull: { number } };
   })
@@ -273,6 +277,8 @@ export const issueRoutes = new Elysia()
       role: a.role,
       requireApproval: a.repo.requireApproval,
       requireChecks: a.repo.requireChecks,
+      requireCodeOwnerReview: a.repo.requireCodeOwnerReview,
+      codeOwners: await ownerStatus(a.repo.id, row.issue.number).catch(() => null),
       checks: await headChecks(a, row),
       deployments: await headDeployments(a, row),
       ...reviewSummary(row.issue.id),
@@ -290,6 +296,12 @@ export const issueRoutes = new Elysia()
       // With protection on, merging needs an approval and no outstanding request for changes.
       const decision = reviewSummary(row.issue.id).reviewDecision;
       if (a.repo.requireApproval && decision !== "approved") throw new HttpError(409, "Merging requires an approving review");
+      if (a.repo.requireCodeOwnerReview) {
+        const owners = await ownerStatus(a.repo.id, row.issue.number);
+        const missing = owners && missingOwners(owners);
+        if (owners && !missing) throw new HttpError(409, "Code owners can't be worked out for this pull request, so it can't be merged while their review is required");
+        if (missing?.length) throw new HttpError(409, `Merging requires a review from code owners of ${missing.map((g) => g.pattern).join(", ")}`);
+      }
       if (a.repo.requireChecks) {
         const checks = await headChecks(a, row);
         if (checks && checks.status !== "success") throw new HttpError(409, "Merging requires passing checks");
