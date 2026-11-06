@@ -19,15 +19,17 @@ test("stacked pull requests show their stack, move down when the one below merge
   writeFileSync(join(src, "base.txt"), "base\n");
   gitOk(src, ["add", "-A"]);
   gitOk(src, ["commit", "-q", "-m", "base"]);
-  for (const [branch, from] of [["a", "main"], ["b", "a"], ["c", "b"]]) {
+  for (const [branch, from] of [["a", "main"], ["b", "a"], ["c", "b"], ["release", "main"]]) {
     gitOk(src, ["checkout", "-q", "-b", branch, from]);
     writeFileSync(join(src, `${branch}.txt`), `${branch}\n`);
     gitOk(src, ["add", "-A"]);
     gitOk(src, ["commit", "-q", "-m", `add ${branch}`]);
   }
-  gitOk(src, ["push", "-q", cloneUrl(author.username, repo), "main", "a", "b", "c"], { username: author.username, token: author.token });
+  gitOk(src, ["push", "-q", cloneUrl(author.username, repo), "main", "a", "b", "c", "release"], { username: author.username, token: author.token });
   const open = async (title: string, base: string, head: string) =>
     (await (await author.ctx.post(`${api}/pulls`, { data: { title, body: "", base, head }, headers: headers() })).json()).pull.number as number;
+  // A pull request out of the default branch (main into release) isn't something the others stack on.
+  await open("Release", "release", "main");
   const one = await open("Add a", "main", "a");
   const two = await open("Add b", "a", "b");
   const three = await open("Add c", "b", "c");
@@ -43,13 +45,15 @@ test("stacked pull requests show their stack, move down when the one below merge
   await expect(stack.getByRole("listitem")).toHaveText([`#${one}Add a`, `#${two}Add b`, `#${three}Add c`]);
   await expect(stack.locator("[aria-current=page]")).toContainText("Add b");
   await expect(page.getByText(`Stacked on #${one}`)).toBeVisible();
+  // Deleting the branch on merge is what moves the pull requests on it, so it's on by default here.
+  await expect(page.getByRole("checkbox", { name: /Delete b after merging/ })).toBeChecked();
   await info.attach("stack", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 
   // Merging the bottom one moves the next one onto main; its diff is still just its own change.
   // A pull request bringing main back into a would end up going from main into main, so it stays where it is.
   const back = await open("Back-merge", "a", "main");
-  const merged = await (await author.ctx.post(`${api}/pulls/${one}/merge`, { headers: headers() })).json();
-  expect(merged.retargeted).toEqual([two]);
+  const merged = await (await author.ctx.post(`${api}/pulls/${one}/merge`, { data: { deleteBranch: true }, headers: headers() })).json();
+  expect([merged.deletedBranch, merged.retargeted]).toEqual([true, [two]]);
   expect((await get(back)).pull.base).toBe("a");
   await author.ctx.patch(`${api}/issues/${back}`, { data: { state: "closed" }, headers: headers() });
   const after = await get(two);
@@ -75,4 +79,35 @@ test("stacked pull requests show their stack, move down when the one below merge
   expect((await setBase(author.ctx, one, "b")).status()).toBe(409);
   expect((await setBase(author.ctx, three, "b")).ok()).toBe(true);
   expect((await get(three)).stack.map((p: { number: number }) => p.number)).toEqual([two, three]);
+});
+
+test("merging without deleting the branch, or out of a long-lived one, moves nothing", async () => {
+  const admin = await loginAdmin();
+  const author = await createUser(admin);
+  const repo = await createRepo(author.ctx, unique("keep"));
+  const api = `/api/repos/${author.username}/${repo}`;
+  const src = workdir();
+  gitOk(src, ["init", "-q"]);
+  writeFileSync(join(src, "base.txt"), "base\n");
+  gitOk(src, ["add", "-A"]);
+  gitOk(src, ["commit", "-q", "-m", "base"]);
+  for (const [branch, from] of [["develop", "main"], ["feat", "develop"]]) {
+    gitOk(src, ["checkout", "-q", "-b", branch, from]);
+    writeFileSync(join(src, `${branch}.txt`), `${branch}\n`);
+    gitOk(src, ["add", "-A"]);
+    gitOk(src, ["commit", "-q", "-m", branch]);
+  }
+  gitOk(src, ["push", "-q", cloneUrl(author.username, repo), "main", "develop", "feat"], { username: author.username, token: author.token });
+  // develop is protected: a long-lived branch, never deleted on merge.
+  await author.ctx.post(`${api}/branch-protection`, { data: { pattern: "develop", requirePullRequest: false, allowForcePush: false, allowDeletion: false }, headers: headers() });
+  const open = async (title: string, base: string, head: string) =>
+    (await (await author.ctx.post(`${api}/pulls`, { data: { title, body: "", base, head }, headers: headers() })).json()).pull.number as number;
+  const release = await open("Release", "main", "develop");
+  const feat = await open("Feature", "develop", "feat");
+  const get = async (n: number) => (await author.ctx.get(`${api}/pulls/${n}`)).json();
+  expect((await get(feat)).stack).toEqual([]);
+  expect((await get(release)).headDeletable).toBe(false);
+  const merged = await (await author.ctx.post(`${api}/pulls/${release}/merge`, { data: { deleteBranch: true }, headers: headers() })).json();
+  expect([merged.deletedBranch, merged.retargeted]).toEqual([false, []]);
+  expect((await get(feat)).pull.base).toBe("develop");
 });

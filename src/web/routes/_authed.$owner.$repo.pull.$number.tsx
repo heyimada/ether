@@ -14,6 +14,8 @@ type PullData = ReviewData & {
   requireCodeOwnerReview: boolean;
   // Open pull requests stacked with this one, bottom first (this one included); empty when it stands alone.
   stack: { number: number; title: string; draft: boolean; base: string; head: string }[];
+  // Whether merging may delete the head branch: not the default or a protected branch, nor shared with another open pull request.
+  headDeletable: boolean;
   codeOwners: {
     path: string;
     groups: { pattern: string; line: number; owners: { name: string; valid: boolean }[]; files: string[]; fileCount: number; approvedBy: string | null }[];
@@ -170,8 +172,11 @@ function MergeBox({ data }: { data: PullData }) {
   const router = useRouter();
   const { info, me } = Route.useRouteContext();
   const { pull } = data;
+  // Deleting the head branch moves pull requests stacked on it to this one's base; on by default when there are some.
+  const stackedOnThis = data.stack.some((p) => p.base === pull.head);
+  const [deleteBranch, setDeleteBranch] = useState(stackedOnThis);
   const merge = useAction(async () => {
-    await post(`${repoApi(info.repo.owner, info.repo.name)}/pulls/${pull.number}/merge`);
+    await post(`${repoApi(info.repo.owner, info.repo.name)}/pulls/${pull.number}/merge`, { deleteBranch: data.headDeletable && deleteBranch });
     await router.invalidate();
   });
   const setDraft = useAction(async (draft: boolean) => {
@@ -308,7 +313,7 @@ function MergeBox({ data }: { data: PullData }) {
           <Link to="/$owner/$repo/pull/$number" params={{ owner: info.repo.owner, repo: info.repo.name, number: String(below.number) }}>
             #{below.number}
           </Link>
-          : merging now brings these changes into <code>{pull.base}</code>. Merge #{below.number} first and this pull request moves to its base on its own.
+          : merging now brings these changes into <code>{pull.base}</code>. Merge #{below.number} first, deleting its branch, and this pull request moves to its base on its own.
         </p>
       )}
       {needsApproval && (
@@ -317,6 +322,14 @@ function MergeBox({ data }: { data: PullData }) {
         </p>
       )}
       <ErrorNote error={setDraft.error} />
+      {canMerge && data.headDeletable && (
+        <label className="radio mb-3">
+          <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} />
+          Delete <code>{pull.head}</code> after merging{stackedOnThis && " (pull requests stacked on it move to " }
+          {stackedOnThis && <code>{pull.base}</code>}
+          {stackedOnThis && ")"}
+        </label>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         {canMerge ? (
           <button className="primary" onClick={() => merge.run()} disabled={blocked || needsApproval || needsChecks || needsOwners || merge.pending}>

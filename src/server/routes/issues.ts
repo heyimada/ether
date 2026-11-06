@@ -4,7 +4,9 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { Elysia } from "elysia";
 import { HttpError, allows, readerOrVisitor, requireRepo, requireUser, type RepoAccess, type Viewer } from "../access";
 import { db } from "../db/client";
-import { comment, issue, issueAssignee, issueLabel, label, repo, user } from "../db/schema";
+import { branchRules } from "../protection";
+import { effectiveRule } from "../branch-rules";
+import { comment, issue, issueAssignee, issueLabel, label, orgMember, repo, user } from "../db/schema";
 import * as git from "../git";
 import { commitChecks, onPullRequest, onPush } from "../ci";
 import { deployedAt } from "../deploy";
@@ -163,6 +165,15 @@ async function headDeployments(a: RepoAccess, row: NonNullable<IssueRow>) {
   return sha ? deployedAt(a.repo.id, sha) : [];
 }
 
+// Team names stay within the organization, as on its teams page: someone who can only read the repository
+// and isn't a member sees how many teams were asked, not which.
+function hideTeams<T extends { teamRequests: string[] }>(summary: T, a: RepoAccess, viewerId: string): T & { teamRequestCount: number } {
+  const count = summary.teamRequests.length;
+  if (allows(a.role, "write") || (viewerId && db.select().from(orgMember).where(and(eq(orgMember.orgId, a.repo.ownerId), eq(orgMember.userId, viewerId))).get()))
+    return { ...summary, teamRequestCount: count };
+  return { ...summary, teamRequests: [], teamRequestCount: count };
+}
+
 export async function pullStatus(a: RepoAccess, row: NonNullable<IssueRow>) {
   const base = row.issue.baseRef!;
   const head = row.issue.headRef!;
@@ -184,7 +195,16 @@ const MAX_STACK = 25;
 
 // The open pull requests stacked with this one, bottom first: those whose head branch this one goes into (and
 // theirs, and so on), then those that go into this one's head branch. Empty when it stands alone.
-export function stackOf(repoId: number, row: NonNullable<IssueRow>): StackEntry[] {
+// Branches that outlive pull requests: the default branch and protected ones. Pull requests going into or out of
+// them aren't stacked on each other (a feature into main isn't "on" a main → release PR), and they're never
+// deleted on merge.
+export async function longLivedBranches(a: RepoAccess): Promise<(branch: string) => boolean> {
+  const main = await git.headBranch(a.path).catch(() => null);
+  const rules = branchRules(a.repo.id);
+  return (branch) => branch === main || effectiveRule(rules, branch) !== null;
+}
+
+export function stackOf(repoId: number, row: NonNullable<IssueRow>, longLived: (branch: string) => boolean): StackEntry[] {
   if (!row.issue.isPull || row.issue.state !== "open" || !row.issue.baseRef || !row.issue.headRef) return [];
   const open = db
     .select({ number: issue.number, title: issue.title, draft: issue.draft, base: issue.baseRef, head: issue.headRef })
@@ -192,10 +212,12 @@ export function stackOf(repoId: number, row: NonNullable<IssueRow>): StackEntry[
     .where(and(eq(issue.repoId, repoId), eq(issue.isPull, true), eq(issue.state, "open")))
     .orderBy(asc(issue.number))
     .all() as StackEntry[];
-  const self = open.find((p) => p.number === row.issue.number)!;
+  // Merged or closed since the row was read.
+  const self = open.find((p) => p.number === row.issue.number);
+  if (!self) return [];
   const seen = new Set([self.number]);
   const below: StackEntry[] = [];
-  for (let at = self; below.length < MAX_STACK; ) {
+  for (let at = self; below.length < MAX_STACK && !longLived(at.base); ) {
     const next = open.find((p) => p.head === at.base && !seen.has(p.number));
     if (!next) break;
     seen.add(next.number);
@@ -204,16 +226,31 @@ export function stackOf(repoId: number, row: NonNullable<IssueRow>): StackEntry[
   }
   // Above may branch out (two pull requests on the same head); they're listed level by level.
   const above: StackEntry[] = [];
-  for (const queue = [self.head]; queue.length && above.length < MAX_STACK; ) {
-    const head = queue.shift();
+  for (const queue = longLived(self.head) ? [] : [self.head]; queue.length && above.length < MAX_STACK; ) {
+    const head = queue.shift()!;
     for (const p of open)
       if (p.base === head && !seen.has(p.number) && above.length < MAX_STACK) {
         seen.add(p.number);
         above.push(p);
-        queue.push(p.head);
+        if (!longLived(p.head)) queue.push(p.head);
       }
   }
   return below.length || above.length ? [...below, self, ...above] : [];
+}
+
+// The stack, and whether merging may delete the head branch: not a long-lived one, nor one another open pull
+// request comes from.
+async function stackInfo(a: RepoAccess, row: NonNullable<IssueRow>) {
+  const longLived = await longLivedBranches(a);
+  const head = row.issue.headRef;
+  const shared =
+    !!head &&
+    !!db
+      .select({ n: issue.number })
+      .from(issue)
+      .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.headRef, head), ne(issue.id, row.issue.id)))
+      .get();
+  return { stack: stackOf(a.repo.id, row, longLived), headDeletable: !!head && !longLived(head) && !shared };
 }
 
 export const issueRoutes = new Elysia()
@@ -281,7 +318,7 @@ export const issueRoutes = new Elysia()
     // A new base can bring other code owners.
     if (set.baseRef && !set.draft && !set.state) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
     // Ready (or reopened) and not a draft: the code owners of its files are asked for a review.
-    if (row.issue.isPull && (set.draft === false || set.state === "open")) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
+    if (row.issue.isPull && (set.draft === false || (set.state === "open" && row.issue.state !== "open"))) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
     // Marked ready on an open pull request (one being reopened gets its own run below): workflows that listen for it run.
     if (set.draft === false && (!set.state || set.state === row.issue.state) && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "ready_for_review", viewer.id).catch(() => {});
     if (set.state && set.state !== row.issue.state) {
@@ -346,14 +383,15 @@ export const issueRoutes = new Elysia()
       requireChecks: a.repo.requireChecks,
       requireCodeOwnerReview: a.repo.requireCodeOwnerReview,
       codeOwners: await ownerStatus(a.repo.id, row.issue.number).catch(() => null),
-      stack: stackOf(a.repo.id, row),
+      ...(await stackInfo(a, row)),
       checks: await headChecks(a, row),
       deployments: await headDeployments(a, row),
-      ...reviewSummary(row.issue.id),
+      ...hideTeams(reviewSummary(row.issue.id), a, viewer.id),
       ...(await pullStatus(a, row)),
     };
   })
-  .post("/repos/:owner/:repo/pulls/:number/merge", async ({ request, params }) => {
+  .post("/repos/:owner/:repo/pulls/:number/merge", async ({ request, params, body }) => {
+    const deleteBranch = (body as Body)?.deleteBranch === true;
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "write");
     return merges.runExclusive(async () => {
@@ -395,17 +433,24 @@ export const issueRoutes = new Elysia()
       record(a.repo.id, viewer.id, "pull_merged", { number: row.issue.number, title: row.issue.title, base: row.issue.baseRef, head: row.issue.headRef });
       // Pull requests stacked on this one now go where it went, as on GitHub: their diff stays their own changes,
       // since the merge brought the commits they share into the base branch.
-      const retargeted = db
-        .update(issue)
-        .set({ baseRef: row.issue.baseRef })
-        .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.baseRef, row.issue.headRef!), ne(issue.headRef, row.issue.baseRef!)))
-        .returning({ number: issue.number })
-        .all()
-        .map((p) => p.number);
+      // Deleting the head branch, when asked and allowed, is what moves pull requests stacked on it, as on GitHub:
+      // a branch that stays (develop, a release branch) keeps the pull requests going into it.
+      const deletedBranch = deleteBranch && (await stackInfo(a, { ...row, issue: { ...row.issue, state: "open" } })).headDeletable
+        ? await git.git(a.path, ["update-ref", "-m", "delete merged branch", "-d", `refs/heads/${row.issue.headRef}`, headAt]).then((r) => r.code === 0)
+        : false;
+      const retargeted = deletedBranch
+        ? db
+            .update(issue)
+            .set({ baseRef: row.issue.baseRef })
+            .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.baseRef, row.issue.headRef!), ne(issue.headRef, row.issue.baseRef!)))
+            .returning({ number: issue.number })
+            .all()
+            .map((p) => p.number)
+        : [];
       for (const n of retargeted) void requestCodeOwners(a.repo.id, n).catch(() => {});
       // Merging moves the base branch like a push would, so its push workflows run on the merge commit.
       const moved = (sha: string | null) => (sha ? [{ name: row.issue.baseRef!, kind: "branch" as const, sha }] : []);
       void onPush(a.repo.id, a.path, moved(before), moved(result.sha), viewer.id).catch(() => {});
-      return { ok: true, sha: result.sha, retargeted };
+      return { ok: true, sha: result.sha, deletedBranch, retargeted };
     });
   });

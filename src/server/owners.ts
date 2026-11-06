@@ -4,7 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { allows, repoAccess } from "./access";
 import { CODEOWNERS_PATHS, ownedFiles, ownerText, parseCodeOwners, type CodeOwners, type Owner, type Problem } from "./codeowners";
 import { db } from "./db/client";
-import { issue, repo, review, reviewRequest, team, teamMember, teamReviewRequest, user } from "./db/schema";
+import { issue, organization, repo, review, reviewRequest, team, teamMember, teamRepo, teamReviewRequest, user } from "./db/schema";
 import * as git from "./git";
 import { notify, quietly, teamMembers } from "./notify";
 
@@ -35,8 +35,18 @@ function resolveOwner(o: Owner, target: { repoName: string; ownerName: string; o
   if (o.org !== target.ownerName.toLowerCase()) return { text, userIds: [], teamId: null, valid: false };
   const t = db.select({ id: team.id }).from(team).where(and(eq(team.orgId, target.ownerId), eq(team.name, o.team))).get();
   if (!t) return { text, userIds: [], teamId: null, valid: false };
+  // Like a user owner, a team has to be able to write: through its own grant on the repository, or the
+  // organization's base permission. Its members count only as far as they can write themselves.
+  const repoId = db.select({ id: repo.id }).from(repo).where(and(eq(repo.ownerId, target.ownerId), eq(repo.name, target.repoName))).get()?.id;
+  const grant = repoId === undefined ? undefined : db.select({ role: teamRepo.role }).from(teamRepo).where(and(eq(teamRepo.teamId, t.id), eq(teamRepo.repoId, repoId))).get();
+  const base = db.select({ base: organization.basePermission }).from(organization).where(eq(organization.userId, target.ownerId)).get()?.base;
+  if (grant?.role !== "write" && base !== "write") return { text, userIds: [], teamId: null, valid: false };
   const members = db.select({ id: teamMember.userId }).from(teamMember).where(eq(teamMember.teamId, t.id)).all();
-  return { text, userIds: members.map((m) => m.id), teamId: t.id, valid: true };
+  const writers = members.filter((m) => {
+    const access = repoAccess({ id: m.id }, target.ownerName, target.repoName);
+    return !!access && allows(access.role, "write");
+  });
+  return { text, userIds: writers.map((m) => m.id), teamId: t.id, valid: true };
 }
 
 // `files` lists up to MAX_SHOWN_FILES of the group's files; `fileCount` counts them all.
