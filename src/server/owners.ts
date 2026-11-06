@@ -6,6 +6,7 @@ import { CODEOWNERS_PATHS, ownedFiles, ownerText, parseCodeOwners, type CodeOwne
 import { db } from "./db/client";
 import { issue, repo, review, reviewRequest, team, teamMember, teamReviewRequest, user } from "./db/schema";
 import * as git from "./git";
+import { notify, quietly, teamMembers } from "./notify";
 
 export type LoadedOwners = { path: string; co: CodeOwners } | { path: string; co: null; problems: Problem[] };
 
@@ -125,10 +126,13 @@ export async function requestCodeOwners(repoId: number, number: number) {
       if (others.length && !others.some((id) => reviewed.has(id))) teams.add(r.teamId);
     } else for (const id of r.userIds) if (id !== pr.authorId && !reviewed.has(id)) users.add(id);
   }
-  db.transaction((tx) => {
-    if (users.size) tx.insert(reviewRequest).values([...users].map((userId) => ({ issueId: pr.id, userId }))).onConflictDoNothing().run();
-    if (teams.size) tx.insert(teamReviewRequest).values([...teams].map((teamId) => ({ issueId: pr.id, teamId }))).onConflictDoNothing().run();
-  });
+  const added = db.transaction((tx) => ({
+    users: users.size ? tx.insert(reviewRequest).values([...users].map((userId) => ({ issueId: pr.id, userId }))).onConflictDoNothing().returning({ id: reviewRequest.userId }).all() : [],
+    teams: teams.size ? tx.insert(teamReviewRequest).values([...teams].map((teamId) => ({ issueId: pr.id, teamId }))).onConflictDoNothing().returning({ id: teamReviewRequest.teamId }).all() : [],
+  }));
+  // Only those newly asked hear about it. CODEOWNERS asks on the author's behalf.
+  const asked = [...added.users.map((u) => u.id), ...teamMembers(added.teams.map((t) => t.id))].filter((id) => id !== pr.authorId && !reviewed.has(id));
+  quietly(() => notify(asked, "review_requested", pr.authorId, { repoId, issueNumber: number, title: pr.title }));
 }
 
 // A review by a team member answers the requests made of their teams.

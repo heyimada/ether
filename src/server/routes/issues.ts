@@ -11,6 +11,7 @@ import { deployedAt } from "../deploy";
 import { excerpt, record } from "../events";
 import { reviewSummary } from "./reviews";
 import { missingOwners, ownerStatus, requestCodeOwners } from "../owners";
+import { markRead, mentioned, notify, notifyThread, quietly } from "../notify";
 
 const merges = new Mutex();
 const mergedByUser = alias(user, "merged_by_user");
@@ -227,13 +228,17 @@ export const issueRoutes = new Elysia()
     const b = body as Body;
     const title = str(b?.title, 256).trim();
     if (!title) throw new HttpError(400, "Title is required");
-    const number = insertIssue(a, viewer, { title, body: str(b?.body, 65536) });
+    const text = str(b?.body, 65536);
+    const number = insertIssue(a, viewer, { title, body: text });
     record(a.repo.id, viewer.id, "issue_opened", { number, title });
+    quietly(() => notify(mentioned([text]), "mention", viewer.id, { repoId: a.repo.id, issueNumber: number, title, excerpt: text }));
     return { issue: { number } };
   })
   .get("/repos/:owner/:repo/issues/:number", async ({ request, params }) => {
-    const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
+    const viewer = await readerOrVisitor(request);
+    const a = requireRepo(viewer, params.owner, params.repo, "read");
     const row = findIssue(a, params.number);
+    if (viewer.id) quietly(() => markRead(viewer.id, a.repo.id, row.issue.number));
     return { issue: presentAll([row])[0], comments: listComments(row.issue.id), role: a.role };
   })
   .patch("/repos/:owner/:repo/issues/:number", async ({ request, params, body }) => {
@@ -287,6 +292,7 @@ export const issueRoutes = new Elysia()
         if (set.state === "open" && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "reopened", viewer.id).catch(() => {});
       }
       else record(a.repo.id, viewer.id, set.state === "closed" ? "issue_closed" : "issue_reopened", ref);
+      if (set.state === "closed") quietly(() => notifyThread(row.issue.id, "closed", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: ref.title }));
     }
     return { ok: true };
   })
@@ -299,6 +305,7 @@ export const issueRoutes = new Elysia()
     db.insert(comment).values({ issueId: row.issue.id, authorId: viewer.id, body: text }).run();
     db.update(issue).set({ updatedAt: new Date() }).where(eq(issue.id, row.issue.id)).run();
     record(a.repo.id, viewer.id, "comment", { number: row.issue.number, title: row.issue.title, isPull: row.issue.isPull, excerpt: excerpt(text) });
+    quietly(() => notifyThread(row.issue.id, "comment", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title, excerpt: text }, [text]));
     return { ok: true };
   })
   // ---------- pull requests ----------
@@ -317,16 +324,20 @@ export const issueRoutes = new Elysia()
     if (!base || !head || base === head) throw new HttpError(400, "Choose two different branches");
     for (const branch of [base, head])
       if (!(await git.resolveCommit(a.path, `refs/heads/${branch}`))) throw new HttpError(400, `No branch named ${branch}`);
-    const number = insertIssue(a, viewer, { title, body: str(b?.body, 65536), isPull: true, draft: b?.draft === true, baseRef: base, headRef: head });
+    const text = str(b?.body, 65536);
+    const number = insertIssue(a, viewer, { title, body: text, isPull: true, draft: b?.draft === true, baseRef: base, headRef: head });
     record(a.repo.id, viewer.id, "pull_opened", { number, title, base, head });
+    quietly(() => notify(mentioned([text]), "mention", viewer.id, { repoId: a.repo.id, issueNumber: number, title, excerpt: text }));
     await requestCodeOwners(a.repo.id, number).catch(() => {});
     await onPullRequest(a.repo.id, a.path, number, "opened", viewer.id).catch(() => {});
     return { pull: { number } };
   })
   .get("/repos/:owner/:repo/pulls/:number", async ({ request, params }) => {
-    const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
+    const viewer = await readerOrVisitor(request);
+    const a = requireRepo(viewer, params.owner, params.repo, "read");
     const row = findIssue(a, params.number);
     if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
+    if (viewer.id) quietly(() => markRead(viewer.id, a.repo.id, row.issue.number));
     return {
       pull: presentAll([row])[0],
       comments: listComments(row.issue.id),
@@ -380,6 +391,7 @@ export const issueRoutes = new Elysia()
         throw new HttpError(409, reason);
       }
       db.update(issue).set({ state: "merged", mergeCommit: result.sha, mergedBy: viewer.id }).where(eq(issue.id, row.issue.id)).run();
+      quietly(() => notifyThread(row.issue.id, "merged", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title }));
       record(a.repo.id, viewer.id, "pull_merged", { number: row.issue.number, title: row.issue.title, base: row.issue.baseRef, head: row.issue.headRef });
       // Pull requests stacked on this one now go where it went, as on GitHub: their diff stays their own changes,
       // since the merge brought the commits they share into the base branch.

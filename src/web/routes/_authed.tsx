@@ -1,7 +1,7 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Link, Outlet, createFileRoute, redirect, useRouter } from "@tanstack/react-router";
-import { Building2, ChevronDown, LogOut, Settings, Shield, User } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { Link, Outlet, createFileRoute, redirect, useRouter, useRouterState } from "@tanstack/react-router";
+import { Bell, Building2, ChevronDown, LogOut, Settings, Shield, User } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { JumpBox } from "../components/jump";
 import { Avatar, BrandMark, MENU_LABEL, MENU_SEP, PeopleContext, type Person } from "../components/ui";
 import { applyAppearance, clearAppearance } from "../lib/accent";
@@ -45,7 +45,10 @@ function AuthedLayout() {
         </Link>
         <JumpBox />
         {me ? (
-          <UserMenu me={me} displayName={directory.get(me.username)?.displayName ?? ""} />
+          <>
+            <NotificationBell />
+            <UserMenu me={me} displayName={directory.get(me.username)?.displayName ?? ""} />
+          </>
         ) : (
           <Link to="/login" className="button primary small">
             Sign in
@@ -54,6 +57,39 @@ function AuthedLayout() {
       </header>
       <Outlet />
     </PeopleContext.Provider>
+  );
+}
+
+// The inbox link with its unread count, refreshed on every navigation and once a minute.
+function NotificationBell() {
+  const location = useRouterState({ select: (s) => s.location.href });
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      api<{ unread: number }>("/api/me/notifications/count")
+        .then((r) => live && setUnread(r.unread))
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, 60_000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [location]);
+  return (
+    <Link
+      to="/notifications"
+      className="relative ml-auto inline-grid size-8 place-items-center rounded-full text-muted hover:bg-surface-3 hover:text-fg hover:no-underline"
+      aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
+    >
+      <Bell size={18} aria-hidden />
+      {unread > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-accent px-1 text-center text-2xs leading-4 font-semibold text-on-state tabular-nums" aria-hidden>
+          {unread > 99 ? "99+" : unread}
+        </span>
+      )}
+    </Link>
   );
 }
 
@@ -66,7 +102,7 @@ function UserMenu({ me, displayName }: { me: Me; displayName: string }) {
   };
   return (
     <Menu.Root>
-      <Menu.Trigger className="user-trigger group ml-auto min-h-0 gap-1 rounded-full border-0 bg-transparent p-0.5 text-muted shadow-none hover:bg-surface-3" aria-label="Account menu">
+      <Menu.Trigger className="user-trigger group min-h-0 gap-1 rounded-full border-0 bg-transparent p-0.5 text-muted shadow-none hover:bg-surface-3" aria-label="Account menu">
         <Avatar name={me.username} size={28} />
         <ChevronDown size={14} aria-hidden className="transition-transform duration-220 ease-out group-data-[state=open]:rotate-180" />
       </Menu.Trigger>

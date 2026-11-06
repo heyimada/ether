@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthedIndexRouteImport } from './routes/_authed.index'
 import { Route as AuthedNewRouteImport } from './routes/_authed.new'
+import { Route as AuthedNotificationsRouteImport } from './routes/_authed.notifications'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
 import { Route as AuthedSiteAdminRouteImport } from './routes/_authed.site-admin'
 import { Route as AuthedOwnerIndexRouteImport } from './routes/_authed.$owner.index'
@@ -66,6 +67,11 @@ const AuthedIndexRoute = AuthedIndexRouteImport.update({
 const AuthedNewRoute = AuthedNewRouteImport.update({
   id: '/new',
   path: '/new',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedNotificationsRoute = AuthedNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedSettingsRoute = AuthedSettingsRouteImport.update({
@@ -236,6 +242,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/new': typeof AuthedNewRoute
+  '/notifications': typeof AuthedNotificationsRoute
   '/settings': typeof AuthedSettingsRoute
   '/site-admin': typeof AuthedSiteAdminRoute
   '/$owner/$repo': typeof AuthedOwnerRepoRouteWithChildren
@@ -270,6 +277,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/new': typeof AuthedNewRoute
+  '/notifications': typeof AuthedNotificationsRoute
   '/settings': typeof AuthedSettingsRoute
   '/site-admin': typeof AuthedSiteAdminRoute
   '/': typeof AuthedIndexRoute
@@ -306,6 +314,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/_authed/new': typeof AuthedNewRoute
+  '/_authed/notifications': typeof AuthedNotificationsRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/site-admin': typeof AuthedSiteAdminRoute
   '/_authed/': typeof AuthedIndexRoute
@@ -344,6 +353,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/new'
+    | '/notifications'
     | '/settings'
     | '/site-admin'
     | '/$owner/$repo'
@@ -378,6 +388,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/new'
+    | '/notifications'
     | '/settings'
     | '/site-admin'
     | '/'
@@ -413,6 +424,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/_authed/new'
+    | '/_authed/notifications'
     | '/_authed/settings'
     | '/_authed/site-admin'
     | '/_authed/'
@@ -486,6 +498,13 @@ declare module '@tanstack/react-router' {
       path: '/new'
       fullPath: '/new'
       preLoaderRoute: typeof AuthedNewRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/notifications': {
+      id: '/_authed/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AuthedNotificationsRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/settings': {
@@ -752,6 +771,7 @@ const AuthedOwnerRepoRouteWithChildren = AuthedOwnerRepoRoute._addFileChildren(
 
 interface AuthedRouteChildren {
   AuthedNewRoute: typeof AuthedNewRoute
+  AuthedNotificationsRoute: typeof AuthedNotificationsRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedSiteAdminRoute: typeof AuthedSiteAdminRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
@@ -763,6 +783,7 @@ interface AuthedRouteChildren {
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedNewRoute: AuthedNewRoute,
+  AuthedNotificationsRoute: AuthedNotificationsRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedSiteAdminRoute: AuthedSiteAdminRoute,
   AuthedIndexRoute: AuthedIndexRoute,
