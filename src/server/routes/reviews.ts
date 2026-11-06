@@ -133,7 +133,9 @@ export const reviewRoutes = new Elysia()
                 : undefined;
             if (!t) throw new HttpError(400, `${n} isn't a team of ${a.owner}`);
             return t.id;
-          });
+          })
+          // The same team written two ways ("org/core", "@Org/Core") is asked once.
+          .filter((id, i, all) => all.indexOf(id) === i);
     const ids = [...new Set(names as string[])].map((n) => {
       const u = findUser(n);
       if (!u || !repoAccess({ id: u.id }, a.owner, a.repo.name)) throw new HttpError(400, `${n} can't see this repository`);
@@ -182,7 +184,8 @@ export const reviewRoutes = new Elysia()
       // A submitted review answers the request.
       tx.delete(reviewRequest).where(and(eq(reviewRequest.issueId, row.issue.id), eq(reviewRequest.userId, viewer.id))).run();
     });
-    answerTeamRequests(row.issue.id, viewer.id);
+    // Only someone who could approve answers for their teams; a read-only member's comment doesn't.
+    if (allows(a.role, "write")) answerTeamRequests(row.issue.id, viewer.id);
     record(a.repo.id, viewer.id, "review", { number: row.issue.number, title: row.issue.title, state });
     return { ok: true };
   })

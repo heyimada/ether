@@ -21,6 +21,8 @@ export type ReviewData = {
   reviewRequests: string[];
   // Teams asked for a review, as org/team.
   teamRequests: string[];
+  // How many teams were asked; readers outside the organization see only this.
+  teamRequestCount: number;
   reviewers: Record<string, "approved" | "changes_requested">;
   reviewDecision: "approved" | "changes_requested" | null;
   requireApproval: boolean;
@@ -143,7 +145,7 @@ export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: I
           })}
         </ul>
       ) : (
-        <p className={SIDE_TEXT}>No reviews yet</p>
+        <p className={SIDE_TEXT}>{data.teamRequestCount ? `Waiting on ${data.teamRequestCount} team${data.teamRequestCount === 1 ? "" : "s"}` : "No reviews yet"}</p>
       )}
     </section>
   );
