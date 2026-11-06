@@ -1,0 +1,1 @@
+ALTER TABLE `ci_run` ADD `schedule` text;

@@ -1,7 +1,8 @@
 // A workflow's `on:` and whether an event starts it, as on GitHub. Pure, so it can be tested without a database.
 import { globMatch, matches, patternProblem } from "./branch-rules";
+import { cronMatches, parseCron } from "./cron";
 
-export const EVENTS = ["push", "pull_request", "workflow_dispatch"] as const;
+export const EVENTS = ["push", "pull_request", "workflow_dispatch", "schedule"] as const;
 export type EventName = (typeof EVENTS)[number];
 export const PULL_ACTIONS = ["opened", "synchronize", "reopened"] as const;
 export type PullAction = (typeof PULL_ACTIONS)[number];
@@ -14,16 +15,21 @@ export type Triggers = {
   push: { branches: Filter | null; tags: Filter | null; paths: Filter | null } | null;
   pull_request: { branches: Filter | null; paths: Filter | null; types: PullAction[] } | null;
   workflow_dispatch: { inputs: Input[] } | null;
+  // The cron expressions, as written.
+  schedule: string[] | null;
 };
 
 // What happened. `changed` is null when the changed files aren't known (or are too many), and then path filters let everything through.
 export type Trigger =
   | { event: "push"; refType: "branch" | "tag"; ref: string; changed: string[] | null }
   | { event: "pull_request"; action: PullAction; base: string; changed: string[] | null }
-  | { event: "workflow_dispatch" };
+  | { event: "workflow_dispatch" }
+  | { event: "schedule"; at: Date };
 
 // The trigger of `.ether/ci.yml`, which predates `on:`: every push to a branch.
-export const LEGACY_TRIGGERS: Triggers = { push: { branches: { ignore: false, patterns: ["**"] }, tags: null, paths: null }, pull_request: null, workflow_dispatch: null };
+export const LEGACY_TRIGGERS: Triggers = { push: { branches: { ignore: false, patterns: ["**"] }, tags: null, paths: null }, pull_request: null, workflow_dispatch: null, schedule: null };
+
+const MAX_SCHEDULES = 10;
 
 const INPUT_NAME_RE = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
 const MAX_INPUTS = 25;
@@ -88,6 +94,22 @@ function parseInputs(raw: unknown): Input[] {
   });
 }
 
+// `schedule: [{ cron: "30 5 * * 1-5" }, …]`.
+function parseSchedule(raw: unknown): string[] {
+  if (!Array.isArray(raw) || raw.length === 0) throw new Error(`on.schedule must be a list of entries such as - cron: "30 5 * * 1-5"`);
+  if (raw.length > MAX_SCHEDULES) throw new Error(`on.schedule can have at most ${MAX_SCHEDULES} entries`);
+  return raw.map((entry) => {
+    const cron = (entry as { cron?: unknown } | null)?.cron;
+    if (typeof cron !== "string" || Object.keys(entry as object).length !== 1) throw new Error(`on.schedule entries must each be a cron: "…"`);
+    try {
+      parseCron(cron);
+    } catch (e) {
+      throw new Error(`on.schedule: ${(e as Error).message}`);
+    }
+    return cron.trim();
+  });
+}
+
 // Normalises `on:` (a name, a list of names or a map of names to settings); throws a readable message.
 export function parseOn(raw: unknown): Triggers {
   const map: Record<string, unknown> =
@@ -103,7 +125,7 @@ export function parseOn(raw: unknown): Triggers {
   const names = Object.keys(map);
   if (names.length === 0) throw new Error(`"on" must name at least one event`);
   for (const n of names) if (!EVENTS.includes(n as EventName)) throw new Error(`on: "${n}" isn't supported; Ether starts workflows on ${EVENTS.join(", ")}`);
-  const triggers: Triggers = { push: null, pull_request: null, workflow_dispatch: null };
+  const triggers: Triggers = { push: null, pull_request: null, workflow_dispatch: null, schedule: null };
   if ("push" in map) {
     const s = eventSpec(map.push, "push");
     triggers.push = { branches: filter(s, "branches", "on.push"), tags: filter(s, "tags", "on.push"), paths: filter(s, "paths", "on.push") };
@@ -114,6 +136,7 @@ export function parseOn(raw: unknown): Triggers {
     for (const t of types) if (!PULL_ACTIONS.includes(t as PullAction)) throw new Error(`on.pull_request.types: "${t}" isn't supported; use ${PULL_ACTIONS.join(", ")}`);
     triggers.pull_request = { branches: filter(s, "branches", "on.pull_request"), paths: filter(s, "paths", "on.pull_request"), types: types as PullAction[] };
   }
+  if ("schedule" in map) triggers.schedule = parseSchedule(map.schedule);
   if ("workflow_dispatch" in map) triggers.workflow_dispatch = { inputs: parseInputs(eventSpec(map.workflow_dispatch, "workflow_dispatch").inputs) };
   return triggers;
 }
@@ -162,7 +185,14 @@ export function starts(t: Triggers, e: Trigger): boolean {
     }
     case "workflow_dispatch":
       return !!t.workflow_dispatch;
+    case "schedule":
+      return dueCron(t, e.at) !== null;
   }
+}
+
+// The first of the workflow's crons that fires in the minute `at` falls in, or null; github.event.schedule.
+export function dueCron(t: Triggers, at: Date): string | null {
+  return t.schedule?.find((c) => cronMatches(parseCron(c), at)) ?? null;
 }
 
 export const inputEnvName = (name: string) => `CI_INPUT_${name.toUpperCase().replace(/-/g, "_")}`;

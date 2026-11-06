@@ -1,0 +1,122 @@
+// POSIX cron as `on: schedule` uses it on GitHub: five fields (minute, hour, day of month, month, day of week),
+// always in UTC. Fields take `*`, numbers, `a-b` ranges, `,` lists and `/n` steps; months and weekdays also take
+// their English abbreviations (JAN, MON), and 7 is Sunday as well as 0. Pure, so it can be tested without a clock.
+
+export type Cron = { minutes: Set<number>; hours: Set<number>; days: Set<number>; months: Set<number>; weekdays: Set<number>; anyDay: boolean; anyWeekday: boolean };
+
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const FIELDS = [
+  { name: "minute", min: 0, max: 59, names: null },
+  { name: "hour", min: 0, max: 23, names: null },
+  { name: "day of month", min: 1, max: 31, names: null },
+  { name: "month", min: 1, max: 12, names: MONTHS },
+  { name: "day of week", min: 0, max: 7, names: WEEKDAYS },
+] as const;
+
+// As on GitHub, no workflow runs more often than this.
+export const MIN_INTERVAL_MINUTES = 5;
+
+function field(text: string, f: (typeof FIELDS)[number]): Set<number> {
+  const fail = (why: string): never => {
+    throw new Error(`"${text}" isn't a valid ${f.name}: ${why}`);
+  };
+  const value = (part: string): number => {
+    const named = f.names ? (f.names as readonly string[]).indexOf(part.toUpperCase()) : -1;
+    if (named !== -1) return named + (f.name === "month" ? 1 : 0);
+    if (!/^\d{1,2}$/.test(part)) fail(`"${part}" isn't a number`);
+    const n = Number(part);
+    if (n < f.min || n > f.max) fail(`${n} is outside ${f.min}-${f.max}`);
+    return n;
+  };
+  const out = new Set<number>();
+  for (const item of text.split(",")) {
+    const [range, stepText, extra] = item.split("/");
+    if (extra !== undefined || range === "") fail("it has a stray /");
+    let step = 1;
+    if (stepText !== undefined) {
+      if (!/^\d{1,2}$/.test(stepText) || Number(stepText) === 0) fail(`"/${stepText}" isn't a step`);
+      step = Number(stepText);
+    }
+    let from: number;
+    let to: number;
+    if (range === "*") [from, to] = [f.min, f.max];
+    else if (range.includes("-")) {
+      const [a, b, more] = range.split("-");
+      if (more !== undefined) fail(`"${range}" isn't a range`);
+      [from, to] = [value(a), value(b)];
+      if (from > to) fail(`${range} runs backwards`);
+    } else {
+      from = value(range);
+      // `5/15` means from 5 on, as `5-59/15`.
+      to = stepText === undefined ? from : f.max;
+    }
+    for (let n = from; n <= to; n += step) out.add(n);
+  }
+  // Sunday is 0 and 7.
+  if (f.name === "day of week" && out.delete(7)) out.add(0);
+  return out;
+}
+
+// Parsed crons by their text. The scheduler asks every minute for every scheduled workflow, and a cron with
+// hours 23 and 0 costs a walk through the calendar (see consecutiveDays), so each text is only worked out once.
+const parsed = new Map<string, Cron>();
+const MAX_PARSED = 2000;
+
+export function parseCron(text: string): Cron {
+  const known = parsed.get(text);
+  if (known) return known;
+  const cron = parseUncached(text);
+  if (parsed.size >= MAX_PARSED) parsed.clear();
+  parsed.set(text, cron);
+  return cron;
+}
+
+function parseUncached(text: string): Cron {
+  const parts = text.trim().split(/\s+/);
+  if (parts.length !== 5 || text.length > 200) throw new Error(`"${text}" must have five fields: minute, hour, day of month, month and day of week`);
+  const [minutes, hours, days, months, weekdays] = parts.map((p, i) => field(p, FIELDS[i]));
+  // As in Vixie cron, a day field that starts with * (*/2 too) counts as unrestricted for the rule in runsOn.
+  const cron: Cron = { minutes, hours, days, months, weekdays, anyDay: parts[2].startsWith("*"), anyWeekday: parts[4].startsWith("*") };
+  const sorted = [...minutes].sort((a, b) => a - b);
+  // Across the hour only when the next hour can run too: 0,58 3 * * * runs 58 minutes apart, not 2. From 23 to 0
+  // that also takes the next day running: 0,58 0,23 * * MON runs a week apart there.
+  const wraps = [...hours].some((h) => (h < 23 ? hours.has(h + 1) : hours.has(0) && consecutiveDays(cron)));
+  const gaps = sorted.map((m, i) => (i === sorted.length - 1 ? (wraps ? sorted[0] + 60 : Infinity) : sorted[i + 1]) - m);
+  // A single minute in each hour is fine; several are only if they're far enough apart, across the hour too.
+  if (sorted.length > 1 && Math.min(...gaps) < MIN_INTERVAL_MINUTES) throw new Error(`"${text}" runs more often than every ${MIN_INTERVAL_MINUTES} minutes, which is the shortest interval`);
+  return cron;
+}
+
+// Whether the cron runs at all on a day. As in cron, when both day fields are restricted, either one matching is enough.
+function runsOn(c: Cron, month: number, date: number, weekday: number): boolean {
+  if (!c.months.has(month)) return false;
+  const day = c.days.has(date);
+  const onWeekday = c.weekdays.has(weekday);
+  return c.anyDay || c.anyWeekday ? day && onWeekday : day || onWeekday;
+}
+
+// Whether two days in a row can both run. The calendar repeats every 28 years (weekdays, month lengths and leap
+// days together, within a century), so walking 28 of them answers it: about 10,000 steps without allocating.
+function consecutiveDays(c: Cron): boolean {
+  let weekday = 1; // 1 January 2001 was a Monday.
+  let previous = false;
+  for (let year = 2001; year < 2029; year++) {
+    const leap = year % 4 === 0;
+    for (let month = 1; month <= 12; month++) {
+      const length = month === 2 ? (leap ? 29 : 28) : [4, 6, 9, 11].includes(month) ? 30 : 31;
+      for (let date = 1; date <= length; date++) {
+        const now = runsOn(c, month, date, weekday);
+        if (previous && now) return true;
+        previous = now;
+        weekday = (weekday + 1) % 7;
+      }
+    }
+  }
+  return false;
+}
+
+// Whether the cron fires in the minute `at` falls in (UTC).
+export function cronMatches(c: Cron, at: Date): boolean {
+  return c.minutes.has(at.getUTCMinutes()) && c.hours.has(at.getUTCHours()) && runsOn(c, at.getUTCMonth() + 1, at.getUTCDate(), at.getUTCDay());
+}

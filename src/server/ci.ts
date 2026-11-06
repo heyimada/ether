@@ -7,9 +7,10 @@ import { secret, sha256 } from "./access";
 import { IMAGE_RE, instanceLabel } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
 import { conditionHolds, matrixEnvName, type MatrixValues, type NeedStatus } from "./ci-graph";
-import { inputEnvName, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
+import { dueCron, inputEnvName, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
 import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type EnvValue, type ParsedWorkflow, type Step } from "./ci-workflow";
 import { config } from "./config";
+import { MIN_INTERVAL_MINUTES } from "./cron";
 import { db } from "./db/client";
 import { ciJob, ciRun, ciRunner, deployment, instanceSetting, issue, repo, user } from "./db/schema";
 import { cancelDeployments, deploymentOfJob, ensureEnvironment, environmentOfJob, reviewerIds, rulesOf, setDeployment, type Environment } from "./deploy";
@@ -54,7 +55,7 @@ function ciVars(run: Run, owner: string, name: string): Record<string, string> {
 }
 
 // What `github` and `inputs` say in expressions. A run isn't there yet when its runs-on is decided.
-function runContext(run: Pick<Run, "sha" | "ref" | "refType" | "event" | "workflowName" | "pullNumber" | "inputs" | "actorId" | "repoId"> & { id?: number }, owner: string, name: string): Context {
+function runContext(run: Pick<Run, "sha" | "ref" | "refType" | "event" | "workflowName" | "pullNumber" | "inputs" | "actorId" | "repoId"> & { id?: number; schedule?: string | null }, owner: string, name: string): Context {
   const actor = run.actorId ? (db.select({ u: user.username }).from(user).where(eq(user.id, run.actorId)).get()?.u ?? "") : "";
   const base = run.pullNumber === null ? null : (db.select({ base: issue.baseRef }).from(issue).where(and(eq(issue.repoId, run.repoId), eq(issue.number, run.pullNumber))).get()?.base ?? "");
   const inputs = Object.fromEntries(Object.entries(JSON.parse(run.inputs) as Record<string, string>).map(([k, v]): [string, Value] => [k, v === "true" ? true : v === "false" ? false : v]));
@@ -72,7 +73,7 @@ function runContext(run: Pick<Run, "sha" | "ref" | "refType" | "event" | "workfl
       run_id: run.id ?? null,
       head_ref: run.pullNumber === null ? "" : run.ref,
       base_ref: base ?? "",
-      event: { inputs, pull_request: run.pullNumber === null ? null : { number: run.pullNumber } },
+      event: { inputs, pull_request: run.pullNumber === null ? null : { number: run.pullNumber }, schedule: run.schedule ?? null },
     },
     inputs,
   };
@@ -760,7 +761,7 @@ export async function workflowFiles(repoPath: string, sha: string): Promise<Work
 
 export const isWorkflowPath = (path: string) => path === WORKFLOW || (path.startsWith(`${WORKFLOW_DIR}/`) && isWorkflowFile(path.slice(WORKFLOW_DIR.length + 1)));
 
-type RunMeta = { ref: string; refType: Run["refType"]; event: Run["event"]; pullNumber: number | null; inputs: Record<string, string> };
+type RunMeta = { ref: string; refType: Run["refType"]; event: Run["event"]; pullNumber: number | null; inputs: Record<string, string>; schedule?: string | null };
 
 // A job's runs-on and image can depend on the run and its matrix, and are settled before it's queued.
 function settleJobs(repoId: number, sha: string, actorId: string | null, wf: ParsedWorkflow, meta: RunMeta) {
@@ -906,6 +907,78 @@ export async function onPullRequest(repoId: number, repoPath: string, number: nu
   await startWorkflows(repoId, repoPath, head, { event: "pull_request", action, base: pr.baseRef, changed }, { ref: pr.headRef, refType: "branch", event: "pull_request", pullNumber: number, inputs: {} }, actorId);
 }
 
+// ---------- schedules ----------
+
+// Each repository's scheduled workflows as of its default branch's commit, so a tick reads git only after a push.
+const schedules = new Map<number, { sha: string; workflows: { path: string; wf: ParsedWorkflow }[] }>();
+
+async function scheduledWorkflows(repoId: number, repoPath: string, sha: string) {
+  const known = schedules.get(repoId);
+  if (known?.sha === sha) return known.workflows;
+  const workflows: { path: string; wf: ParsedWorkflow }[] = [];
+  for (const file of await workflowFiles(repoPath, sha)) {
+    try {
+      const wf = parseWorkflow(file.content, file.path);
+      if (wf.on.schedule) workflows.push({ path: file.path, wf });
+    } catch {
+      // A file that doesn't parse is reported on the push that brought it.
+    }
+  }
+  schedules.set(repoId, { sha, workflows });
+  return workflows;
+}
+
+// When each scheduled workflow last started, so that several crons together can't run one more often than
+// every MIN_INTERVAL_MINUTES either: each is checked on its own when the workflow is read, but not their sum.
+const lastScheduled = new Map<string, number>();
+
+// Starts what's due in the minute `at` falls in: as on GitHub, the workflows on each repository's default
+// branch, at its latest commit. Nobody pushed, so a scheduled run has no actor.
+export async function runSchedules(at: Date) {
+  if (!ciAllowed()) return;
+  const repos = db.select({ id: repo.id, owner: user.username, name: repo.name }).from(repo).innerJoin(user, eq(user.id, repo.ownerId)).where(eq(repo.ciEnabled, true)).all();
+  for (const r of repos) {
+    if (!r.owner) continue;
+    try {
+      const repoPath = git.repoPath(r.owner, r.name);
+      const branch = await git.headBranch(repoPath);
+      const sha = await git.resolveCommit(repoPath, `refs/heads/${branch}`);
+      if (!sha) continue;
+      for (const { path, wf } of await scheduledWorkflows(r.id, repoPath, sha)) {
+        const cron = dueCron(wf.on, at);
+        const key = `${r.id}:${path}`;
+        if (!cron || at.getTime() - (lastScheduled.get(key) ?? 0) < MIN_INTERVAL_MINUTES * 60_000) continue;
+        lastScheduled.set(key, at.getTime());
+        await createRun(r.id, repoPath, sha, null, path, wf, { ref: branch, refType: "branch", event: "schedule", pullNumber: null, inputs: {}, schedule: cron });
+      }
+    } catch (e) {
+      console.error(`Scheduled workflows of ${r.owner}/${r.name} failed:`, e);
+    }
+  }
+  pump();
+}
+
+// Ticks at the start of every minute. A tick that's still busy when the next is due lets that one go rather
+// than run two at once; minutes the server was down aren't made up, as on GitHub.
+function scheduleTicks() {
+  let busy = false;
+  const next = () => setTimeout(tick, 60_000 - (Date.now() % 60_000) + 50).unref();
+  const tick = async () => {
+    next();
+    if (busy) return;
+    busy = true;
+    try {
+      await runSchedules(new Date(Math.floor(Date.now() / 60_000) * 60_000));
+    } catch (e) {
+      // A bad minute (a locked database, say) is skipped; it mustn't take the server down.
+      console.error("Running scheduled workflows failed:", e);
+    } finally {
+      busy = false;
+    }
+  };
+  next();
+}
+
 export class DispatchError extends Error {}
 
 // Someone starts a workflow by hand on a branch, as the workflow is on that branch.
@@ -935,7 +1008,7 @@ export async function rerun(run: Run, repoPath: string, actorId: string): Promis
   if (!ciOn(run.repoId)) return null;
   const file = await git.readBlob(repoPath, run.sha, run.workflowPath).catch(() => null);
   if (!file?.content) return null;
-  const meta: RunMeta = { ref: run.ref, refType: run.refType, event: run.event, pullNumber: run.pullNumber, inputs: JSON.parse(run.inputs) };
+  const meta: RunMeta = { ref: run.ref, refType: run.refType, event: run.event, pullNumber: run.pullNumber, inputs: JSON.parse(run.inputs), schedule: run.schedule };
   let wf: ParsedWorkflow;
   try {
     wf = parseWorkflow(file.content, run.workflowPath);
@@ -1010,5 +1083,6 @@ export function resumeQueue() {
   setInterval(expireRemoteJobs, Math.min(15_000, RUNNER_TIMEOUT / 2)).unref();
   swept = false;
   sweep = removeLeftoverContainers(instance()).catch((e) => console.error("Removing leftover CI containers failed:", e));
+  scheduleTicks();
   pump();
 }

@@ -22,7 +22,7 @@ type Run = {
   jobs: { name: string; status: CiStatus }[];
 };
 type Input = { name: string; description: string; type: "string" | "boolean" | "choice" | "number"; required: boolean; default: string | null; options: string[] };
-type Workflow = { path: string; name: string; events: CiEvent[]; inputs: Input[] | null; error: string | null };
+type Workflow = { path: string; name: string; events: CiEvent[]; inputs: Input[] | null; schedule: string[] | null; error: string | null };
 
 export const Route = createFileRoute("/_authed/$owner/$repo/ci/")({
   validateSearch: (s: Record<string, unknown>): { workflow?: string } => ({ workflow: typeof s.workflow === "string" && s.workflow ? s.workflow : undefined }),
@@ -99,7 +99,7 @@ function Runs() {
         {current && (
           <p className="text-muted m-0">
             <code>{current.path}</code>
-            {current.events.length > 0 && ` · runs on ${current.events.map((e) => EVENT_LABEL[e]).join(", ")}`}
+            {current.events.length > 0 && ` · runs on ${current.events.map((e) => (e === "schedule" && current.schedule ? `a schedule (${current.schedule.join(", ")}, UTC)` : EVENT_LABEL[e])).join(", ")}`}
           </p>
         )}
         {current?.error && <p className="error m-0">{current.error}</p>}

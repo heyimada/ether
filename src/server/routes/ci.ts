@@ -72,9 +72,9 @@ export const ciRoutes = new Elysia()
       workflows: files.map((f) => {
         try {
           const wf = parseWorkflow(f.content, f.path);
-          return { path: f.path, name: wf.name, events: EVENTS.filter((e) => wf.on[e]), inputs: wf.on.workflow_dispatch?.inputs ?? null, error: null };
+          return { path: f.path, name: wf.name, events: EVENTS.filter((e) => wf.on[e]), inputs: wf.on.workflow_dispatch?.inputs ?? null, schedule: wf.on.schedule, error: null };
         } catch (e) {
-          return { path: f.path, name: f.path, events: [], inputs: null, error: (e as Error).message };
+          return { path: f.path, name: f.path, events: [], inputs: null, schedule: null, error: (e as Error).message };
         }
       }),
     };
