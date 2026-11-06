@@ -89,6 +89,8 @@ export const issue = sqliteTable(
       .references(() => user.id),
     state: text("state", { enum: ["open", "closed", "merged"] }).notNull().default("open"),
     isPull: integer("is_pull", { mode: "boolean" }).notNull().default(false),
+    // A pull request still being worked on: it can't be merged until it's marked ready for review.
+    draft: integer("draft", { mode: "boolean" }).notNull().default(false),
     baseRef: text("base_ref"),
     headRef: text("head_ref"),
     mergeCommit: text("merge_commit"),

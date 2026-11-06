@@ -72,6 +72,7 @@ const present = (r: NonNullable<IssueRow>) => ({
   body: r.issue.body,
   state: r.issue.state,
   isPull: r.issue.isPull,
+  draft: r.issue.draft,
   base: r.issue.baseRef,
   head: r.issue.headRef,
   mergeCommit: r.issue.mergeCommit,
@@ -122,6 +123,8 @@ function listIssues(a: RepoAccess, isPull: boolean, q: Record<string, string | u
         db.select({ id: issueLabel.issueId }).from(issueLabel).innerJoin(label, eq(label.id, issueLabel.labelId)).where(and(eq(label.repoId, a.repo.id), eq(label.name, q.label.toLowerCase()))),
       ),
     );
+  // ?draft=true lists only drafts, ?draft=false only pull requests ready for review.
+  if (isPull && (q.draft === "true" || q.draft === "false")) filters.push(eq(issue.draft, q.draft === "true"));
   if (q.assignee)
     filters.push(
       inArray(
@@ -208,7 +211,15 @@ export const issueRoutes = new Elysia()
       if (row.issue.state === "merged") throw new HttpError(409, "Merged pull requests cannot be reopened or closed");
       set.state = b.state;
     }
+    // Only an open pull request moves between draft and ready; the author or a writer may do it.
+    if (typeof b?.draft === "boolean" && b.draft !== row.issue.draft) {
+      if (!row.issue.isPull) throw new HttpError(400, "Only pull requests can be drafts");
+      if (row.issue.state !== "open") throw new HttpError(409, "Only an open pull request can be marked as a draft or ready for review");
+      set.draft = b.draft;
+    }
     if (Object.keys(set).length) db.update(issue).set(set).where(eq(issue.id, row.issue.id)).run();
+    // Marked ready on an open pull request (one being reopened gets its own run below): workflows that listen for it run.
+    if (set.draft === false && !set.state && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "ready_for_review", viewer.id).catch(() => {});
     if (set.state && set.state !== row.issue.state) {
       const ref = { number: row.issue.number, title: set.title ?? row.issue.title };
       if (row.issue.isPull) {
@@ -247,7 +258,7 @@ export const issueRoutes = new Elysia()
     if (!base || !head || base === head) throw new HttpError(400, "Choose two different branches");
     for (const branch of [base, head])
       if (!(await git.resolveCommit(a.path, `refs/heads/${branch}`))) throw new HttpError(400, `No branch named ${branch}`);
-    const number = insertIssue(a, viewer, { title, body: str(b?.body, 65536), isPull: true, baseRef: base, headRef: head });
+    const number = insertIssue(a, viewer, { title, body: str(b?.body, 65536), isPull: true, draft: b?.draft === true, baseRef: base, headRef: head });
     record(a.repo.id, viewer.id, "pull_opened", { number, title, base, head });
     await onPullRequest(a.repo.id, a.path, number, "opened", viewer.id).catch(() => {});
     return { pull: { number } };
@@ -275,6 +286,7 @@ export const issueRoutes = new Elysia()
       const row = findIssue(a, params.number);
       if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
       if (row.issue.state !== "open") throw new HttpError(409, "This pull request is not open");
+      if (row.issue.draft) throw new HttpError(409, "This pull request is still a draft; mark it ready for review first");
       // With protection on, merging needs an approval and no outstanding request for changes.
       const decision = reviewSummary(row.issue.id).reviewDecision;
       if (a.repo.requireApproval && decision !== "approved") throw new HttpError(409, "Merging requires an approving review");

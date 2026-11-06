@@ -1,0 +1,1 @@
+ALTER TABLE `issue` ADD `draft` integer DEFAULT false NOT NULL;

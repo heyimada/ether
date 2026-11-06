@@ -5,7 +5,7 @@ import { CiBadge, ciDone, EVENT_LABEL, type CiEvent, type CiStatus } from "../co
 import { IssueSidebar } from "../components/labels";
 import { ReviewList, ReviewPanel, ReviewersSection, type ReviewData } from "../components/reviews";
 import { ErrorNote, TabBar, useAction } from "../components/ui";
-import { api, post, repoApi, shortSha, type Comment, type Commit, type Issue } from "../lib/api";
+import { api, patch, post, repoApi, shortSha, type Comment, type Commit, type Issue } from "../lib/api";
 
 type PullData = ReviewData & {
   pull: Issue;
@@ -86,12 +86,18 @@ function PullPage() {
 
 function MergeBox({ data }: { data: PullData }) {
   const router = useRouter();
-  const { info } = Route.useRouteContext();
+  const { info, me } = Route.useRouteContext();
   const { pull } = data;
   const merge = useAction(async () => {
     await post(`${repoApi(info.repo.owner, info.repo.name)}/pulls/${pull.number}/merge`);
     await router.invalidate();
   });
+  const setDraft = useAction(async (draft: boolean) => {
+    await patch(`${repoApi(info.repo.owner, info.repo.name)}/issues/${pull.number}`, { draft });
+    await router.invalidate();
+  });
+  // The author can move their own pull request between draft and ready, as can anyone who can merge.
+  const canToggleDraft = !!me && (me.username === pull.author || data.role !== "read");
 
   if (pull.state === "merged")
     return (
@@ -100,6 +106,21 @@ function MergeBox({ data }: { data: PullData }) {
       </section>
     );
   if (pull.state === "closed") return <section className="card body merge-box blocked">This pull request is closed.</section>;
+
+  if (pull.draft)
+    return (
+      <section className="card body merge-box blocked">
+        <ErrorNote error={setDraft.error} />
+        <p className="mt-0">
+          <strong>This pull request is still a draft.</strong> It can't be merged until it's marked ready for review.
+        </p>
+        {canToggleDraft && (
+          <button className="primary" onClick={() => setDraft.run(false)} disabled={setDraft.pending}>
+            Ready for review
+          </button>
+        )}
+      </section>
+    );
 
   const canMerge = data.role !== "read";
   const needsApproval = data.requireApproval && data.reviewDecision !== "approved";
@@ -174,13 +195,21 @@ function MergeBox({ data }: { data: PullData }) {
           <strong>Merging requires an approving review</strong> because this repository protects its pull requests.
         </p>
       )}
-      {canMerge ? (
-        <button className="primary" onClick={() => merge.run()} disabled={blocked || needsApproval || needsChecks || merge.pending}>
-          Merge pull request
-        </button>
-      ) : (
-        <p className="text-muted">Only collaborators with write access can merge.</p>
-      )}
+      <ErrorNote error={setDraft.error} />
+      <div className="flex flex-wrap items-center gap-2">
+        {canMerge ? (
+          <button className="primary" onClick={() => merge.run()} disabled={blocked || needsApproval || needsChecks || merge.pending}>
+            Merge pull request
+          </button>
+        ) : (
+          <p className="m-0 text-muted">Only collaborators with write access can merge.</p>
+        )}
+        {canToggleDraft && (
+          <button className="small" onClick={() => setDraft.run(true)} disabled={setDraft.pending}>
+            Convert to draft
+          </button>
+        )}
+      </div>
     </section>
   );
 }

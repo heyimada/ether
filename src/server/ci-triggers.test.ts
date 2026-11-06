@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { dueCron, parseOn, resolveInputs, starts, type Trigger } from "./ci-triggers";
+import { dueCron, parseOn, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
 
 const push = (ref: string, changed: string[] | null = ["src/a.ts"]): Trigger => ({ event: "push", refType: "branch", ref, changed });
 const tag = (ref: string): Trigger => ({ event: "push", refType: "tag", ref, changed: null });
-const pull = (base: string, action: "opened" | "synchronize" | "reopened" = "opened", changed: string[] | null = ["src/a.ts"]): Trigger => ({ event: "pull_request", action, base, changed });
+const pull = (base: string, action: PullAction = "opened", changed: string[] | null = ["src/a.ts"]): Trigger => ({ event: "pull_request", action, base, changed });
 
 test("on: takes a name, a list or a map", () => {
   expect(parseOn("push").push).toEqual({ branches: null, tags: null, paths: null });
@@ -125,4 +125,12 @@ test("schedule takes a list of crons, and starts the workflow in the minutes one
     [{ schedule: Array(11).fill({ cron: "0 3 * * *" }) }, "at most 10"],
   ] as const)
     expect(() => parseOn(raw), JSON.stringify(raw)).toThrow(why);
+});
+
+test("marking a draft ready for review only starts workflows that ask for it, as on GitHub", () => {
+  expect(starts(parseOn("pull_request"), pull("main", "ready_for_review"))).toBe(false);
+  expect(parseOn("pull_request").pull_request?.types).toEqual(["opened", "synchronize", "reopened"]);
+  const t = parseOn({ pull_request: { types: ["ready_for_review"] } });
+  expect(starts(t, pull("main", "ready_for_review"))).toBe(true);
+  expect(starts(t, pull("main", "opened"))).toBe(false);
 });

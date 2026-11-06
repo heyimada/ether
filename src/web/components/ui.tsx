@@ -1,5 +1,5 @@
 import { useRouterState } from "@tanstack/react-router";
-import { Check, CircleCheck, CircleDot, Copy, GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, MessageSquareText, Workflow } from "lucide-react";
+import { Check, CircleCheck, CircleDot, Copy, GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, MessageSquareText, Workflow } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { createContext, useContext, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { snappy } from "../lib/motion";
@@ -79,12 +79,15 @@ const STATE_TEXT = { open: "text-open", closed: "text-closed", merged: "text-mer
 const STATE_FILL = { open: "bg-open", closed: "bg-closed", merged: "bg-merged" } as const;
 
 // State as a labelled icon for list rows; the colour repeats what the icon and label say.
-export function StateIcon({ state, isPull }: { state: "open" | "closed" | "merged"; isPull: boolean }) {
+export function StateIcon({ state, isPull, draft = false }: { state: "open" | "closed" | "merged"; isPull: boolean; draft?: boolean }) {
+  if (draft && state === "open") return <GitPullRequestDraft size={16} role="img" aria-label="Draft" aria-hidden={false} className="shrink-0 text-muted" />;
   const Icon = state === "merged" ? GitMerge : isPull ? (state === "open" ? GitPullRequest : GitPullRequestClosed) : state === "open" ? CircleDot : CircleCheck;
   return <Icon size={16} role="img" aria-label={STATE_LABEL[state]} aria-hidden={false} className={`shrink-0 ${STATE_TEXT[state]}`} />;
 }
 
-export function StateBadge({ state }: { state: "open" | "closed" | "merged" }) {
+export function StateBadge({ state, draft = false }: { state: "open" | "closed" | "merged"; draft?: boolean }) {
+  // A draft is open but not ready: outlined, so it doesn't read as closed (also grey).
+  if (draft && state === "open") return <span className="badge bg-surface-3 px-3 py-1 text-sm text-fg">Draft</span>;
   return <span className={`badge border-0 px-3 py-1 text-sm text-on-state shadow-xs ${STATE_FILL[state]}`}>{state[0].toUpperCase() + state.slice(1)}</span>;
 }
 

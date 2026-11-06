@@ -57,7 +57,7 @@ export function IssueList({
         <motion.ul className="list" {...staggered}>
           {data.items.map((i, n) => (
             <motion.li key={i.number} variants={rise} custom={n}>
-              <StateIcon state={i.state} isPull={i.isPull} />
+              <StateIcon state={i.state} isPull={i.isPull} draft={i.draft} />
               <div>
                 <Link className="font-semibold"
                   to={i.isPull ? "/$owner/$repo/pull/$number" : "/$owner/$repo/issues/$number"}
@@ -65,6 +65,7 @@ export function IssueList({
                 >
                   {i.title}
                 </Link>
+                {i.draft && i.state === "open" && <span className="badge ml-2 align-middle">Draft</span>}
                 {i.labels.length > 0 && (
                   <span className="my-1 inline-flex flex-wrap gap-1">
                     {i.labels.map((l) => (
@@ -105,7 +106,7 @@ export function IssueHeader({ issue }: { issue: Issue }) {
         <span className="ml-2 font-normal text-muted tabular-nums">#{issue.number}</span>
       </h1>
       <div className={ROW}>
-        <StateBadge state={issue.state} />
+        <StateBadge state={issue.state} draft={issue.draft} />
         <span className="text-muted">
           <strong>{issue.author}</strong> opened this {timeAgo(issue.createdAt)}
           {issue.isPull && (
