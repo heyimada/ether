@@ -1,6 +1,6 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Check, CircleDot, MessageSquare, Settings2, X } from "lucide-react";
+import { Check, CircleDot, MessageSquare, Settings2, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api, post, put, repoApi, timeAgo, type Issue, type RepoInfo } from "../lib/api";
 import { Markdown } from "./content";
@@ -19,6 +19,10 @@ export type Review = {
 export type ReviewData = {
   reviews: Review[];
   reviewRequests: string[];
+  // Teams asked for a review, as org/team.
+  teamRequests: string[];
+  // How many teams were asked; readers outside the organization see only this.
+  teamRequestCount: number;
   reviewers: Record<string, "approved" | "changes_requested">;
   reviewDecision: "approved" | "changes_requested" | null;
   requireApproval: boolean;
@@ -40,19 +44,32 @@ export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: I
   const router = useRouter();
   const canEdit = info.role !== "read" && pull.state === "open";
   const [people, setPeople] = useState<string[] | null>(null);
+  const [teams, setTeams] = useState<string[]>([]);
   const [requested, setRequested] = useState(data.reviewRequests);
+  const [requestedTeams, setRequestedTeams] = useState(data.teamRequests);
   useEffect(() => setRequested(data.reviewRequests), [data.reviewRequests]);
+  useEffect(() => setRequestedTeams(data.teamRequests), [data.teamRequests]);
   useEffect(() => {
-    if (canEdit) api<{ users: string[] }>(`${repoApi(info.repo.owner, info.repo.name)}/assignable`).then((r) => setPeople(r.users.filter((u) => u !== pull.author)));
+    if (canEdit)
+      api<{ users: string[]; teams: string[] }>(`${repoApi(info.repo.owner, info.repo.name)}/assignable`).then((r) => {
+        setPeople(r.users.filter((u) => u !== pull.author));
+        setTeams(r.teams);
+      });
   }, [canEdit, info.repo.owner, info.repo.name, pull.author]);
-  const save = useAction(async (next: string[]) => {
-    await put(`${repoApi(info.repo.owner, info.repo.name)}/pulls/${pull.number}/reviewers`, { reviewers: next });
+  const save = useAction(async (next: string[], nextTeams: string[]) => {
+    await put(`${repoApi(info.repo.owner, info.repo.name)}/pulls/${pull.number}/reviewers`, { reviewers: next, teams: nextTeams });
     await router.invalidate();
   });
+  const toggle = (list: string[], name: string) => (list.includes(name) ? list.filter((x) => x !== name) : [...list, name]);
   const pick = (name: string) => {
-    const next = requested.includes(name) ? requested.filter((x) => x !== name) : [...requested, name];
+    const next = toggle(requested, name);
     setRequested(next);
-    save.run(next);
+    save.run(next, requestedTeams);
+  };
+  const pickTeam = (name: string) => {
+    const next = toggle(requestedTeams, name);
+    setRequestedTeams(next);
+    save.run(requested, next);
   };
   const everyone = [...new Set([...requested, ...Object.keys(data.reviewers)])].sort();
 
@@ -75,14 +92,43 @@ export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: I
                     {p}
                   </Menu.CheckboxItem>
                 ))}
+                {teams.length > 0 && <Menu.Label className={MENU_LABEL}>Teams</Menu.Label>}
+                {teams.map((t) => (
+                  <Menu.CheckboxItem key={t} className="menu-item" checked={requestedTeams.includes(t)} onSelect={(e) => e.preventDefault()} onCheckedChange={() => pickTeam(t)}>
+                    <Check size={14} aria-hidden className={requestedTeams.includes(t) ? "" : "invisible"} />
+                    <Users size={16} aria-hidden />
+                    {t}
+                  </Menu.CheckboxItem>
+                ))}
               </Menu.Content>
             </Menu.Portal>
           </Menu.Root>
         )}
       </div>
       <ErrorNote error={save.error} />
-      {everyone.length ? (
+      {everyone.length || requestedTeams.length || data.teamRequestCount ? (
         <ul className={PEOPLE} aria-label="Reviewers">
+          {/* Teams the viewer may not see by name are still counted. */}
+          {data.teamRequestCount > requestedTeams.length && (
+            <li className={PERSON}>
+              <Users size={18} aria-hidden className="text-muted" />
+              <span className="min-w-0 flex-1">
+                {data.teamRequestCount - requestedTeams.length} team{data.teamRequestCount - requestedTeams.length === 1 ? "" : "s"}
+              </span>
+              <span className={`${REVIEW_STATE} ${VERDICT_TEXT.pending}`}>
+                <CircleDot size={14} aria-hidden /> Pending
+              </span>
+            </li>
+          )}
+          {requestedTeams.map((t) => (
+            <li key={t} className={PERSON}>
+              <Users size={18} aria-hidden className="text-muted" />
+              <span className="min-w-0 flex-1 wrap-anywhere">{t}</span>
+              <span className={`${REVIEW_STATE} ${VERDICT_TEXT.pending}`}>
+                <CircleDot size={14} aria-hidden /> Pending
+              </span>
+            </li>
+          ))}
           {everyone.map((p) => {
             const verdict = requested.includes(p) ? "pending" : data.reviewers[p];
             return (

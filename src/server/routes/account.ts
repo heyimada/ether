@@ -28,7 +28,7 @@ const MIN_PASSWORD = 10;
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 // First path segments the web app uses for its own pages; a user with one of these names
 // would have unreachable repository URLs.
-export const RESERVED = new Set(["api", "assets", "login", "register", "new", "settings", "site-admin", "organizations", "_shell"]);
+export const RESERVED = new Set(["api", "assets", "login", "register", "new", "settings", "site-admin", "organizations", "notifications", "_shell"]);
 const registration = new Mutex();
 
 type RegisterBody = { code?: unknown; username?: unknown; password?: unknown };

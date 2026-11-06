@@ -62,6 +62,12 @@ function RepoSettings() {
     await patch(base, { requireApproval: on });
     await router.invalidate();
   });
+  const [requireOwners, setRequireOwners] = useState(info.repo.requireCodeOwnerReview);
+  const protectOwners = useAction(async (on: boolean) => {
+    setRequireOwners(on);
+    await patch(base, { requireCodeOwnerReview: on });
+    await router.invalidate();
+  });
   const next = info.repo.visibility === "public" ? "private" : "public";
   const changeVisibility = useAction(async () => {
     await patch(base, { visibility: next });
@@ -146,6 +152,15 @@ function RepoSettings() {
         </label>
         <span className="hint m-0">
           Someone with write access other than the author has to approve, and nobody may have outstanding requested changes.
+        </span>
+        <ErrorNote error={protectOwners.error} />
+        <label className="radio">
+          <input type="checkbox" checked={requireOwners} onChange={(e) => protectOwners.run(e.target.checked)} disabled={protectOwners.pending} />
+          Require review from code owners
+        </label>
+        <span className="hint m-0">
+          Every changed file listed in <code>CODEOWNERS</code> (in <code>.ether/</code>, <code>.github/</code>, the root or <code>docs/</code> of the base branch) needs an
+          approval from one of its owners. Owners are asked for a review automatically when a pull request opens or is marked ready.
         </span>
       </section>
 

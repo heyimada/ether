@@ -55,6 +55,8 @@ export const repo = sqliteTable(
     ciEnabled: integer("ci_enabled", { mode: "boolean" }).notNull().default(false),
     // Branch protection: the head commit's CI run must have passed to merge.
     requireChecks: integer("require_checks", { mode: "boolean" }).notNull().default(false),
+    // Branch protection: every changed file with code owners needs an approval from one of them.
+    requireCodeOwnerReview: integer("require_code_owner_review", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("repo_owner_name_idx").on(t.ownerId, t.name)],
@@ -408,6 +410,20 @@ export const reviewRequest = sqliteTable(
   (t) => [primaryKey({ columns: [t.issueId, t.userId] }), index("review_request_user_idx").on(t.userId)],
 );
 
+// A review asked of an organization's team, by CODEOWNERS or by hand; any member's review answers it.
+export const teamReviewRequest = sqliteTable(
+  "team_review_request",
+  {
+    issueId: integer("issue_id")
+      .notNull()
+      .references(() => issue.id, { onDelete: "cascade" }),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => team.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.issueId, t.teamId] }), index("team_review_request_team_idx").on(t.teamId)],
+);
+
 // Public keys for git over SSH. `blob` is the base64 key data; one key belongs to one account.
 export const sshKey = sqliteTable(
   "ssh_key",
@@ -687,3 +703,28 @@ export const deployment = sqliteTable(
   (t) => [index("deployment_env_idx").on(t.environmentId, t.createdAt), uniqueIndex("deployment_job_idx").on(t.jobId)],
 );
 
+
+// Someone's inbox: what happened that concerns them. One unread entry per thread and reason; a new event on
+// it updates that entry instead of adding another. Listing filters by what the person can read now.
+export const notification = sqliteTable(
+  "notification",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    // The issue or pull request it's about, or for a failed run, the run.
+    issueNumber: integer("issue_number"),
+    runId: integer("run_id"),
+    reason: text("reason", { enum: ["review_requested", "mention", "review", "comment", "assigned", "merged", "closed", "ci_failed"] }).notNull(),
+    actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    excerpt: text("excerpt").notNull().default(""),
+    createdAt: createdAt(),
+    readAt: integer("read_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("notification_user_idx").on(t.userId, t.readAt, t.createdAt)],
+);

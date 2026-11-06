@@ -20,7 +20,17 @@ const SIDE_TEXT = "m-0 text-base wrap-anywhere";
 const TD = "border-t border-border px-4 py-2 transition-colors duration-150";
 
 export type TreeData = { sha: string; path: string; entries: TreeEntry[]; lastCommit: Commit | null; commitCount: number | null; readme: string | null };
-export type BlobData = { sha: string; path: string; size: number; binary: boolean; tooLarge: boolean; content: string | null };
+export type BlobData = {
+  sha: string;
+  path: string;
+  size: number;
+  binary: boolean;
+  tooLarge: boolean;
+  content: string | null;
+  // Code owners of this file, and on the CODEOWNERS file itself, the lines Ether can't use.
+  owners?: string[];
+  ownerProblems?: { line: number; message: string }[];
+};
 
 export async function loadTree(info: RepoInfo, ref: string, path: string): Promise<TreeData> {
   const base = repoApi(info.repo.owner, info.repo.name);
@@ -295,9 +305,27 @@ export function BlobView({ info, gitRef, data }: { info: RepoInfo; gitRef: strin
         <RefPicker info={info} current={gitRef} kind="tree" />
         <Breadcrumb info={info} gitRef={gitRef} path={data.path} />
       </div>
+      {!!data.ownerProblems?.length && (
+        <section className="notice" aria-label="CODEOWNERS problems">
+          <strong>Some lines of this CODEOWNERS file are ignored:</strong>
+          <ul className="m-0 mt-1">
+            {data.ownerProblems.map((p, i) => (
+              <li key={i}>
+                {p.line > 0 && <>Line {p.line}: </>}
+                {p.message}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section className="card">
         <header className={CARD_HEADER}>
           <span className="text-muted">{formatSize(data.size)}</span>
+          {!!data.owners?.length && (
+            <span className="text-muted" aria-label="Code owners">
+              · Owned by {data.owners.join(", ")}
+            </span>
+          )}
           <span className="flex-1" />
           <Link to="/$owner/$repo/commits/$" params={{ ...params, _splat: gitRef }} search={{ path: data.path }} className="button">
             History

@@ -1,7 +1,7 @@
 import { Link, useRouteContext, useRouter } from "@tanstack/react-router";
 import { MessageSquare } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { rise, staggered } from "../lib/motion";
 import { patch, post, repoApi, timeAgo, type Comment, type Issue, type RepoInfo } from "../lib/api";
 import { Markdown } from "./content";
@@ -98,7 +98,7 @@ export function IssueList({
   );
 }
 
-export function IssueHeader({ issue }: { issue: Issue }) {
+export function IssueHeader({ issue, children }: { issue: Issue; children?: ReactNode }) {
   return (
     <div className="mb-4">
       <h1 className="text-5xl font-semibold tracking-tighter">
@@ -116,6 +116,7 @@ export function IssueHeader({ issue }: { issue: Issue }) {
             </>
           )}
         </span>
+        {children}
       </div>
     </div>
   );
