@@ -1,5 +1,5 @@
 import { Mutex } from "async-mutex";
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { Elysia } from "elysia";
 import { HttpError, allows, readerOrVisitor, requireRepo, requireUser, type RepoAccess, type Viewer } from "../access";
@@ -265,7 +265,14 @@ export const issueRoutes = new Elysia()
       set.baseRef = base;
     }
     // Under the merge lock, so a merge doesn't retarget pull requests around a base that's changing.
-    if (Object.keys(set).length) await merges.runExclusive(() => db.update(issue).set(set).where(eq(issue.id, row.issue.id)).run());
+    // A base only changes while the pull request is still open once the lock is held: a merge or close may have
+    // come first.
+    if (Object.keys(set).length)
+      await merges.runExclusive(() => {
+        const where = set.baseRef ? and(eq(issue.id, row.issue.id), eq(issue.state, "open")) : eq(issue.id, row.issue.id);
+        const changed = db.update(issue).set(set).where(where).returning({ id: issue.id }).all();
+        if (set.baseRef && !changed.length) throw new HttpError(409, "Only an open pull request can change its base branch");
+      });
     // A new base can bring other code owners.
     if (set.baseRef && !set.draft && !set.state) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
     // Ready (or reopened) and not a draft: the code owners of its files are asked for a review.
@@ -379,7 +386,7 @@ export const issueRoutes = new Elysia()
       const retargeted = db
         .update(issue)
         .set({ baseRef: row.issue.baseRef })
-        .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.baseRef, row.issue.headRef!)))
+        .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.baseRef, row.issue.headRef!), ne(issue.headRef, row.issue.baseRef!)))
         .returning({ number: issue.number })
         .all()
         .map((p) => p.number);

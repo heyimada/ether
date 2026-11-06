@@ -46,8 +46,12 @@ test("stacked pull requests show their stack, move down when the one below merge
   await info.attach("stack", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 
   // Merging the bottom one moves the next one onto main; its diff is still just its own change.
+  // A pull request bringing main back into a would end up going from main into main, so it stays where it is.
+  const back = await open("Back-merge", "a", "main");
   const merged = await (await author.ctx.post(`${api}/pulls/${one}/merge`, { headers: headers() })).json();
   expect(merged.retargeted).toEqual([two]);
+  expect((await get(back)).pull.base).toBe("a");
+  await author.ctx.patch(`${api}/issues/${back}`, { data: { state: "closed" }, headers: headers() });
   const after = await get(two);
   expect(after.pull.base).toBe("main");
   expect(after.commits.map((c: { subject: string }) => c.subject)).toEqual(["add b"]);

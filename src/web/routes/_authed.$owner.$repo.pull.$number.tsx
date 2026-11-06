@@ -110,7 +110,11 @@ function BaseEditor({ pull }: { pull: Issue }) {
   if (!me || pull.state !== "open" || (me.username !== pull.author && info.role === "read")) return null;
   if (!editing)
     return (
-      <button className="ghost small" onClick={() => (setBase(pull.base ?? ""), setEditing(true))}>
+      <button
+        className="ghost small"
+        // The current base may be gone (deleted after the one below merged): start on a branch the list has.
+        onClick={() => (setBase(info.branches.includes(pull.base ?? "") ? (pull.base ?? "") : (info.branches.find((b) => b !== pull.head) ?? "")), setEditing(true))}
+      >
         Change base
       </button>
     );
