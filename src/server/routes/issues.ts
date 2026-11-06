@@ -178,6 +178,43 @@ export async function pullStatus(a: RepoAccess, row: NonNullable<IssueRow>) {
   return { ...cmp, mergeable: merge.clean, conflicts: merge.clean ? [] : merge.conflicts, missing: false };
 }
 
+export type StackEntry = { number: number; title: string; draft: boolean; base: string; head: string };
+const MAX_STACK = 25;
+
+// The open pull requests stacked with this one, bottom first: those whose head branch this one goes into (and
+// theirs, and so on), then those that go into this one's head branch. Empty when it stands alone.
+export function stackOf(repoId: number, row: NonNullable<IssueRow>): StackEntry[] {
+  if (!row.issue.isPull || row.issue.state !== "open" || !row.issue.baseRef || !row.issue.headRef) return [];
+  const open = db
+    .select({ number: issue.number, title: issue.title, draft: issue.draft, base: issue.baseRef, head: issue.headRef })
+    .from(issue)
+    .where(and(eq(issue.repoId, repoId), eq(issue.isPull, true), eq(issue.state, "open")))
+    .orderBy(asc(issue.number))
+    .all() as StackEntry[];
+  const self = open.find((p) => p.number === row.issue.number)!;
+  const seen = new Set([self.number]);
+  const below: StackEntry[] = [];
+  for (let at = self; below.length < MAX_STACK; ) {
+    const next = open.find((p) => p.head === at.base && !seen.has(p.number));
+    if (!next) break;
+    seen.add(next.number);
+    below.unshift(next);
+    at = next;
+  }
+  // Above may branch out (two pull requests on the same head); they're listed level by level.
+  const above: StackEntry[] = [];
+  for (const queue = [self.head]; queue.length && above.length < MAX_STACK; ) {
+    const head = queue.shift();
+    for (const p of open)
+      if (p.base === head && !seen.has(p.number) && above.length < MAX_STACK) {
+        seen.add(p.number);
+        above.push(p);
+        queue.push(p.head);
+      }
+  }
+  return below.length || above.length ? [...below, self, ...above] : [];
+}
+
 export const issueRoutes = new Elysia()
   // ---------- issues ----------
   .get("/repos/:owner/:repo/issues", async ({ request, params, query }) => {
@@ -218,7 +255,19 @@ export const issueRoutes = new Elysia()
       if (row.issue.state !== "open") throw new HttpError(409, "Only an open pull request can be marked as a draft or ready for review");
       set.draft = b.draft;
     }
-    if (Object.keys(set).length) db.update(issue).set(set).where(eq(issue.id, row.issue.id)).run();
+    // An open pull request can be pointed at another base branch, e.g. once the one it was stacked on is gone.
+    if (typeof b?.base === "string" && b.base !== row.issue.baseRef) {
+      if (!row.issue.isPull) throw new HttpError(400, "Only pull requests have a base branch");
+      if (row.issue.state !== "open") throw new HttpError(409, "Only an open pull request can change its base branch");
+      const base = str(b.base, 255);
+      if (base === row.issue.headRef) throw new HttpError(400, "The base branch must differ from the head branch");
+      if (!(await git.resolveCommit(a.path, `refs/heads/${base}`))) throw new HttpError(400, `No branch named ${base}`);
+      set.baseRef = base;
+    }
+    // Under the merge lock, so a merge doesn't retarget pull requests around a base that's changing.
+    if (Object.keys(set).length) await merges.runExclusive(() => db.update(issue).set(set).where(eq(issue.id, row.issue.id)).run());
+    // A new base can bring other code owners.
+    if (set.baseRef && !set.draft && !set.state) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
     // Ready (or reopened) and not a draft: the code owners of its files are asked for a review.
     if (row.issue.isPull && (set.draft === false || set.state === "open")) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
     // Marked ready on an open pull request (one being reopened gets its own run below): workflows that listen for it run.
@@ -279,6 +328,7 @@ export const issueRoutes = new Elysia()
       requireChecks: a.repo.requireChecks,
       requireCodeOwnerReview: a.repo.requireCodeOwnerReview,
       codeOwners: await ownerStatus(a.repo.id, row.issue.number).catch(() => null),
+      stack: stackOf(a.repo.id, row),
       checks: await headChecks(a, row),
       deployments: await headDeployments(a, row),
       ...reviewSummary(row.issue.id),
@@ -324,9 +374,19 @@ export const issueRoutes = new Elysia()
       }
       db.update(issue).set({ state: "merged", mergeCommit: result.sha, mergedBy: viewer.id }).where(eq(issue.id, row.issue.id)).run();
       record(a.repo.id, viewer.id, "pull_merged", { number: row.issue.number, title: row.issue.title, base: row.issue.baseRef, head: row.issue.headRef });
+      // Pull requests stacked on this one now go where it went, as on GitHub: their diff stays their own changes,
+      // since the merge brought the commits they share into the base branch.
+      const retargeted = db
+        .update(issue)
+        .set({ baseRef: row.issue.baseRef })
+        .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.baseRef, row.issue.headRef!)))
+        .returning({ number: issue.number })
+        .all()
+        .map((p) => p.number);
+      for (const n of retargeted) void requestCodeOwners(a.repo.id, n).catch(() => {});
       // Merging moves the base branch like a push would, so its push workflows run on the merge commit.
       const moved = (sha: string | null) => (sha ? [{ name: row.issue.baseRef!, kind: "branch" as const, sha }] : []);
       void onPush(a.repo.id, a.path, moved(before), moved(result.sha), viewer.id).catch(() => {});
-      return { ok: true, sha: result.sha };
+      return { ok: true, sha: result.sha, retargeted };
     });
   });
