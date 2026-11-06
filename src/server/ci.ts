@@ -10,6 +10,7 @@ import { conditionHolds, matrixEnvName, type MatrixValues, type NeedStatus } fro
 import { dueCron, inputEnvName, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
 import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type EnvValue, type ParsedWorkflow, type Step } from "./ci-workflow";
 import { config } from "./config";
+import { MIN_INTERVAL_MINUTES } from "./cron";
 import { db } from "./db/client";
 import { ciJob, ciRun, ciRunner, deployment, instanceSetting, issue, repo, user } from "./db/schema";
 import { cancelDeployments, deploymentOfJob, ensureEnvironment, environmentOfJob, reviewerIds, rulesOf, setDeployment, type Environment } from "./deploy";
@@ -927,6 +928,10 @@ async function scheduledWorkflows(repoId: number, repoPath: string, sha: string)
   return workflows;
 }
 
+// When each scheduled workflow last started, so that several crons together can't run one more often than
+// every MIN_INTERVAL_MINUTES either: each is checked on its own when the workflow is read, but not their sum.
+const lastScheduled = new Map<string, number>();
+
 // Starts what's due in the minute `at` falls in: as on GitHub, the workflows on each repository's default
 // branch, at its latest commit. Nobody pushed, so a scheduled run has no actor.
 export async function runSchedules(at: Date) {
@@ -941,7 +946,10 @@ export async function runSchedules(at: Date) {
       if (!sha) continue;
       for (const { path, wf } of await scheduledWorkflows(r.id, repoPath, sha)) {
         const cron = dueCron(wf.on, at);
-        if (cron) await createRun(r.id, repoPath, sha, null, path, wf, { ref: branch, refType: "branch", event: "schedule", pullNumber: null, inputs: {}, schedule: cron });
+        const key = `${r.id}:${path}`;
+        if (!cron || at.getTime() - (lastScheduled.get(key) ?? 0) < MIN_INTERVAL_MINUTES * 60_000) continue;
+        lastScheduled.set(key, at.getTime());
+        await createRun(r.id, repoPath, sha, null, path, wf, { ref: branch, refType: "branch", event: "schedule", pullNumber: null, inputs: {}, schedule: cron });
       }
     } catch (e) {
       console.error(`Scheduled workflows of ${r.owner}/${r.name} failed:`, e);
@@ -961,6 +969,9 @@ function scheduleTicks() {
     busy = true;
     try {
       await runSchedules(new Date(Math.floor(Date.now() / 60_000) * 60_000));
+    } catch (e) {
+      // A bad minute (a locked database, say) is skipped; it mustn't take the server down.
+      console.error("Running scheduled workflows failed:", e);
     } finally {
       busy = false;
     }

@@ -23,6 +23,12 @@ test("with both day fields restricted, either one is enough, as in cron", () => 
   expect(fires("0 0 13 * FRI", "2026-11-06T00:00:00")).toBe(true); // a Friday, not the 13th
   expect(fires("0 0 13 * FRI", "2026-11-12T00:00:00")).toBe(false);
   expect(fires("0 0 13 * *", "2026-11-06T00:00:00")).toBe(false);
+  // A day field that starts with * still counts as unrestricted, as in Vixie cron.
+  expect(fires("0 0 */1 * MON", "2026-11-09T00:00:00")).toBe(true);
+  expect(fires("0 0 */1 * MON", "2026-11-10T00:00:00")).toBe(false);
+  expect(fires("0 0 */2 * FRI", "2026-11-13T00:00:00")).toBe(true); // an odd Friday
+  expect(fires("0 0 */2 * FRI", "2026-11-06T00:00:00")).toBe(false); // an even Friday
+  expect(fires("0 0 */2 * FRI", "2026-11-11T00:00:00")).toBe(false); // odd, but a Wednesday
 });
 
 test("what can't be read is refused with the reason, and so is anything more often than every five minutes", () => {

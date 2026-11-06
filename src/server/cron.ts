@@ -66,7 +66,8 @@ export function parseCron(text: string): Cron {
   const gaps = sorted.map((m, i) => (i === sorted.length - 1 ? sorted[0] + 60 : sorted[i + 1]) - m);
   // A single minute in each hour is fine; several are only if they're far enough apart, across the hour too.
   if (sorted.length > 1 && Math.min(...gaps) < MIN_INTERVAL_MINUTES) throw new Error(`"${text}" runs more often than every ${MIN_INTERVAL_MINUTES} minutes, which is the shortest interval`);
-  return { minutes, hours, days, months, weekdays, anyDay: parts[2] === "*", anyWeekday: parts[4] === "*" };
+  // As in Vixie cron, a day field that starts with * (*/2 too) counts as unrestricted for the rule below.
+  return { minutes, hours, days, months, weekdays, anyDay: parts[2].startsWith("*"), anyWeekday: parts[4].startsWith("*") };
 }
 
 // Whether the cron fires in the minute `at` falls in (UTC). As in cron, when both day fields are restricted,
@@ -75,8 +76,5 @@ export function cronMatches(c: Cron, at: Date): boolean {
   if (!c.minutes.has(at.getUTCMinutes()) || !c.hours.has(at.getUTCHours()) || !c.months.has(at.getUTCMonth() + 1)) return false;
   const day = c.days.has(at.getUTCDate());
   const weekday = c.weekdays.has(at.getUTCDay());
-  if (c.anyDay && c.anyWeekday) return true;
-  if (c.anyDay) return weekday;
-  if (c.anyWeekday) return day;
-  return day || weekday;
+  return c.anyDay || c.anyWeekday ? day && weekday : day || weekday;
 }
