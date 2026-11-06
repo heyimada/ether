@@ -104,7 +104,7 @@ test("code owners are asked for a review and, when required, have to approve the
   await expect(page.getByRole("region", { name: "CODEOWNERS problems" })).toContainText("Line 4: octo@example.com: owners by email aren't supported");
 });
 
-test("a draft asks its code owners only once it's ready, and teams can be requested by hand", async () => {
+test("a draft asks its code owners only once it's ready, and teams can be requested by hand", async ({ browser }) => {
   const admin = await loginAdmin();
   const founder = await createUser(admin);
   const author = await createUser(admin);
@@ -150,4 +150,10 @@ test("a draft asks its code owners only once it's ready, and teams can be reques
   // Nor which teams were asked to review, only how many.
   const seen = await (await outsider.ctx.get(`${api}/pulls/${pull.number}`)).json();
   expect([seen.teamRequests, seen.teamRequestCount]).toEqual([[], 1]);
+  // The sidebar still says a team was asked, next to the people.
+  const outsiderPage = await (await browser.newContext()).newPage();
+  await uiLogin(outsiderPage, outsider.username, outsider.password);
+  await outsiderPage.goto(`${baseURL()}/${org}/${repo}/pull/${pull.number}`);
+  await expect(outsiderPage.getByRole("list", { name: "Reviewers" })).toContainText("1 team");
+  await expect(outsiderPage.getByRole("list", { name: "Reviewers" })).toContainText(founder.username);
 });
