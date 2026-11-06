@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, readableRepos, requireUser } from "../access";
 import { db } from "../db/client";
@@ -61,13 +61,33 @@ export const notificationRoutes = new Elysia()
   .patch("/me/notifications/:id", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const read = (body as { read?: unknown } | null)?.read !== false;
-    const done = db
-      .update(notification)
-      .set({ readAt: read ? new Date() : null })
-      .where(and(eq(notification.id, Number(params.id)), eq(notification.userId, viewer.id)))
-      .returning({ id: notification.id })
-      .all();
-    if (!done.length) throw new HttpError(404, "No such notification");
+    const mine = db.select().from(notification).where(and(eq(notification.id, Number(params.id)), eq(notification.userId, viewer.id))).get();
+    if (!mine) throw new HttpError(404, "No such notification");
+    db.transaction((tx) => {
+      // A thread keeps one unread entry per reason: marking an older one unread takes over a newer unread one.
+      if (!read) {
+        const newer = tx
+          .select()
+          .from(notification)
+          .where(
+            and(
+              eq(notification.userId, viewer.id),
+              eq(notification.repoId, mine.repoId),
+              eq(notification.reason, mine.reason),
+              isNull(notification.readAt),
+              ne(notification.id, mine.id),
+              mine.issueNumber === null ? isNull(notification.issueNumber) : eq(notification.issueNumber, mine.issueNumber),
+              mine.runId === null ? isNull(notification.runId) : eq(notification.runId, mine.runId),
+            ),
+          )
+          .get();
+        if (newer) {
+          tx.delete(notification).where(eq(notification.id, newer.id)).run();
+          tx.update(notification).set({ actorId: newer.actorId, title: newer.title, excerpt: newer.excerpt, createdAt: newer.createdAt }).where(eq(notification.id, mine.id)).run();
+        }
+      }
+      tx.update(notification).set({ readAt: read ? new Date() : null }).where(eq(notification.id, mine.id)).run();
+    });
     return { ok: true };
   })
   .post("/me/notifications/read", async ({ request }) => {

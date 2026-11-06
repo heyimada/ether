@@ -77,6 +77,18 @@ test("people hear about mentions, comments, review requests, reviews, merges and
   expect((await dev.ctx.patch(`/api/me/notifications/${first.id}`, { data: { read: false }, headers: headers() })).status()).toBe(404);
   expect((await owner.ctx.patch(`/api/me/notifications/${first.id}`, { data: { read: false }, headers: headers() })).ok()).toBe(true);
   expect((await inbox(owner.ctx)).notifications.some((n) => n.id === first.id)).toBe(true);
+  // Marking an older entry of a thread unread while a newer one is unread keeps one entry for the thread.
+  await owner.ctx.patch(`/api/me/notifications/${first.id}`, { data: { read: true }, headers: headers() });
+  await dev.ctx.post(`${api}/issues/${pull.number}/comments`, { data: { body: "One more thing." }, headers: headers() });
+  await dev.ctx.post(`${api}/issues/${pull.number}/comments`, { data: { body: "And another." }, headers: headers() });
+  const comments = async () => (await inbox(owner.ctx, true)).notifications.filter((n) => n.reason === "comment" && n.issueNumber === pull.number);
+  const [newer] = (await comments()).filter((n) => !n.read);
+  await owner.ctx.patch(`/api/me/notifications/${newer.id}`, { data: { read: true }, headers: headers() });
+  await dev.ctx.post(`${api}/issues/${pull.number}/comments`, { data: { body: "Last one." }, headers: headers() });
+  const [latest] = (await comments()).filter((n) => !n.read);
+  await owner.ctx.patch(`/api/me/notifications/${newer.id}`, { data: { read: false }, headers: headers() });
+  const unreadComments = (await comments()).filter((n) => !n.read);
+  expect(unreadComments.map((n) => [n.id, n.excerpt])).toEqual([[newer.id, latest.excerpt]]);
   await owner.ctx.post("/api/me/notifications/read", { headers: headers() });
   expect((await inbox(owner.ctx)).unread).toBe(0);
   expect((await inbox(owner.ctx, true)).notifications.length).toBeGreaterThan(0);

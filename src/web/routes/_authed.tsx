@@ -62,7 +62,9 @@ function AuthedLayout() {
 
 // The inbox link with its unread count, refreshed on every navigation and once a minute.
 function NotificationBell() {
-  const location = useRouterState({ select: (s) => s.location.href });
+  // The location once its loaders are done: opening an issue reads its notifications there, so counting before
+  // that would still include them.
+  const location = useRouterState({ select: (s) => s.resolvedLocation?.href ?? s.location.href });
   const [unread, setUnread] = useState(0);
   useEffect(() => {
     let live = true;
