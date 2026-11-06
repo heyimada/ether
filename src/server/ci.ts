@@ -55,10 +55,9 @@ function ciVars(run: Run, owner: string, name: string): Record<string, string> {
 }
 
 // What `github` and `inputs` say in expressions. A run isn't there yet when its runs-on is decided.
-function runContext(run: Pick<Run, "sha" | "ref" | "refType" | "event" | "workflowName" | "pullNumber" | "inputs" | "actorId" | "repoId"> & { id?: number; schedule?: string | null }, owner: string, name: string): Context {
+function runContext(run: Pick<Run, "sha" | "ref" | "refType" | "event" | "workflowName" | "pullNumber" | "inputs" | "actorId" | "repoId"> & { id?: number; schedule?: string | null; pullDraft?: boolean | null }, owner: string, name: string): Context {
   const actor = run.actorId ? (db.select({ u: user.username }).from(user).where(eq(user.id, run.actorId)).get()?.u ?? "") : "";
-  const pr = run.pullNumber === null ? null : db.select({ base: issue.baseRef, draft: issue.draft }).from(issue).where(and(eq(issue.repoId, run.repoId), eq(issue.number, run.pullNumber))).get();
-  const base = run.pullNumber === null ? null : (pr?.base ?? "");
+  const base = run.pullNumber === null ? null : (db.select({ base: issue.baseRef }).from(issue).where(and(eq(issue.repoId, run.repoId), eq(issue.number, run.pullNumber))).get()?.base ?? "");
   const inputs = Object.fromEntries(Object.entries(JSON.parse(run.inputs) as Record<string, string>).map(([k, v]): [string, Value] => [k, v === "true" ? true : v === "false" ? false : v]));
   return {
     github: {
@@ -74,7 +73,7 @@ function runContext(run: Pick<Run, "sha" | "ref" | "refType" | "event" | "workfl
       run_id: run.id ?? null,
       head_ref: run.pullNumber === null ? "" : run.ref,
       base_ref: base ?? "",
-      event: { inputs, pull_request: run.pullNumber === null ? null : { number: run.pullNumber, draft: pr?.draft ?? false }, schedule: run.schedule ?? null },
+      event: { inputs, pull_request: run.pullNumber === null ? null : { number: run.pullNumber, draft: run.pullDraft ?? false }, schedule: run.schedule ?? null },
     },
     inputs,
   };
@@ -762,7 +761,7 @@ export async function workflowFiles(repoPath: string, sha: string): Promise<Work
 
 export const isWorkflowPath = (path: string) => path === WORKFLOW || (path.startsWith(`${WORKFLOW_DIR}/`) && isWorkflowFile(path.slice(WORKFLOW_DIR.length + 1)));
 
-type RunMeta = { ref: string; refType: Run["refType"]; event: Run["event"]; pullNumber: number | null; inputs: Record<string, string>; schedule?: string | null };
+type RunMeta = { ref: string; refType: Run["refType"]; event: Run["event"]; pullNumber: number | null; inputs: Record<string, string>; schedule?: string | null; pullDraft?: boolean | null };
 
 // A job's runs-on and image can depend on the run and its matrix, and are settled before it's queued.
 function settleJobs(repoId: number, sha: string, actorId: string | null, wf: ParsedWorkflow, meta: RunMeta) {
@@ -905,7 +904,7 @@ export async function onPullRequest(repoId: number, repoPath: string, number: nu
   if (!head) return;
   // What the pull request would bring in: its changes since it left the base branch.
   const changed = base ? await changedFiles(repoPath, [`${base}...${head}`]) : null;
-  await startWorkflows(repoId, repoPath, head, { event: "pull_request", action, base: pr.baseRef, changed }, { ref: pr.headRef, refType: "branch", event: "pull_request", pullNumber: number, inputs: {} }, actorId);
+  await startWorkflows(repoId, repoPath, head, { event: "pull_request", action, base: pr.baseRef, changed }, { ref: pr.headRef, refType: "branch", event: "pull_request", pullNumber: number, inputs: {}, pullDraft: pr.draft }, actorId);
 }
 
 // ---------- schedules ----------
@@ -1009,7 +1008,7 @@ export async function rerun(run: Run, repoPath: string, actorId: string): Promis
   if (!ciOn(run.repoId)) return null;
   const file = await git.readBlob(repoPath, run.sha, run.workflowPath).catch(() => null);
   if (!file?.content) return null;
-  const meta: RunMeta = { ref: run.ref, refType: run.refType, event: run.event, pullNumber: run.pullNumber, inputs: JSON.parse(run.inputs), schedule: run.schedule };
+  const meta: RunMeta = { ref: run.ref, refType: run.refType, event: run.event, pullNumber: run.pullNumber, inputs: JSON.parse(run.inputs), schedule: run.schedule, pullDraft: run.pullDraft };
   let wf: ParsedWorkflow;
   try {
     wf = parseWorkflow(file.content, run.workflowPath);

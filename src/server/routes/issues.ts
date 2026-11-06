@@ -219,7 +219,7 @@ export const issueRoutes = new Elysia()
     }
     if (Object.keys(set).length) db.update(issue).set(set).where(eq(issue.id, row.issue.id)).run();
     // Marked ready on an open pull request (one being reopened gets its own run below): workflows that listen for it run.
-    if (set.draft === false && !set.state && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "ready_for_review", viewer.id).catch(() => {});
+    if (set.draft === false && (!set.state || set.state === row.issue.state) && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "ready_for_review", viewer.id).catch(() => {});
     if (set.state && set.state !== row.issue.state) {
       const ref = { number: row.issue.number, title: set.title ?? row.issue.title };
       if (row.issue.isPull) {

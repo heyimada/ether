@@ -485,6 +485,8 @@ export const ciRun = sqliteTable(
     pullNumber: integer("pull_number"),
     // The cron expression that started a scheduled run, as github.event.schedule.
     schedule: text("schedule"),
+    // Whether the pull request was a draft when the run started, as github.event.pull_request.draft.
+    pullDraft: integer("pull_draft", { mode: "boolean" }),
     // JSON: a manual run's inputs by name.
     inputs: text("inputs").notNull().default("{}"),
     status: text("status", { enum: ["queued", "waiting", "running", "success", "failure", "cancelled", "error"] }).notNull(),
