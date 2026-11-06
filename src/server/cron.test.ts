@@ -54,4 +54,10 @@ test("what can't be read is refused with the reason, and so is anything more oft
   expect(() => parseCron("0,57 9,11 * * MON")).not.toThrow();
   expect(() => parseCron("0,58 3-4 * * *")).toThrow("every 5 minutes");
   expect(() => parseCron("0,58 0,23 * * *")).toThrow("every 5 minutes");
+  // From 23 to 0 only when the next day runs too.
+  expect(() => parseCron("0,58 0,23 * * MON")).not.toThrow();
+  expect(() => parseCron("0,58 0,23 1 * *")).not.toThrow();
+  expect(() => parseCron("0,58 0,23 * * MON,TUE")).toThrow("every 5 minutes");
+  expect(() => parseCron("0,58 0,23 28-29 2 *")).toThrow("every 5 minutes");
+  expect(() => parseCron("0,58 0,23 31 * 1")).toThrow("every 5 minutes"); // the 31st, then a Monday 1st
 });
