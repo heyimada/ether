@@ -1,16 +1,21 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
+import { useState } from "react";
 import { DiffView } from "../components/content";
 import { Conversation, IssueHeader } from "../components/conversation";
 import { CiBadge, ciDone, EVENT_LABEL, type CiEvent, type CiStatus } from "../components/ci";
 import { IssueSidebar } from "../components/labels";
 import { ReviewList, ReviewPanel, ReviewersSection, type ReviewData } from "../components/reviews";
-import { ErrorNote, TabBar, useAction } from "../components/ui";
+import { ErrorNote, onSubmit, TabBar, useAction } from "../components/ui";
 import { api, patch, post, repoApi, shortSha, type Comment, type Commit, type Issue } from "../lib/api";
 
 type PullData = ReviewData & {
   pull: Issue;
   requireChecks: boolean;
   requireCodeOwnerReview: boolean;
+  // Open pull requests stacked with this one, bottom first (this one included); empty when it stands alone.
+  stack: { number: number; title: string; draft: boolean; base: string; head: string }[];
+  // Whether merging may delete the head branch: not the default or a protected branch, nor shared with another open pull request.
+  headDeletable: boolean;
   codeOwners: {
     path: string;
     groups: { pattern: string; line: number; owners: { name: string; valid: boolean }[]; files: string[]; fileCount: number; approvedBy: string | null }[];
@@ -43,7 +48,9 @@ function PullPage() {
 
   return (
     <div>
-      <IssueHeader issue={pull} />
+      <IssueHeader issue={pull}>
+        <BaseEditor pull={pull} />
+      </IssueHeader>
       <TabBar label="Pull request" className="tabs subtabs" activeSelector=".active">
         <Link to="/$owner/$repo/pull/$number" params={params} search={{}} className={!tab ? "active" : ""}>
           Conversation
@@ -82,6 +89,7 @@ function PullPage() {
             <MergeBox data={data} />
           </div>
           <IssueSidebar info={info} issue={pull}>
+            {data.stack.length > 0 && <StackSection data={data} />}
             <ReviewersSection info={info} pull={pull} data={data} />
           </IssueSidebar>
         </div>
@@ -90,12 +98,85 @@ function PullPage() {
   );
 }
 
+// Point an open pull request at another branch: the author or anyone with write access.
+function BaseEditor({ pull }: { pull: Issue }) {
+  const router = useRouter();
+  const { info, me } = Route.useRouteContext();
+  const [editing, setEditing] = useState(false);
+  const [base, setBase] = useState(pull.base ?? "");
+  const save = useAction(async () => {
+    await patch(`${repoApi(info.repo.owner, info.repo.name)}/issues/${pull.number}`, { base });
+    setEditing(false);
+    await router.invalidate();
+  });
+  if (!me || pull.state !== "open" || (me.username !== pull.author && info.role === "read")) return null;
+  if (!editing)
+    return (
+      <button
+        className="ghost small"
+        // The current base may be gone (deleted after the one below merged): start on a branch the list has.
+        onClick={() => (setBase(info.branches.includes(pull.base ?? "") ? (pull.base ?? "") : (info.branches.find((b) => b !== pull.head) ?? "")), setEditing(true))}
+      >
+        Change base
+      </button>
+    );
+  return (
+    <form className="inline-flex flex-wrap items-center gap-2" onSubmit={onSubmit(save.run)}>
+      <label htmlFor="new-base" className="sr-only">
+        Base branch
+      </label>
+      <select id="new-base" className="w-auto" value={base} onChange={(e) => setBase(e.target.value)}>
+        {info.branches
+          .filter((b) => b !== pull.head)
+          .map((b) => (
+            <option key={b}>{b}</option>
+          ))}
+      </select>
+      <button className="small primary" disabled={save.pending || base === pull.base}>
+        Save
+      </button>
+      <button type="button" className="small" onClick={() => setEditing(false)}>
+        Cancel
+      </button>
+      <ErrorNote error={save.error} />
+    </form>
+  );
+}
+
+// The pull requests stacked with this one, bottom first, so reviewers can walk the stack.
+function StackSection({ data }: { data: PullData }) {
+  const { info } = Route.useRouteContext();
+  return (
+    <section>
+      <h3 className="m-0 mb-2 text-base">Stack</h3>
+      <ol className="m-0 p-0 list-none stack-sm" aria-label="Stack">
+        {data.stack.map((p) => (
+          <li key={p.number} className="flex items-baseline gap-2" aria-current={p.number === data.pull.number ? "page" : undefined}>
+            <span className="text-muted tabular-nums">#{p.number}</span>
+            {p.number === data.pull.number ? (
+              <strong className="min-w-0 wrap-anywhere">{p.title}</strong>
+            ) : (
+              <Link to="/$owner/$repo/pull/$number" params={{ owner: info.repo.owner, repo: info.repo.name, number: String(p.number) }} className="min-w-0 wrap-anywhere">
+                {p.title}
+              </Link>
+            )}
+            {p.draft && <span className="badge">Draft</span>}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function MergeBox({ data }: { data: PullData }) {
   const router = useRouter();
   const { info, me } = Route.useRouteContext();
   const { pull } = data;
+  // Deleting the head branch moves pull requests stacked on it to this one's base; on by default when there are some.
+  const stackedOnThis = data.stack.some((p) => p.base === pull.head);
+  const [deleteBranch, setDeleteBranch] = useState(stackedOnThis);
   const merge = useAction(async () => {
-    await post(`${repoApi(info.repo.owner, info.repo.name)}/pulls/${pull.number}/merge`);
+    await post(`${repoApi(info.repo.owner, info.repo.name)}/pulls/${pull.number}/merge`, { deleteBranch: data.headDeletable && deleteBranch });
     await router.invalidate();
   });
   const setDraft = useAction(async (draft: boolean) => {
@@ -131,6 +212,8 @@ function MergeBox({ data }: { data: PullData }) {
   const canMerge = data.role !== "read";
   const needsApproval = data.requireApproval && data.reviewDecision !== "approved";
   const needsChecks = data.requireChecks && !!data.checks && data.checks.status !== "success";
+  // The pull request whose branch this one goes into, if it's still open.
+  const below = data.stack.find((p) => p.head === pull.base);
   const owners = data.codeOwners;
   const needsOwners = data.requireCodeOwnerReview && !!owners && (owners.incomplete || owners.groups.some((g) => !g.approvedBy));
   const blocked = !data.mergeable;
@@ -224,12 +307,29 @@ function MergeBox({ data }: { data: PullData }) {
           </ul>
         </div>
       )}
+      {below && (
+        <p className="m-0 mb-3">
+          Stacked on{" "}
+          <Link to="/$owner/$repo/pull/$number" params={{ owner: info.repo.owner, repo: info.repo.name, number: String(below.number) }}>
+            #{below.number}
+          </Link>
+          : merging now brings these changes into <code>{pull.base}</code>. Merge #{below.number} first, deleting its branch, and this pull request moves to its base on its own.
+        </p>
+      )}
       {needsApproval && (
         <p className="m-0 mb-3">
           <strong>Merging requires an approving review</strong> because this repository protects its pull requests.
         </p>
       )}
       <ErrorNote error={setDraft.error} />
+      {canMerge && data.headDeletable && (
+        <label className="radio mb-3">
+          <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} />
+          Delete <code>{pull.head}</code> after merging{stackedOnThis && " (pull requests stacked on it move to " }
+          {stackedOnThis && <code>{pull.base}</code>}
+          {stackedOnThis && ")"}
+        </label>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         {canMerge ? (
           <button className="primary" onClick={() => merge.run()} disabled={blocked || needsApproval || needsChecks || needsOwners || merge.pending}>
