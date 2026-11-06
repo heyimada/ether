@@ -7,6 +7,7 @@ import * as git from "../git";
 import { record } from "../events";
 import { findIssue, pullStatus } from "./issues";
 import { answerTeamRequests } from "../owners";
+import { notify, notifyThread, quietly, teamMembers } from "../notify";
 
 export type Decision = "approved" | "changes_requested" | null;
 
@@ -113,7 +114,8 @@ export function requestedOf(userId: string, repoIds: number[], limit = 100) {
 
 export const reviewRoutes = new Elysia()
   .put("/repos/:owner/:repo/pulls/:number/reviewers", async ({ request, params, body }) => {
-    const a = requireRepo(await requireUser(request), params.owner, params.repo, "write");
+    const viewer = await requireUser(request);
+    const a = requireRepo(viewer, params.owner, params.repo, "write");
     const row = findIssue(a, params.number);
     if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
     const names = (body as { reviewers?: unknown } | null)?.reviewers;
@@ -142,6 +144,9 @@ export const reviewRoutes = new Elysia()
       if (u.id === row.issue.authorId) throw new HttpError(400, "Authors can't review their own pull request");
       return u.id;
     });
+    // Who's newly asked hears about it; those asked already don't hear again.
+    const before = new Set(db.select({ id: reviewRequest.userId }).from(reviewRequest).where(eq(reviewRequest.issueId, row.issue.id)).all().map((r) => r.id));
+    const teamsBefore = new Set(db.select({ id: teamReviewRequest.teamId }).from(teamReviewRequest).where(eq(teamReviewRequest.issueId, row.issue.id)).all().map((r) => r.id));
     db.transaction((tx) => {
       tx.delete(reviewRequest).where(eq(reviewRequest.issueId, row.issue.id)).run();
       if (ids.length) tx.insert(reviewRequest).values(ids.map((userId) => ({ issueId: row.issue.id, userId }))).run();
@@ -151,6 +156,8 @@ export const reviewRoutes = new Elysia()
         if (teamIds.length) tx.insert(teamReviewRequest).values(teamIds.map((teamId) => ({ issueId: row.issue.id, teamId }))).run();
       }
     });
+    const asked = [...ids.filter((id) => !before.has(id)), ...teamMembers((teamIds ?? []).filter((id) => !teamsBefore.has(id))).filter((id) => id !== row.issue.authorId)];
+    quietly(() => notify(asked, "review_requested", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title }));
     return { ok: true };
   })
   .post("/repos/:owner/:repo/pulls/:number/reviews", async ({ request, params, body }) => {
@@ -186,6 +193,9 @@ export const reviewRoutes = new Elysia()
     });
     // Only someone who could approve answers for their teams; a read-only member's comment doesn't.
     if (allows(a.role, "write")) answerTeamRequests(row.issue.id, viewer.id);
+    quietly(() =>
+      notifyThread(row.issue.id, "review", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title, excerpt: text || checked[0]?.body }, [text, ...checked.map((c) => c.body)]),
+    );
     record(a.repo.id, viewer.id, "review", { number: row.issue.number, title: row.issue.title, state });
     return { ok: true };
   })

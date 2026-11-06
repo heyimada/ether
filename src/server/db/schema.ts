@@ -703,3 +703,28 @@ export const deployment = sqliteTable(
   (t) => [index("deployment_env_idx").on(t.environmentId, t.createdAt), uniqueIndex("deployment_job_idx").on(t.jobId)],
 );
 
+
+// Someone's inbox: what happened that concerns them. One unread entry per thread and reason; a new event on
+// it updates that entry instead of adding another. Listing filters by what the person can read now.
+export const notification = sqliteTable(
+  "notification",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    // The issue or pull request it's about, or for a failed run, the run.
+    issueNumber: integer("issue_number"),
+    runId: integer("run_id"),
+    reason: text("reason", { enum: ["review_requested", "mention", "review", "comment", "assigned", "merged", "closed", "ci_failed"] }).notNull(),
+    actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    excerpt: text("excerpt").notNull().default(""),
+    createdAt: createdAt(),
+    readAt: integer("read_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("notification_user_idx").on(t.userId, t.readAt, t.createdAt)],
+);

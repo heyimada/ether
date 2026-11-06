@@ -7,6 +7,7 @@ import { secret, sha256 } from "./access";
 import { IMAGE_RE, instanceLabel } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
 import { conditionHolds, matrixEnvName, type MatrixValues, type NeedStatus } from "./ci-graph";
+import { notify, quietly } from "./notify";
 import { requestCodeOwners } from "./owners";
 import { dueCron, inputEnvName, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
 import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type EnvValue, type ParsedWorkflow, type Step } from "./ci-workflow";
@@ -569,6 +570,10 @@ async function reportFailure(run: { id: number; repoId: number; sha: string; ref
   if (!run.actorId) return;
   const [commit] = await git.log(path, run.sha, { limit: 1 }).catch(() => []);
   record(run.repoId, run.actorId, "ci_failed", { runId: run.id, ref: run.ref, sha: run.sha, subject: commit?.subject ?? "", status });
+  // And into their inbox. No one is the actor, so the person who started it hears about it too.
+  const name = db.select({ w: ciRun.workflowName }).from(ciRun).where(eq(ciRun.id, run.id)).get()?.w ?? "A workflow";
+  const actorId = run.actorId;
+  quietly(() => notify([actorId], "ci_failed", null, { repoId: run.repoId, runId: run.id, title: `${name} ${status === "error" ? "couldn't run" : "failed"} on ${run.ref}`, excerpt: commit?.subject ?? "" }));
 }
 
 const currentStatus = (runId: number) => db.select({ s: ciRun.status }).from(ciRun).where(eq(ciRun.id, runId)).get()?.s;

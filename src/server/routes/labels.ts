@@ -3,6 +3,7 @@ import { Elysia } from "elysia";
 import { HttpError, allows, findUser, readerOrVisitor, repoAccess, requireRepo, requireUser, type RepoAccess } from "../access";
 import { db } from "../db/client";
 import { issue, issueAssignee, issueLabel, label, team, user } from "../db/schema";
+import { notify, quietly } from "../notify";
 
 const LABEL_RE = /^[^\s,][^,]{0,49}$/;
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
@@ -105,7 +106,8 @@ export const labelRoutes = new Elysia()
     };
   })
   .put("/repos/:owner/:repo/issues/:number/assignees", async ({ request, params, body }) => {
-    const a = requireRepo(await requireUser(request), params.owner, params.repo, "write");
+    const viewer = await requireUser(request);
+    const a = requireRepo(viewer, params.owner, params.repo, "write");
     const issueId = findIssueId(a, params.number);
     const names = (body as { assignees?: unknown } | null)?.assignees;
     if (!Array.isArray(names) || names.length > 10 || names.some((n) => typeof n !== "string")) throw new HttpError(400, "assignees must be a list of up to ten usernames");
@@ -115,9 +117,12 @@ export const labelRoutes = new Elysia()
       if (!u || !repoAccess({ id: u.id }, a.owner, a.repo.name)) throw new HttpError(400, `${n} can't see this repository`);
       return u.id;
     });
+    const before = new Set(db.select({ id: issueAssignee.userId }).from(issueAssignee).where(eq(issueAssignee.issueId, issueId)).all().map((r) => r.id));
     db.transaction((tx) => {
       tx.delete(issueAssignee).where(eq(issueAssignee.issueId, issueId)).run();
       if (people.length) tx.insert(issueAssignee).values(people.map((userId) => ({ issueId, userId }))).run();
     });
+    const title = db.select({ title: issue.title }).from(issue).where(eq(issue.id, issueId)).get()?.title ?? "";
+    quietly(() => notify(people.filter((id) => !before.has(id)), "assigned", viewer.id, { repoId: a.repo.id, issueNumber: Number(params.number), title }));
     return { ok: true };
   });
