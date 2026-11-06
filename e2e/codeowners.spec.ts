@@ -20,13 +20,17 @@ test("code owners are asked for a review and, when required, have to approve the
   expect((await founder.ctx.post(`/api/orgs/${org}/teams`, { data: { name: "core" }, headers: headers() })).ok()).toBe(true);
   for (const m of [author, dev]) await founder.ctx.put(`/api/orgs/${org}/teams/core/members/${m.username}`, { headers: headers() });
   await founder.ctx.put(`/api/orgs/${org}/teams/core/repos/${repo}`, { data: { role: "write" }, headers: headers() });
+  // A team that can only read can't own files: it's listed, but neither asked nor counted.
+  await founder.ctx.post(`/api/orgs/${org}/teams`, { data: { name: "viewers" }, headers: headers() });
+  await founder.ctx.put(`/api/orgs/${org}/teams/viewers/members/${dev.username}`, { headers: headers() });
+  await founder.ctx.put(`/api/orgs/${org}/teams/viewers/repos/${repo}`, { data: { role: "read" }, headers: headers() });
 
   const src = workdir();
   gitOk(src, ["init", "-q"]);
   mkdirSync(join(src, ".github"));
   mkdirSync(join(src, "docs"));
   mkdirSync(join(src, "src"));
-  writeFileSync(join(src, ".github", "CODEOWNERS"), `# Owners\n*.ts @${org}/core\n/docs/ @${founder.username}\n*.md octo@example.com\n`);
+  writeFileSync(join(src, ".github", "CODEOWNERS"), `# Owners\n*.ts @${org}/core\n/docs/ @${founder.username}\n*.md octo@example.com\n/README @${org}/viewers\n`);
   writeFileSync(join(src, "src", "a.ts"), "export const a = 1;\n");
   writeFileSync(join(src, "docs", "x.md"), "# Docs\n");
   writeFileSync(join(src, "README"), "hi\n");
@@ -53,7 +57,9 @@ test("code owners are asked for a review and, when required, have to approve the
   ]);
   // A file no rule owns needs nobody.
   const plain = await (await author.ctx.post(`${api}/pulls`, { data: { title: "Readme", body: "", base: "main", head: "readme" }, headers: headers() })).json();
-  expect((await author.ctx.get(`${api}/pulls/${plain.pull.number}`).then((r) => r.json())).codeOwners.groups).toEqual([]);
+  const plainData = await author.ctx.get(`${api}/pulls/${plain.pull.number}`).then((r) => r.json());
+  expect(plainData.codeOwners.groups.map((g: { pattern: string; owners: unknown }) => [g.pattern, g.owners])).toEqual([["/README", [{ name: `@${org}/viewers`, valid: false }]]]);
+  expect(plainData.teamRequests).toEqual([]);
 
   // The team request reaches its members' dashboards, and the merge waits for both groups.
   const devPage = await (await browser.newContext()).newPage();
@@ -133,9 +139,15 @@ test("a draft asks its code owners only once it's ready, and teams can be reques
   expect((await set([`${org}/writers`])).ok()).toBe(true);
   expect((await get()).teamRequests).toEqual([`${org}/writers`]);
   expect((await set(["someone-else/writers"])).status()).toBe(400);
+  // The same team written two ways is asked once.
+  expect((await set([`${org}/writers`, `@${org.toUpperCase()}/Writers`])).ok()).toBe(true);
+  expect((await get()).teamRequests).toEqual([`${org}/writers`]);
   expect((await (await author.ctx.get(`${api}/assignable`)).json()).teams).toEqual([`${org}/writers`]);
   // Someone who can only read (here anyone, on a public repository) doesn't learn the organization's teams.
   const outsider = await createUser(admin);
   await founder.ctx.patch(api, { data: { visibility: "public" }, headers: headers() });
   expect((await (await outsider.ctx.get(`${api}/assignable`)).json()).teams).toEqual([]);
+  // Nor which teams were asked to review, only how many.
+  const seen = await (await outsider.ctx.get(`${api}/pulls/${pull.number}`)).json();
+  expect([seen.teamRequests, seen.teamRequestCount]).toEqual([[], 1]);
 });

@@ -4,7 +4,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { Elysia } from "elysia";
 import { HttpError, allows, readerOrVisitor, requireRepo, requireUser, type RepoAccess, type Viewer } from "../access";
 import { db } from "../db/client";
-import { comment, issue, issueAssignee, issueLabel, label, repo, user } from "../db/schema";
+import { comment, issue, issueAssignee, issueLabel, label, orgMember, repo, user } from "../db/schema";
 import * as git from "../git";
 import { commitChecks, onPullRequest, onPush } from "../ci";
 import { deployedAt } from "../deploy";
@@ -162,6 +162,15 @@ async function headDeployments(a: RepoAccess, row: NonNullable<IssueRow>) {
   return sha ? deployedAt(a.repo.id, sha) : [];
 }
 
+// Team names stay within the organization, as on its teams page: someone who can only read the repository
+// and isn't a member sees how many teams were asked, not which.
+function hideTeams<T extends { teamRequests: string[] }>(summary: T, a: RepoAccess, viewerId: string): T & { teamRequestCount: number } {
+  const count = summary.teamRequests.length;
+  if (allows(a.role, "write") || (viewerId && db.select().from(orgMember).where(and(eq(orgMember.orgId, a.repo.ownerId), eq(orgMember.userId, viewerId))).get()))
+    return { ...summary, teamRequestCount: count };
+  return { ...summary, teamRequests: [], teamRequestCount: count };
+}
+
 export async function pullStatus(a: RepoAccess, row: NonNullable<IssueRow>) {
   const base = row.issue.baseRef!;
   const head = row.issue.headRef!;
@@ -220,7 +229,7 @@ export const issueRoutes = new Elysia()
     }
     if (Object.keys(set).length) db.update(issue).set(set).where(eq(issue.id, row.issue.id)).run();
     // Ready (or reopened) and not a draft: the code owners of its files are asked for a review.
-    if (row.issue.isPull && (set.draft === false || set.state === "open")) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
+    if (row.issue.isPull && (set.draft === false || (set.state === "open" && row.issue.state !== "open"))) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
     // Marked ready on an open pull request (one being reopened gets its own run below): workflows that listen for it run.
     if (set.draft === false && (!set.state || set.state === row.issue.state) && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "ready_for_review", viewer.id).catch(() => {});
     if (set.state && set.state !== row.issue.state) {
@@ -268,7 +277,8 @@ export const issueRoutes = new Elysia()
     return { pull: { number } };
   })
   .get("/repos/:owner/:repo/pulls/:number", async ({ request, params }) => {
-    const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
+    const viewer = await readerOrVisitor(request);
+    const a = requireRepo(viewer, params.owner, params.repo, "read");
     const row = findIssue(a, params.number);
     if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
     return {
@@ -281,7 +291,7 @@ export const issueRoutes = new Elysia()
       codeOwners: await ownerStatus(a.repo.id, row.issue.number).catch(() => null),
       checks: await headChecks(a, row),
       deployments: await headDeployments(a, row),
-      ...reviewSummary(row.issue.id),
+      ...hideTeams(reviewSummary(row.issue.id), a, viewer.id),
       ...(await pullStatus(a, row)),
     };
   })
