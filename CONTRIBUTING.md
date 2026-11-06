@@ -40,14 +40,18 @@ Open http://localhost:5173 and sign in. Your development data lives in `./data` 
 
 | Path | What's there |
 |---|---|
-| `src/server/` | Bun + Elysia server: API routes (`routes/`), git smart HTTP and SSH, access control (`access.ts`), CI runner, admin CLI (`cli.ts`) |
+| `src/server/` | Bun + Elysia server: API routes (`routes/`), git smart HTTP and SSH, access control (`access.ts`), CI scheduling, containers and secrets (`ci*.ts`), deployments, admin CLI (`cli.ts`) |
 | `src/server/db/` | Drizzle schema (`schema.ts`), Better Auth tables (`auth-schema.ts`), SQLite client |
+| `src/runner/` | `ether-runner`, the CI runner for other machines, plus the job executor and `${{ }}` expression evaluator it shares with the server |
 | `drizzle/` | SQL migrations, applied automatically on startup |
 | `src/web/` | TanStack Start SPA: routes, components, styles |
 | `cli/` | The `ether` command-line client, in Rust |
 | `e2e/` | Playwright end-to-end tests against a real server |
 | `scripts/` | Deployment helpers and the Better Auth schema generator config |
-| `design/` | Design briefs and mockups. These are historical, so treat the README and the code as the source of truth. |
+| `docs/` | [FEATURES.md](docs/FEATURES.md), a map from each feature to its code and tests |
+| `.github/review/` | The automated review, `/fix` and merge gate described below |
+
+Indent with 2 spaces, or 4 in Rust (see `.editorconfig`).
 
 ## Making changes
 
@@ -75,9 +79,9 @@ Anything that reads or changes a repository, issue, profile or organization must
 
 ```sh
 cd cli
-cargo fmt
-cargo clippy --all-targets -- -D warnings
-cargo build
+cargo fmt                                          # CI runs cargo fmt --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo build --locked
 ```
 
 ## Tests
@@ -90,7 +94,7 @@ bun run test:e2e                  # builds, boots a throwaway server, drives git
 bun run test:e2e -- e2e/git.spec.ts   # one file
 ```
 
-The e2e suite boots a real server against a temporary data folder. It never touches `./data`. Each run writes a report to `e2e-report/<timestamp>/`, with an HTML report and screenshots in `html/` and the server's output in `server.log`. Look there first when a test fails.
+The e2e suite boots a real server against a temporary data folder. It never touches `./data`. Specs that change server-wide settings (anonymous access, CI isolation, runners and the like) run last, one at a time, so they can't affect the others; `playwright.config.ts` lists them. Each run writes a report to `e2e-report/<timestamp>/`, with an HTML report and screenshots in `html/` and the server's output in `server.log`. Look there first when a test fails.
 
 New behavior needs an e2e test. Write it the way the existing specs read: one user-visible story per test, named as a sentence that describes the behavior.
 
@@ -109,15 +113,16 @@ New behavior needs an e2e test. Write it the way the existing specs read: one us
 
 ### Automated review
 
-Pull requests from collaborators with write access also get an automated review, posted by the review GitHub App. Its code lives in `.github/review/`. Two reviews run on every push, one for bugs and one for security. Several agents look for problems, and a separate group checks each one. A finding is posted only when they agree it is real. Findings are inline comments tagged **Important**, **Nit** or **Pre-existing**. Style and cleanup remarks are never posted. When a review posts an **Important** finding, the App requests changes. The merge gate dismisses that request once every finding is resolved. Resolving a thread doesn't start the gate, so if you resolve the last finding after everything else is done, re-run the **Merge gate** workflow or have a maintainer dismiss the App's review.
+Pull requests from collaborators with write access also get an automated review, posted by the review GitHub App. Its code lives in `.github/review/`. Two reviews, one for bugs and then one for security, run when the pull request is opened, reopened or marked ready for review, and on every push. Draft pull requests aren't reviewed. Several agents look for problems, and a separate group checks each one. A finding is posted only when they agree it is real. Findings are inline comments tagged **Important**, **Nit** or **Pre-existing**. Style and cleanup remarks are never posted. When a review posts an **Important** finding, the App requests changes. The merge gate dismisses that request once every finding is resolved. Resolving a thread doesn't start the gate, so if you resolve the last finding after everything else is done, re-run the **Merge gate** workflow or have a maintainer dismiss the App's review.
 
 Answer every finding. Either fix it, or resolve the thread with a short reply that says why it isn't a problem. When a later commit fixes a finding, the review resolves the thread itself. A finding resolved by a person instead means a maintainer has to approve the pull request. From the third round on, only the commits since the last review are checked, and from the fourth round on only **Important** findings are posted.
 
 To have an agent fix the open findings, comment `/fix` on the pull request. Anything after `/fix` is passed on to the agent, for example `/fix only the lifecycle finding`. This works only when you and the author both have write access and the branch is in this repository. The agent checks each finding and fixes the ones that are real. It only reads and edits files, never runs anything (CI tests the result), and never edits `.github/`. The App then pushes the change as one commit and comments what it did. The review runs again on that commit. Because an agent wrote it, a person has to approve the pull request before it merges, and the App won't auto-merge it.
 
-The **Review gate** check says whether the App approves the pull request. It approves only when all of these hold, and then it merges the pull request with auto-merge:
+The **Review gate** check says whether the App approves the pull request. It approves only when all of these hold, and then it merges the pull request (with auto-merge if GitHub isn't ready to merge it yet):
 
-- The author has write access to the repository. Bots never qualify.
+- The author has write, maintain or admin access to the repository. Bots never qualify.
+- The pull request isn't a draft, doesn't come from a fork, and nobody has requested changes.
 - The change is low risk: docs or design files, or a change the review rates as low risk. A feature or bug fix can qualify when it is contained, a revert fully undoes it, it keeps existing routes, CLI commands and protocols working, and tests in the pull request cover it, or it is a visual or copy change you can check by reading it. Workflow files, agent instructions (`CLAUDE.md`, `AGENTS.md`, `.claude/`), auth, access control, git and SSH handling, CI secrets, the database schema, migrations and dependencies never are. `.github/CODEOWNERS` lists them, and a maintainer other than the author has to approve those.
 - Both reviews finished for the latest commit, every finding is fixed (a finding resolved by a person doesn't count), and CI passed.
 - No commit in the pull request was written by `/fix`.
@@ -136,7 +141,7 @@ A maintainer reviews the pull request and may ask for changes. Push follow-up co
 | `question` | Needs an answer, not code |
 | `good first issue` | Small, self-contained and well described. Good for a first contribution. |
 | `help wanted` | The maintainers would welcome a pull request |
-| `server`, `web`, `cli`, `e2e`, `ci` | The area a pull request touches. Added automatically from the changed paths. |
+| `server`, `web`, `cli`, `e2e`, `ci`, `documentation` | The area a pull request touches. Added automatically from the changed paths. |
 
 ## License
 
