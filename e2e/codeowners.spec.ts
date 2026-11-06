@@ -75,7 +75,18 @@ test("code owners are asked for a review and, when required, have to approve the
   expect((await dev.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "approved", body: "" }, headers: headers() })).ok()).toBe(true);
   data = await (await author.ctx.get(`${api}/pulls/${pull.number}`)).json();
   expect(data.teamRequests).toEqual([]);
-  expect(data.codeOwners.groups.map((g: { approvedBy: string | null }) => g.approvedBy)).toEqual([dev.username, null]);
+  expect(data.codeOwners.groups.map((g: { approvedBy: string | null; fileCount: number }) => [g.approvedBy, g.fileCount])).toEqual([
+    [dev.username, 1],
+    [null, 1],
+  ]);
+  // A push afterwards doesn't ask the team again: a member's review answered it.
+  gitOk(src, ["checkout", "-q", "change"]);
+  writeFileSync(join(src, "src", "b.ts"), "export const b = 1;\n");
+  gitOk(src, ["add", "-A"]);
+  gitOk(src, ["commit", "-q", "-m", "b"]);
+  gitOk(src, ["push", "-q", cloneUrl(org, repo), "change"], { username: founder.username, token: founder.token });
+  await expect.poll(async () => (await (await author.ctx.get(`${api}/pulls/${pull.number}`)).json()).codeOwners.groups[0].fileCount).toBe(2);
+  expect((await (await author.ctx.get(`${api}/pulls/${pull.number}`)).json()).teamRequests).toEqual([]);
   expect(await (await founder.ctx.post(`${api}/pulls/${pull.number}/merge`, { headers: headers() })).text()).toContain("code owners of /docs/");
   expect((await founder.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "approved", body: "" }, headers: headers() })).ok()).toBe(true);
   expect((await founder.ctx.post(`${api}/pulls/${pull.number}/merge`, { headers: headers() })).ok()).toBe(true);
@@ -123,4 +134,8 @@ test("a draft asks its code owners only once it's ready, and teams can be reques
   expect((await get()).teamRequests).toEqual([`${org}/writers`]);
   expect((await set(["someone-else/writers"])).status()).toBe(400);
   expect((await (await author.ctx.get(`${api}/assignable`)).json()).teams).toEqual([`${org}/writers`]);
+  // Someone who can only read (here anyone, on a public repository) doesn't learn the organization's teams.
+  const outsider = await createUser(admin);
+  await founder.ctx.patch(api, { data: { visibility: "public" }, headers: headers() });
+  expect((await (await outsider.ctx.get(`${api}/assignable`)).json()).teams).toEqual([]);
 });

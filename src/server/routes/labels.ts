@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
-import { HttpError, findUser, readerOrVisitor, repoAccess, requireRepo, requireUser, type RepoAccess } from "../access";
+import { HttpError, allows, findUser, readerOrVisitor, repoAccess, requireRepo, requireUser, type RepoAccess } from "../access";
 import { db } from "../db/client";
 import { issue, issueAssignee, issueLabel, label, team, user } from "../db/schema";
 
@@ -91,14 +91,17 @@ export const labelRoutes = new Elysia()
         .all()
         .filter((u) => u.role !== "org" && repoAccess({ id: u.id }, a.owner, a.repo.name))
         .map((u) => u.username!),
-      // Teams that can be asked for a review: those of the organization that owns the repository.
-      teams: db
-        .select({ name: team.name })
-        .from(team)
-        .where(eq(team.orgId, a.repo.ownerId))
-        .orderBy(team.name)
-        .all()
-        .map((t) => `${a.owner}/${t.name}`),
+      // Teams that can be asked for a review: those of the organization that owns the repository. Only for people
+      // who can ask (write access): the organization keeps its team list from outsiders who can merely read.
+      teams: allows(a.role, "write")
+        ? db
+            .select({ name: team.name })
+            .from(team)
+            .where(eq(team.orgId, a.repo.ownerId))
+            .orderBy(team.name)
+            .all()
+            .map((t) => `${a.owner}/${t.name}`)
+        : [],
     };
   })
   .put("/repos/:owner/:repo/issues/:number/assignees", async ({ request, params, body }) => {

@@ -296,26 +296,30 @@ export const issueRoutes = new Elysia()
       // With protection on, merging needs an approval and no outstanding request for changes.
       const decision = reviewSummary(row.issue.id).reviewDecision;
       if (a.repo.requireApproval && decision !== "approved") throw new HttpError(409, "Merging requires an approving review");
+      // The commits every check below looks at, and the merge then takes or refuses as raced.
+      const [baseAt, headAt] = await Promise.all([git.resolveCommit(a.path, `refs/heads/${row.issue.baseRef}`), git.resolveCommit(a.path, `refs/heads/${row.issue.headRef}`)]);
+      if (!baseAt || !headAt) throw new HttpError(409, "A branch no longer exists");
       if (a.repo.requireCodeOwnerReview) {
-        const owners = await ownerStatus(a.repo.id, row.issue.number);
+        const owners = await ownerStatus(a.repo.id, row.issue.number, { base: baseAt, head: headAt });
         const missing = owners && missingOwners(owners);
         if (owners && !missing) throw new HttpError(409, "Code owners can't be worked out for this pull request, so it can't be merged while their review is required");
         if (missing?.length) throw new HttpError(409, `Merging requires a review from code owners of ${missing.map((g) => g.pattern).join(", ")}`);
       }
       if (a.repo.requireChecks) {
-        const checks = await headChecks(a, row);
+        const checks = commitChecks(a.repo.id, headAt, row.issue.number);
         if (checks && checks.status !== "success") throw new HttpError(409, "Merging requires passing checks");
       }
-      const before = await git.resolveCommit(a.path, `refs/heads/${row.issue.baseRef}`);
+      const before = baseAt;
       const result = await git.mergeBranches(
         a.path,
         row.issue.baseRef!,
         row.issue.headRef!,
         `Merge pull request #${row.issue.number} from ${row.issue.headRef}\n\n${row.issue.title}`,
         { name: viewer.username, email: `${viewer.username}@users.ether.invalid` },
+        { base: baseAt, head: headAt },
       );
       if (!result.ok) {
-        const reason = { conflict: "The branches have conflicts", missing: "A branch no longer exists", raced: "The base branch changed; try again" }[result.reason];
+        const reason = { conflict: "The branches have conflicts", missing: "A branch no longer exists", raced: "A branch changed while merging; try again" }[result.reason];
         throw new HttpError(409, reason);
       }
       db.update(issue).set({ state: "merged", mergeCommit: result.sha, mergedBy: viewer.id }).where(eq(issue.id, row.issue.id)).run();

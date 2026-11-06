@@ -38,18 +38,20 @@ function resolveOwner(o: Owner, target: { repoName: string; ownerName: string; o
   return { text, userIds: members.map((m) => m.id), teamId: t.id, valid: true };
 }
 
-export type OwnerGroup = { pattern: string; line: number; owners: { name: string; valid: boolean }[]; files: string[]; approvedBy: string | null };
+// `files` lists up to MAX_SHOWN_FILES of the group's files; `fileCount` counts them all.
+export type OwnerGroup = { pattern: string; line: number; owners: { name: string; valid: boolean }[]; files: string[]; fileCount: number; approvedBy: string | null };
 export type OwnerStatus = { path: string; groups: OwnerGroup[]; problems: Problem[]; incomplete: boolean };
 
 const MAX_SHOWN_FILES = 20;
 
 // The code owners of what a pull request would bring in, judged by CODEOWNERS on its base branch, and for each
 // group of files whether one of its owners (other than the author) approved. Null when there is no CODEOWNERS.
-export async function ownerStatus(repoId: number, number: number): Promise<OwnerStatus | null> {
-  return (await evaluate(repoId, number))?.status ?? null;
+// `at` pins the base and head commits, so a merge checks exactly what it merges.
+export async function ownerStatus(repoId: number, number: number, at?: { base: string; head: string }): Promise<OwnerStatus | null> {
+  return (await evaluate(repoId, number, at))?.status ?? null;
 }
 
-async function evaluate(repoId: number, number: number): Promise<{ status: OwnerStatus; resolved: Resolved[][] } | null> {
+async function evaluate(repoId: number, number: number, at?: { base: string; head: string }): Promise<{ status: OwnerStatus; resolved: Resolved[][] } | null> {
   const row = db
     .select({ issue, repoName: repo.name, ownerId: repo.ownerId, ownerName: user.username })
     .from(issue)
@@ -60,7 +62,9 @@ async function evaluate(repoId: number, number: number): Promise<{ status: Owner
   if (!row?.issue.isPull || !row.issue.baseRef || !row.issue.headRef) return null;
   const path = git.repoPath(row.ownerName!, row.repoName);
   const merged = row.issue.state === "merged" && row.issue.mergeCommit;
-  const [base, head] = merged
+  const [base, head] = at
+    ? [at.base, at.head]
+    : merged
     ? [`${row.issue.mergeCommit}^1`, `${row.issue.mergeCommit}^2`]
     : await Promise.all([git.resolveCommit(path, `refs/heads/${row.issue.baseRef}`), git.resolveCommit(path, `refs/heads/${row.issue.headRef}`)]);
   if (!base || !head) return null;
@@ -93,7 +97,7 @@ async function evaluate(repoId: number, number: number): Promise<{ status: Owner
   const groups = rules.map(([rule, paths], i): OwnerGroup => {
     const ids = new Set(resolved[i].flatMap((r) => r.userIds));
     const by = approvers.find(([id]) => ids.has(id));
-    return { pattern: rule.pattern, line: rule.line, owners: resolved[i].map((r) => ({ name: r.text, valid: r.valid })), files: paths.slice(0, MAX_SHOWN_FILES), approvedBy: by ? by[1].name : null };
+    return { pattern: rule.pattern, line: rule.line, owners: resolved[i].map((r) => ({ name: r.text, valid: r.valid })), files: paths.slice(0, MAX_SHOWN_FILES), fileCount: paths.length, approvedBy: by ? by[1].name : null };
   });
   return { status: { path: loaded.path, groups, problems: loaded.co.problems, incomplete: false }, resolved };
 }
@@ -115,8 +119,10 @@ export async function requestCodeOwners(repoId: number, number: number) {
   for (const r of result.resolved.flat()) {
     if (!r.valid) continue;
     if (r.teamId !== null) {
-      // A team whose members all reviewed already (or is only the author) has nothing left to answer.
-      if (r.userIds.some((id) => id !== pr.authorId && !reviewed.has(id))) teams.add(r.teamId);
+      // A member's review answers the team's request, so a team one of whose members (other than the author)
+      // already reviewed isn't asked again; nor is a team that is only the author.
+      const others = r.userIds.filter((id) => id !== pr.authorId);
+      if (others.length && !others.some((id) => reviewed.has(id))) teams.add(r.teamId);
     } else for (const id of r.userIds) if (id !== pr.authorId && !reviewed.has(id)) users.add(id);
   }
   db.transaction((tx) => {

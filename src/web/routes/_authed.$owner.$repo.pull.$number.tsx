@@ -13,7 +13,7 @@ type PullData = ReviewData & {
   requireCodeOwnerReview: boolean;
   codeOwners: {
     path: string;
-    groups: { pattern: string; line: number; owners: { name: string; valid: boolean }[]; files: string[]; approvedBy: string | null }[];
+    groups: { pattern: string; line: number; owners: { name: string; valid: boolean }[]; files: string[]; fileCount: number; approvedBy: string | null }[];
     incomplete: boolean;
   } | null;
   checks: { status: CiStatus; runs: { id: number; workflow: string; event: CiEvent; status: CiStatus }[] } | null;
@@ -217,7 +217,7 @@ function MergeBox({ data }: { data: PullData }) {
                 {g.owners.length === 0 && <span className="text-muted">no owners</span>}
                 <span className="text-muted">
                   {" "}
-                  · {g.approvedBy ? `approved by ${g.approvedBy}` : `${g.files.length === 20 ? "20+" : g.files.length} file${g.files.length === 1 ? "" : "s"}`}
+                  · {g.approvedBy ? `approved by ${g.approvedBy}` : `${g.fileCount} file${g.fileCount === 1 ? "" : "s"}`}
                 </span>
               </li>
             ))}

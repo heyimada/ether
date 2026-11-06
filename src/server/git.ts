@@ -355,10 +355,13 @@ export async function mergeBranches(
   headBranch: string,
   message: string,
   author: { name: string; email: string },
+  // The commits the caller checked: if either branch has moved on since, the merge is refused as raced.
+  expected?: { base: string; head: string },
 ): Promise<{ ok: true; sha: string } | { ok: false; reason: "conflict" | "missing" | "raced" }> {
   const baseSha = await resolveCommit(repo, `refs/heads/${baseBranch}`);
   const headSha = await resolveCommit(repo, `refs/heads/${headBranch}`);
   if (!baseSha || !headSha) return { ok: false, reason: "missing" };
+  if (expected && (expected.base !== baseSha || expected.head !== headSha)) return { ok: false, reason: "raced" };
   const merged = await mergeTree(repo, baseSha, headSha);
   if (!merged.clean) return { ok: false, reason: "conflict" };
   const env = {
