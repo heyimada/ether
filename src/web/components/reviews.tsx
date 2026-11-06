@@ -106,8 +106,20 @@ export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: I
         )}
       </div>
       <ErrorNote error={save.error} />
-      {everyone.length || requestedTeams.length ? (
+      {everyone.length || requestedTeams.length || data.teamRequestCount ? (
         <ul className={PEOPLE} aria-label="Reviewers">
+          {/* Teams the viewer may not see by name are still counted. */}
+          {data.teamRequestCount > requestedTeams.length && (
+            <li className={PERSON}>
+              <Users size={18} aria-hidden className="text-muted" />
+              <span className="min-w-0 flex-1">
+                {data.teamRequestCount - requestedTeams.length} team{data.teamRequestCount - requestedTeams.length === 1 ? "" : "s"}
+              </span>
+              <span className={`${REVIEW_STATE} ${VERDICT_TEXT.pending}`}>
+                <CircleDot size={14} aria-hidden /> Pending
+              </span>
+            </li>
+          )}
           {requestedTeams.map((t) => (
             <li key={t} className={PERSON}>
               <Users size={18} aria-hidden className="text-muted" />
@@ -145,7 +157,7 @@ export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: I
           })}
         </ul>
       ) : (
-        <p className={SIDE_TEXT}>{data.teamRequestCount ? `Waiting on ${data.teamRequestCount} team${data.teamRequestCount === 1 ? "" : "s"}` : "No reviews yet"}</p>
+        <p className={SIDE_TEXT}>No reviews yet</p>
       )}
     </section>
   );
