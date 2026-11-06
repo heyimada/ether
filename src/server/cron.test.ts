@@ -61,3 +61,14 @@ test("what can't be read is refused with the reason, and so is anything more oft
   expect(() => parseCron("0,58 0,23 28-29 2 *")).toThrow("every 5 minutes");
   expect(() => parseCron("0,58 0,23 31 * 1")).toThrow("every 5 minutes"); // the 31st, then a Monday 1st
 });
+
+test("a cron is worked out once, however often the scheduler asks", () => {
+  // Hours 23 and 0 with days that never follow each other take the whole walk through the calendar.
+  const text = "0,30 0,23 31 2 *";
+  const started = performance.now();
+  const first = parseCron(text);
+  expect(performance.now() - started).toBeLessThan(50);
+  const again = performance.now();
+  for (let i = 0; i < 10_000; i++) expect(parseCron(text)).toBe(first);
+  expect(performance.now() - again).toBeLessThan(200);
+});

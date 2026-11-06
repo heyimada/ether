@@ -58,11 +58,25 @@ function field(text: string, f: (typeof FIELDS)[number]): Set<number> {
   return out;
 }
 
+// Parsed crons by their text. The scheduler asks every minute for every scheduled workflow, and a cron with
+// hours 23 and 0 costs a walk through the calendar (see consecutiveDays), so each text is only worked out once.
+const parsed = new Map<string, Cron>();
+const MAX_PARSED = 2000;
+
 export function parseCron(text: string): Cron {
+  const known = parsed.get(text);
+  if (known) return known;
+  const cron = parseUncached(text);
+  if (parsed.size >= MAX_PARSED) parsed.clear();
+  parsed.set(text, cron);
+  return cron;
+}
+
+function parseUncached(text: string): Cron {
   const parts = text.trim().split(/\s+/);
   if (parts.length !== 5 || text.length > 200) throw new Error(`"${text}" must have five fields: minute, hour, day of month, month and day of week`);
   const [minutes, hours, days, months, weekdays] = parts.map((p, i) => field(p, FIELDS[i]));
-  // As in Vixie cron, a day field that starts with * (*/2 too) counts as unrestricted for the rule in dayRuns.
+  // As in Vixie cron, a day field that starts with * (*/2 too) counts as unrestricted for the rule in runsOn.
   const cron: Cron = { minutes, hours, days, months, weekdays, anyDay: parts[2].startsWith("*"), anyWeekday: parts[4].startsWith("*") };
   const sorted = [...minutes].sort((a, b) => a - b);
   // Across the hour only when the next hour can run too: 0,58 3 * * * runs 58 minutes apart, not 2. From 23 to 0
@@ -74,30 +88,35 @@ export function parseCron(text: string): Cron {
   return cron;
 }
 
-// Whether the cron runs at all on the day `at` falls in (UTC). As in cron, when both day fields are restricted,
-// either one matching is enough.
-function dayRuns(c: Cron, at: Date): boolean {
-  if (!c.months.has(at.getUTCMonth() + 1)) return false;
-  const day = c.days.has(at.getUTCDate());
-  const weekday = c.weekdays.has(at.getUTCDay());
-  return c.anyDay || c.anyWeekday ? day && weekday : day || weekday;
+// Whether the cron runs at all on a day. As in cron, when both day fields are restricted, either one matching is enough.
+function runsOn(c: Cron, month: number, date: number, weekday: number): boolean {
+  if (!c.months.has(month)) return false;
+  const day = c.days.has(date);
+  const onWeekday = c.weekdays.has(weekday);
+  return c.anyDay || c.anyWeekday ? day && onWeekday : day || onWeekday;
 }
 
 // Whether two days in a row can both run. The calendar repeats every 28 years (weekdays, month lengths and leap
-// days together, within a century), so looking through 28 of them answers it.
+// days together, within a century), so walking 28 of them answers it: about 10,000 steps without allocating.
 function consecutiveDays(c: Cron): boolean {
-  const day = 86_400_000;
-  const start = Date.UTC(2001, 0, 1);
-  let previous = dayRuns(c, new Date(start));
-  for (let t = start + day; t < start + 28 * 366 * day; t += day) {
-    const now = dayRuns(c, new Date(t));
-    if (previous && now) return true;
-    previous = now;
+  let weekday = 1; // 1 January 2001 was a Monday.
+  let previous = false;
+  for (let year = 2001; year < 2029; year++) {
+    const leap = year % 4 === 0;
+    for (let month = 1; month <= 12; month++) {
+      const length = month === 2 ? (leap ? 29 : 28) : [4, 6, 9, 11].includes(month) ? 30 : 31;
+      for (let date = 1; date <= length; date++) {
+        const now = runsOn(c, month, date, weekday);
+        if (previous && now) return true;
+        previous = now;
+        weekday = (weekday + 1) % 7;
+      }
+    }
   }
   return false;
 }
 
 // Whether the cron fires in the minute `at` falls in (UTC).
 export function cronMatches(c: Cron, at: Date): boolean {
-  return c.minutes.has(at.getUTCMinutes()) && c.hours.has(at.getUTCHours()) && dayRuns(c, at);
+  return c.minutes.has(at.getUTCMinutes()) && c.hours.has(at.getUTCHours()) && runsOn(c, at.getUTCMonth() + 1, at.getUTCDate(), at.getUTCDay());
 }
