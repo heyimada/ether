@@ -59,7 +59,9 @@ export function mentioned(texts: string[]): Set<string> {
   for (const text of texts) {
     const prose = text.replace(/```[\s\S]*?```/g, " ").replace(/`[^`\n]*`/g, " ");
     for (const m of prose.matchAll(/(?<![\w@/.])@([a-z0-9][a-z0-9._-]{0,38})(?:\/([a-z0-9][a-z0-9._-]{0,99}))?/gi)) {
-      names.add(m[2] ? `${m[1].toLowerCase()}/${m[2].toLowerCase()}` : m[1].toLowerCase().replace(/[._-]+$/, ""));
+      // Punctuation ending a sentence ("thanks @ana.", "cc @acme/devs.") isn't part of the name.
+      const trim = (n: string) => n.toLowerCase().replace(/[._-]+$/, "");
+      names.add(m[2] ? `${m[1].toLowerCase()}/${trim(m[2])}` : trim(m[1]));
       if (names.size >= MAX_MENTIONS) break;
     }
   }

@@ -72,9 +72,12 @@ function NotificationBell() {
         .catch(() => {});
     load();
     const timer = setInterval(load, 60_000);
+    // The inbox page says when it marked something read or unread.
+    window.addEventListener("notifications-changed", load);
     return () => {
       live = false;
       clearInterval(timer);
+      window.removeEventListener("notifications-changed", load);
     };
   }, [location]);
   return (

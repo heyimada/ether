@@ -85,3 +85,34 @@ test("people hear about mentions, comments, review requests, reviews, merges and
   await owner.ctx.delete(`${api}/collaborators/${reader.username}`, { headers: headers() });
   expect(await inbox(reader.ctx, true)).toEqual({ notifications: [], unread: 0, next: null });
 });
+
+test("a team mention at the end of a sentence reaches its members, and the bell follows what the inbox marks", async ({ page }) => {
+  const admin = await loginAdmin();
+  const founder = await createUser(admin);
+  const member = await createUser(admin);
+  const org = unique("ping").slice(0, 30);
+  await founder.ctx.post("/api/orgs", { data: { name: org }, headers: headers() });
+  await founder.ctx.put(`/api/orgs/${org}/members/${member.username}`, { data: { role: "member" }, headers: headers() });
+  await founder.ctx.post(`/api/orgs/${org}/teams`, { data: { name: "devs" }, headers: headers() });
+  await founder.ctx.put(`/api/orgs/${org}/teams/devs/members/${member.username}`, { headers: headers() });
+  const repo = unique("team");
+  await founder.ctx.post("/api/repos", { data: { name: repo, owner: org }, headers: headers() });
+  const api = `/api/repos/${org}/${repo}`;
+  for (const n of [1, 2])
+    await founder.ctx.post(`${api}/issues`, { data: { title: `Ping ${n}`, body: `Thoughts, @${org}/devs.` }, headers: headers() });
+  expect((await inbox(member.ctx)).unread).toBe(2);
+
+  await uiLogin(page, member.username, member.password);
+  await page.goto(`${baseURL()}/notifications`);
+  await expect(page.getByRole("link", { name: "Notifications, 2 unread" })).toBeVisible();
+  // Marking one read here updates the bell without leaving the page.
+  await page.getByRole("listitem", { name: "Unread: Ping 1" }).getByRole("button", { name: "Mark read" }).click();
+  await expect(page.getByRole("link", { name: "Notifications, 1 unread" })).toBeVisible();
+  // Tabs page on their own: All shows both, Unread only what's left after Mark all as read.
+  await page.getByRole("link", { name: "All", exact: true }).click();
+  await expect(page.getByRole("list", { name: "Notifications" }).getByRole("listitem")).toHaveCount(2);
+  await page.getByRole("button", { name: "Mark all as read" }).click();
+  await expect(page.getByRole("link", { name: "Notifications", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: /^Unread/ }).click();
+  await expect(page.getByText("You're all caught up.")).toBeVisible();
+});

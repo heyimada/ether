@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { AtSign, CircleX, Eye, GitMerge, MessageSquare, UserPlus, type LucideIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ErrorNote, StateIcon, useAction } from "../components/ui";
 import { api, patch, post, timeAgo } from "../lib/api";
 import { requireAccount } from "../lib/require-account";
@@ -33,6 +33,9 @@ const REASON: Record<Notification["reason"], { text: string; icon: LucideIcon }>
   ci_failed: { text: "Your run failed", icon: CircleX },
 };
 
+// Tells the bell in the header to count again.
+export const notificationsChanged = () => window.dispatchEvent(new Event("notifications-changed"));
+
 export const Route = createFileRoute("/_authed/notifications")({
   validateSearch: (s: Record<string, unknown>): { filter?: "all" } => ({ filter: s.filter === "all" ? "all" : undefined }),
   beforeLoad: ({ context, location }) => requireAccount(context.me, location.href),
@@ -47,16 +50,27 @@ function Notifications() {
   const { filter } = Route.useSearch();
   const [more, setMore] = useState<Notification[]>([]);
   const [next, setNext] = useState(data.next);
-  const items = [...data.notifications, ...more.filter((m) => !data.notifications.some((n) => n.id === m.id))];
+  // Read or unread since the page loaded; the list stays put rather than reloading under the reader.
+  const [changed, setChanged] = useState<Record<number, boolean>>({});
+  // A new first page (another tab, Mark all as read) starts paging over.
+  useEffect(() => {
+    setMore([]);
+    setNext(data.next);
+    setChanged({});
+  }, [data]);
+  const loaded = [...data.notifications, ...more.filter((m) => !data.notifications.some((n) => n.id === m.id))];
+  const items = loaded.map((n) => (n.id in changed ? { ...n, read: changed[n.id] } : n));
+  // The server's count, adjusted by what was marked here since.
+  const unread = data.unread + loaded.reduce((d, n) => d + (n.id in changed && changed[n.id] !== n.read ? (changed[n.id] ? -1 : 1) : 0), 0);
   const readAll = useAction(async () => {
     await post("/api/me/notifications/read");
-    setMore([]);
+    notificationsChanged();
     await router.invalidate();
   });
   const setRead = useAction(async (n: Notification, read: boolean) => {
     await patch(`/api/me/notifications/${n.id}`, { read });
-    setMore((m) => m.map((x) => (x.id === n.id ? { ...x, read } : x)));
-    await router.invalidate();
+    setChanged((c) => ({ ...c, [n.id]: read }));
+    notificationsChanged();
   });
   const loadMore = useAction(async () => {
     const page = await api<Inbox>(`/api/me/notifications?${new URLSearchParams({ ...(filter ? { filter } : {}), before: next ?? "" })}`);
@@ -70,13 +84,13 @@ function Notifications() {
       <section className="card">
         <header>
           <Link to="/notifications" search={{}} className={!filter ? "active" : "text-muted"}>
-            Unread<span className="count">{data.unread}</span>
+            Unread<span className="count">{unread}</span>
           </Link>
           <Link to="/notifications" search={{ filter: "all" }} className={filter ? "active" : "text-muted"}>
             All
           </Link>
           <span className="flex-1" />
-          {data.unread > 0 && (
+          {unread > 0 && (
             <button className="small" onClick={() => readAll.run()} disabled={readAll.pending}>
               Mark all as read
             </button>
