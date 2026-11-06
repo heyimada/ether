@@ -752,41 +752,29 @@
   }
 
   /* ---------- decoration and motion ---------- */
+  /* Ether's mark (BrandMark in ui.tsx), in the accent. Hovering the home link gives the commit a nudge along its orbit. */
   .brand-mark {
-    @apply relative size-[22px] flex-none rounded-full border-2 border-accent;
-    box-shadow: 0 0 0 3px var(--accent-soft);
+    @apply size-[24px] flex-none text-accent;
+    fill: currentColor;
   }
-  .brand-mark::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    width: 6px;
-    height: 6px;
-    margin: auto;
-    border-radius: 50%;
-    background: var(--accent);
+  .brand-orbit {
+    transform-origin: 32px 32px;
     transition: transform var(--dur) var(--ease-out);
   }
-  a:hover > .brand-mark::after {
-    transform: scale(1.5);
+  a:hover > .brand-mark .brand-orbit {
+    transform: rotate(25deg);
   }
   .brand-mark-lg {
-    @apply size-10 border-3;
-    box-shadow: 0 0 0 6px var(--accent-soft);
+    @apply size-11;
   }
-  .brand-mark-lg::after {
-    width: 12px;
-    height: 12px;
+  /* On the front door the orbit turns slowly; it is decoration, so it may loop. */
+  .brand-mark-lg .brand-orbit {
+    animation: orbit 14s linear infinite;
   }
-  /* A slow breath on the big mark; it is decoration, so it may loop. */
-  .brand-mark-lg::before {
-    content: "";
-    position: absolute;
-    inset: -9px;
-    border-radius: 50%;
-    border: 1px solid var(--accent);
-    opacity: 0;
-    animation: breathe 3.6s var(--ease-in-out) 1s infinite;
+  @media (prefers-reduced-motion: reduce) {
+    .brand-mark-lg .brand-orbit {
+      animation: none;
+    }
   }
   /* The front door's backdrop: accent and merged-purple glows over a dot grid. */
   .auth-hero {
@@ -981,9 +969,8 @@
   25% { transform: translateX(-4px); }
   60% { transform: translateX(3px); }
 }
-@keyframes breathe {
-  0% { opacity: 0.5; transform: scale(0.8); }
-  70%, 100% { opacity: 0; transform: scale(1.35); }
+@keyframes orbit {
+  to { transform: rotate(360deg); }
 }
 @keyframes shimmer {
   to { transform: translateX(100%); }

@@ -153,12 +153,26 @@ const AUTH_FEATURES = [
   { Icon: Workflow, text: "Checks that run on every push" },
 ];
 
+// Ether's mark: a ring, the repository, open where a commit sits on its orbit, around a core. Drawn in the
+// accent, so it follows the user's own; the large one's orbit turns slowly (see .brand-mark-lg).
+export function BrandMark({ large = false }: { large?: boolean }) {
+  return (
+    <svg viewBox="0 0 64 64" className={large ? "brand-mark brand-mark-lg" : "brand-mark"} aria-hidden focusable="false">
+      <circle className="brand-core" cx="32" cy="32" r="6.5" />
+      <g className="brand-orbit">
+        <path d="M52.74 28.71A21 21 0 1 1 35.29 11.26" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+        <circle cx="46.85" cy="17.15" r="6.5" />
+      </g>
+    </svg>
+  );
+}
+
 export function AuthShell({ title, children, footer }: { title: string; children: ReactNode; footer: ReactNode }) {
   return (
     <main className="grid min-h-screen grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] max-xl:min-h-0 max-xl:grid-cols-1">
       <section className="auth-hero relative isolate flex flex-col justify-center gap-5 overflow-hidden border-r border-border px-[clamp(24px,6vw,88px)] py-16 max-xl:items-center max-xl:gap-2 max-xl:border-r-0 max-xl:px-4 max-xl:pt-10 max-xl:pb-2 max-xl:text-center">
         <div className="flex items-center gap-3 max-xl:flex-col max-xl:gap-2">
-          <span className="brand-mark brand-mark-lg" aria-hidden />
+          <BrandMark large />
           <p className="m-0 text-3xl font-bold tracking-tight">Ether</p>
         </div>
         <p className="mt-2 mb-0 max-w-[15ch] text-[clamp(30px,3.6vw,46px)] leading-[1.08] font-bold tracking-[-0.035em] text-balance max-xl:hidden">Code hosting and review, on a server you own.</p>

@@ -3,7 +3,7 @@ import { Link, Outlet, createFileRoute, redirect, useRouter } from "@tanstack/re
 import { Building2, ChevronDown, LogOut, Settings, Shield, User } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { JumpBox } from "../components/jump";
-import { Avatar, MENU_LABEL, MENU_SEP, PeopleContext, type Person } from "../components/ui";
+import { Avatar, BrandMark, MENU_LABEL, MENU_SEP, PeopleContext, type Person } from "../components/ui";
 import { applyAppearance, clearAppearance } from "../lib/accent";
 import { ApiError, api, type Me } from "../lib/api";
 import { authClient } from "../lib/auth-client";
@@ -40,7 +40,7 @@ function AuthedLayout() {
     <PeopleContext.Provider value={directory}>
       <header className="sticky top-0 z-10 flex items-center gap-6 border-b border-border bg-surface-glass px-6 py-3 backdrop-blur-[14px] backdrop-saturate-[1.6] max-md:flex-wrap max-md:gap-3 max-md:px-4">
         <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-wide text-fg hover:no-underline">
-          <span className="brand-mark" aria-hidden />
+          <BrandMark />
           Ether
         </Link>
         <JumpBox />
