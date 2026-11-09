@@ -1075,6 +1075,8 @@ fn changed_files(diff: &str) -> Vec<String> {
     };
     let mut files = Vec::new();
     let mut current: Option<(Option<String>, Option<String>, Option<String>)> = None; // (new, old, header)
+                                                                                      // Past a block's first @@ every line is content, even one that starts with "--- " or "+++ ".
+    let mut in_hunks = false;
     let flush = |c: Option<(Option<String>, Option<String>, Option<String>)>,
                  files: &mut Vec<String>| {
         if let Some((new, old, header)) = c {
@@ -1092,6 +1094,13 @@ fn changed_files(diff: &str) -> Vec<String> {
                 .map(|i| rest[i + 3..].to_string())
                 .or_else(|| rest.rfind(" \"b/").map(|i| strip(&rest[i + 1..], "b/")));
             current = Some((None, None, header));
+            in_hunks = false;
+            continue;
+        }
+        if line.starts_with("@@") {
+            in_hunks = true;
+        }
+        if in_hunks {
             continue;
         }
         let Some((new, old, _)) = current.as_mut() else {
@@ -1133,6 +1142,12 @@ diff --git a/from.txt b/to.txt
 similarity index 100%
 rename from from.txt
 rename to to.txt
+diff --git a/notes.md b/notes.md
+--- a/notes.md
++++ b/notes.md
+@@ -1,2 +1,2 @@
+--- a/not-a-file
++++ b/not-a-file
 diff --git a/run.sh b/run.sh
 old mode 100644
 new mode 100755
