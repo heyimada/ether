@@ -29,14 +29,17 @@ test("pull requests squash or rebase onto their base, and the ones stacked on th
   commit("f2.txt", "feat two");
   gitOk(src, ["checkout", "-q", "-b", "upper"]);
   commit("u.txt", "upper");
+  gitOk(src, ["checkout", "-q", "-b", "upper2"]);
+  commit("u2.txt", "upper two");
   gitOk(src, ["checkout", "-q", "-b", "side", "main"]);
   commit("s1.txt", "side one");
   commit("s2.txt", "side two");
-  gitOk(src, ["push", "-q", remote, "main", "feat", "upper", "side"], auth);
+  gitOk(src, ["push", "-q", remote, "main", "feat", "upper", "upper2", "side"], auth);
   const open = async (title: string, base: string, head: string) =>
     (await (await author.ctx.post(`${api}/pulls`, { data: { title, body: "", base, head }, headers: headers() })).json()).pull.number as number;
   const feat = await open("Feature", "main", "feat");
   const upper = await open("Upper", "feat", "upper");
+  const upper2 = await open("Upper two", "upper", "upper2");
   const side = await open("Side", "main", "side");
 
   // The repository can turn merge commits off, but not every way to merge.
@@ -70,6 +73,16 @@ test("pull requests squash or rebase onto their base, and the ones stacked on th
   expect(moved.commits.map((c: { subject: string }) => c.subject)).toEqual(["upper"]);
   expect(moved.mergeable).toBe(true);
   expect(log("upper").map(([s]) => s)).toEqual(["upper", "Add the feature (#1)", "base"]);
+  // The one stacked on upper follows it onto the rewritten commit, and still goes into upper.
+  const second = await (await author.ctx.get(`${api}/pulls/${upper2}`)).json();
+  expect([second.pull.base, second.commits.map((c: { subject: string }) => c.subject)]).toEqual(["upper", ["upper two"]]);
+  expect(log("upper2").map(([s]) => s)).toEqual(["upper two", "upper", "Add the feature (#1)", "base"]);
+
+  // The merged commits are kept under a ref that clones don't see and pushes can't touch.
+  const probe = workdir();
+  gitOk(probe, ["clone", "-q", remote, "p"], auth);
+  expect(git(join(probe, "p"), ["ls-remote", "origin"]).stdout).not.toContain("refs/ether");
+  expect(git(join(probe, "p"), ["push", "origin", "HEAD:refs/ether/pull/1/head"], auth).code).not.toBe(0);
 
   // Rebase keeps each commit, without a merge commit.
   const rebased = await (await author.ctx.post(`${api}/pulls/${side}/merge`, { data: { method: "rebase" }, headers: headers() })).json();
