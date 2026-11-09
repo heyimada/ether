@@ -1170,6 +1170,7 @@ diff --git \"a/caf\\303\\251.txt\" \"b/caf\\303\\251.txt\"
                 "old.txt",
                 "logo.png",
                 "to.txt",
+                "notes.md",
                 "run.sh",
                 "with space.txt",
                 "café.txt"
