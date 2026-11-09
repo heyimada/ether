@@ -641,24 +641,27 @@ fn print_pull_status(v: &Value) {
             .collect();
         println!("Stack: {}", line.join(" → "));
     }
+    // One entry per person: asked again after a verdict shows as pending, with that verdict.
+    let verdict = |who: &str| match v["reviewers"][who].as_str() {
+        Some("approved") => Some("approved"),
+        Some("changes_requested") => Some("changes requested"),
+        _ => None,
+    };
+    let requested = strings(&v["reviewRequests"]);
     let mut reviewers: Vec<String> = Vec::new();
     if let Some(map) = v["reviewers"].as_object() {
-        for (who, verdict) in map {
-            reviewers.push(format!(
-                "{who} ({})",
-                if verdict == "approved" {
-                    "approved"
-                } else {
-                    "changes requested"
-                }
-            ));
+        for who in map.keys().filter(|w| !requested.contains(w)) {
+            reviewers.push(format!("{who} ({})", verdict(who).unwrap_or("reviewed")));
         }
     }
-    for who in strings(&v["reviewRequests"])
-        .into_iter()
-        .chain(strings(&v["teamRequests"]))
-    {
-        reviewers.push(format!("{who} (pending)"));
+    for who in &requested {
+        reviewers.push(match verdict(who) {
+            Some(before) => format!("{who} (pending; {before} before)"),
+            None => format!("{who} (pending)"),
+        });
+    }
+    for team in strings(&v["teamRequests"]) {
+        reviewers.push(format!("{team} (pending)"));
     }
     if !reviewers.is_empty() {
         println!("Reviewers: {}", reviewers.join(", "));
@@ -903,9 +906,7 @@ fn pr(cmd: PrCmd) -> Result<()> {
                 fields["base"] = json!(b);
             }
             let touched_fields = fields.as_object().is_some_and(|f| !f.is_empty());
-            if touched_fields {
-                c.patch(&format!("{api}/issues/{number}"), fields)?;
-            }
+            // Reviewers first: if the list is refused, nothing has changed yet.
             if !add_reviewer.is_empty() || !remove_reviewer.is_empty() {
                 let v = c.get(&format!("{api}/pulls/{number}"))?;
                 let names = |key: &str| -> Vec<String> {
@@ -939,6 +940,9 @@ fn pr(cmd: PrCmd) -> Result<()> {
                 )?;
             } else if !touched_fields {
                 bail!("nothing to change; pass --title, --body, --base, --add-reviewer or --remove-reviewer");
+            }
+            if touched_fields {
+                c.patch(&format!("{api}/issues/{number}"), fields)?;
             }
             println!("Updated #{number}");
             Ok(())

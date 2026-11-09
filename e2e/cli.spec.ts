@@ -158,6 +158,18 @@ test("the CLI drives drafts, reviews, stacks and squash merges, and prints shell
   expect(ok(["pr", "view", "1"], { cwd: dir })).toContain(`${reviewer.username} (pending)`);
   other.ok(["pr", "review", "1", "-R", full, "--approve", "-b", "Looks good"]);
   expect(ok(["pr", "view", "1"], { cwd: dir })).toContain(`${reviewer.username} (approved)`);
+  // Asked again after approving: one entry, pending with the earlier verdict.
+  ok(["pr", "edit", "1", "--add-reviewer", reviewer.username], { cwd: dir });
+  const again = ok(["pr", "view", "1"], { cwd: dir });
+  expect(again).toContain(`${reviewer.username} (pending; approved before)`);
+  expect(again.split(reviewer.username).length - 1).toBe(1);
+  // Someone asked who has since lost access doesn't block changing the list.
+  const gone = await createUser(admin);
+  await me.ctx.put(`/api/repos/${full}/collaborators/${gone.username}`, { data: { role: "write" }, headers: { Origin: baseURL() } });
+  ok(["pr", "edit", "1", "--add-reviewer", gone.username], { cwd: dir });
+  await me.ctx.delete(`/api/repos/${full}/collaborators/${gone.username}`, { headers: { Origin: baseURL() } });
+  ok(["pr", "edit", "1", "--remove-reviewer", reviewer.username], { cwd: dir });
+  expect(ok(["pr", "view", "1"], { cwd: dir })).not.toContain(gone.username);
 
   // Checks and diff.
   expect(ok(["pr", "checks", "1"], { cwd: dir })).toContain("No checks ran");
