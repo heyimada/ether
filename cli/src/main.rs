@@ -1005,8 +1005,8 @@ fn pr(cmd: PrCmd) -> Result<()> {
             let v = c.get(&format!("{}/pulls/{number}", repo_api(&o, &n)))?;
             let diff = v["diff"].as_str().unwrap_or("");
             if name_only {
-                for line in diff.lines().filter_map(|l| l.strip_prefix("+++ b/")) {
-                    println!("{line}");
+                for file in changed_files(diff) {
+                    println!("{file}");
                 }
             } else {
                 print!("{diff}");
@@ -1027,5 +1027,134 @@ fn pr(cmd: PrCmd) -> Result<()> {
             println!("Switched to {head}");
             Ok(())
         }
+    }
+}
+
+// A path as git prints it in a diff: bare, or in double quotes with C escapes (octal bytes for non-ASCII).
+fn unquote(path: &str) -> String {
+    let Some(inner) = path.strip_prefix('"').and_then(|p| p.strip_suffix('"')) else {
+        return path.to_string();
+    };
+    let mut bytes = Vec::new();
+    let mut chars = inner.bytes().peekable();
+    while let Some(b) = chars.next() {
+        if b != b'\\' {
+            bytes.push(b);
+            continue;
+        }
+        match chars.next() {
+            Some(d @ b'0'..=b'7') => {
+                let mut n = u32::from(d - b'0');
+                for _ in 0..2 {
+                    if let Some(&e @ b'0'..=b'7') = chars.peek() {
+                        n = n * 8 + u32::from(e - b'0');
+                        chars.next();
+                    }
+                }
+                bytes.push(n as u8);
+            }
+            Some(b'n') => bytes.push(b'\n'),
+            Some(b't') => bytes.push(b'\t'),
+            Some(other) => bytes.push(other),
+            None => {}
+        }
+    }
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+// The files a unified diff touches, one per `diff --git` block: the new path, or the old one for a deletion.
+// Renames, binary files and mode changes have no +++ line, so the block's own header lines are read too.
+fn changed_files(diff: &str) -> Vec<String> {
+    let strip = |p: &str, side: &str| {
+        let p = unquote(p);
+        p.strip_prefix(side).map(str::to_string).unwrap_or(p)
+    };
+    let mut files = Vec::new();
+    let mut current: Option<(Option<String>, Option<String>, Option<String>)> = None; // (new, old, header)
+    let flush = |c: Option<(Option<String>, Option<String>, Option<String>)>,
+                 files: &mut Vec<String>| {
+        if let Some((new, old, header)) = c {
+            if let Some(f) = new.or(old).or(header) {
+                files.push(f);
+            }
+        }
+    };
+    for line in diff.lines() {
+        if let Some(rest) = line.strip_prefix("diff --git ") {
+            flush(current.take(), &mut files);
+            // "a/X b/X": the b/ side, found from the end so spaces in X survive.
+            let header = rest
+                .rfind(" b/")
+                .map(|i| rest[i + 3..].to_string())
+                .or_else(|| rest.rfind(" \"b/").map(|i| strip(&rest[i + 1..], "b/")));
+            current = Some((None, None, header));
+            continue;
+        }
+        let Some((new, old, _)) = current.as_mut() else {
+            continue;
+        };
+        if let Some(p) = line.strip_prefix("+++ ") {
+            if p != "/dev/null" {
+                *new = Some(strip(p, "b/"));
+            }
+        } else if let Some(p) = line.strip_prefix("--- ") {
+            if p != "/dev/null" {
+                *old = Some(strip(p, "a/"));
+            }
+        } else if let Some(p) = line.strip_prefix("rename to ") {
+            *new = Some(unquote(p));
+        }
+    }
+    flush(current, &mut files);
+    files
+}
+
+#[cfg(test)]
+mod tests {
+    use super::changed_files;
+
+    #[test]
+    fn changed_files_covers_every_kind_of_change() {
+        let diff = "\
+diff --git a/old.txt b/old.txt
+deleted file mode 100644
+--- a/old.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-gone
+diff --git a/logo.png b/logo.png
+new file mode 100644
+Binary files /dev/null and b/logo.png differ
+diff --git a/from.txt b/to.txt
+similarity index 100%
+rename from from.txt
+rename to to.txt
+diff --git a/run.sh b/run.sh
+old mode 100644
+new mode 100755
+diff --git a/with space.txt b/with space.txt
+--- a/with space.txt
++++ b/with space.txt
+@@ -1 +1 @@
+-a
++b
+diff --git \"a/caf\\303\\251.txt\" \"b/caf\\303\\251.txt\"
+--- \"a/caf\\303\\251.txt\"
++++ \"b/caf\\303\\251.txt\"
+@@ -1 +1 @@
+-x
++y
+";
+        assert_eq!(
+            changed_files(diff),
+            [
+                "old.txt",
+                "logo.png",
+                "to.txt",
+                "run.sh",
+                "with space.txt",
+                "café.txt"
+            ]
+        );
     }
 }
