@@ -467,6 +467,11 @@ export const issueRoutes = new Elysia()
         }[result.reason];
         throw new HttpError(409, reason);
       }
+      // After a squash or rebase nothing in the base reaches the merged commits, and deleting the branch would leave
+      // them to garbage collection; this hidden ref keeps them, so the merged pull request still shows what it
+      // brought in. refs/ether is hidden from fetches and refused to pushes.
+      await git.git(a.path, ["config", "transfer.hideRefs", "refs/ether"]).catch(() => {});
+      await git.git(a.path, ["update-ref", "-m", "keep merged pull request", `refs/ether/pull/${row.issue.number}/head`, headAt]).catch(() => {});
       db.update(issue)
         .set({ state: "merged", mergeCommit: result.sha, mergedBy: viewer.id, mergeMethod: how, mergedBase: baseAt, mergedHead: headAt })
         .where(eq(issue.id, row.issue.id))
@@ -496,13 +501,23 @@ export const issueRoutes = new Elysia()
       const movedRefs: { before: git.Ref; after: git.Ref }[] = [{ before: { name: row.issue.baseRef!, kind: "branch", sha: before }, after: { name: row.issue.baseRef!, kind: "branch", sha: result.sha } }];
       if (how !== "merge" && retargeted.length) {
         const longLived = await longLivedBranches(a);
-        for (const n of retargeted) {
+        // Each rewritten branch carries the pull requests stacked on it along: their own commits move from the
+        // branch's old tip onto its new one, down the whole stack.
+        const queue = retargeted.map((n) => ({ n, since: headAt, onto: result.sha }));
+        while (queue.length && restacked.length < MAX_STACK) {
+          const { n, since, onto } = queue.shift()!;
           const up = db.select({ head: issue.headRef }).from(issue).where(and(eq(issue.repoId, a.repo.id), eq(issue.number, n))).get();
           if (!up?.head || longLived(up.head)) continue;
-          const moved = await git.restack(a.path, up.head, headAt, result.sha, committer).catch(() => ({ ok: false as const }));
+          const moved = await git.restack(a.path, up.head, since, onto, committer).catch(() => ({ ok: false as const }));
           if (!moved.ok) continue;
           restacked.push(n);
           movedRefs.push({ before: { name: up.head, kind: "branch", sha: moved.before }, after: { name: up.head, kind: "branch", sha: moved.sha } });
+          for (const next of db
+            .select({ number: issue.number })
+            .from(issue)
+            .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.baseRef, up.head)))
+            .all())
+            if (!restacked.includes(next.number)) queue.push({ n: next.number, since: moved.before, onto: moved.sha });
         }
       }
       for (const n of retargeted) void requestCodeOwners(a.repo.id, n).catch(() => {});
