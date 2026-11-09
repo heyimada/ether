@@ -12,6 +12,8 @@ type PullData = ReviewData & {
   pull: Issue;
   requireChecks: boolean;
   requireCodeOwnerReview: boolean;
+  // The ways this repository allows merging, its preferred one first.
+  mergeMethods: MergeMethod[];
   // Open pull requests stacked with this one, bottom first (this one included); empty when it stands alone.
   stack: { number: number; title: string; draft: boolean; base: string; head: string }[];
   // Whether merging may delete the head branch: not the default or a protected branch, nor shared with another open pull request.
@@ -168,6 +170,10 @@ function StackSection({ data }: { data: PullData }) {
   );
 }
 
+type MergeMethod = "merge" | "squash" | "rebase";
+const METHOD_LABEL: Record<MergeMethod, string> = { merge: "Create a merge commit", squash: "Squash and merge", rebase: "Rebase and merge" };
+const METHOD_BUTTON: Record<MergeMethod, string> = { merge: "Merge pull request", squash: "Squash and merge", rebase: "Rebase and merge" };
+
 function MergeBox({ data }: { data: PullData }) {
   const router = useRouter();
   const { info, me } = Route.useRouteContext();
@@ -175,8 +181,16 @@ function MergeBox({ data }: { data: PullData }) {
   // Deleting the head branch moves pull requests stacked on it to this one's base; on by default when there are some.
   const stackedOnThis = data.stack.some((p) => p.base === pull.head);
   const [deleteBranch, setDeleteBranch] = useState(stackedOnThis);
+  const [method, setMethod] = useState<MergeMethod>(data.mergeMethods[0] ?? "merge");
+  // A squash commit's message, editable before merging; prefilled from the title and the commits.
+  const [squashTitle, setSquashTitle] = useState(`${pull.title} (#${pull.number})`);
+  const [squashMessage, setSquashMessage] = useState(() => [...data.commits].reverse().map((c) => `* ${c.subject}`).join("\n"));
   const merge = useAction(async () => {
-    await post(`${repoApi(info.repo.owner, info.repo.name)}/pulls/${pull.number}/merge`, { deleteBranch: data.headDeletable && deleteBranch });
+    await post(`${repoApi(info.repo.owner, info.repo.name)}/pulls/${pull.number}/merge`, {
+      method,
+      deleteBranch: data.headDeletable && deleteBranch,
+      ...(method === "squash" ? { title: squashTitle, message: squashMessage } : {}),
+    });
     await router.invalidate();
   });
   const setDraft = useAction(async (draft: boolean) => {
@@ -189,7 +203,9 @@ function MergeBox({ data }: { data: PullData }) {
   if (pull.state === "merged")
     return (
       <section className="card body merge-box done">
-        <strong>{pull.mergedBy}</strong> merged this pull request in <code>{pull.mergeCommit && shortSha(pull.mergeCommit)}</code>.
+        <strong>{pull.mergedBy}</strong> {pull.mergeMethod === "squash" ? "squashed and merged" : pull.mergeMethod === "rebase" ? "rebased and merged" : "merged"} this pull request
+        {pull.mergeMethod === "rebase" ? " up to " : " in "}
+        <code>{pull.mergeCommit && shortSha(pull.mergeCommit)}</code>.
       </section>
     );
   if (pull.state === "closed") return <section className="card body merge-box blocked">This pull request is closed.</section>;
@@ -322,6 +338,14 @@ function MergeBox({ data }: { data: PullData }) {
         </p>
       )}
       <ErrorNote error={setDraft.error} />
+      {canMerge && method === "squash" && (
+        <div className="mb-3 stack-sm">
+          <label htmlFor="squash-title">Commit title</label>
+          <input id="squash-title" value={squashTitle} onChange={(e) => setSquashTitle(e.target.value)} maxLength={256} />
+          <label htmlFor="squash-message">Commit message</label>
+          <textarea id="squash-message" value={squashMessage} onChange={(e) => setSquashMessage(e.target.value)} rows={4} />
+        </div>
+      )}
       {canMerge && data.headDeletable && (
         <label className="radio mb-3">
           <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} />
@@ -332,9 +356,25 @@ function MergeBox({ data }: { data: PullData }) {
       )}
       <div className="flex flex-wrap items-center gap-2">
         {canMerge ? (
-          <button className="primary" onClick={() => merge.run()} disabled={blocked || needsApproval || needsChecks || needsOwners || merge.pending}>
-            Merge pull request
-          </button>
+          <>
+            {data.mergeMethods.length > 1 && (
+              <>
+                <label htmlFor="merge-method" className="sr-only">
+                  Merge method
+                </label>
+                <select id="merge-method" className="w-auto" value={method} onChange={(e) => setMethod(e.target.value as MergeMethod)}>
+                  {data.mergeMethods.map((m) => (
+                    <option key={m} value={m}>
+                      {METHOD_LABEL[m]}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            <button className="primary" onClick={() => merge.run()} disabled={blocked || needsApproval || needsChecks || needsOwners || merge.pending}>
+              {METHOD_BUTTON[method]}
+            </button>
+          </>
         ) : (
           <p className="m-0 text-muted">Only collaborators with write access can merge.</p>
         )}

@@ -80,6 +80,7 @@ const present = (r: NonNullable<IssueRow>) => ({
   base: r.issue.baseRef,
   head: r.issue.headRef,
   mergeCommit: r.issue.mergeCommit,
+  mergeMethod: r.issue.mergeMethod,
   mergedBy: r.mergedBy,
   author: r.author,
   comments: r.comments,
@@ -177,6 +178,11 @@ function hideTeams<T extends { teamRequests: string[] }>(summary: T, a: RepoAcce
 export async function pullStatus(a: RepoAccess, row: NonNullable<IssueRow>) {
   const base = row.issue.baseRef!;
   const head = row.issue.headRef!;
+  // Merged with the commits it was merged from known: what it brought in, whichever way it was merged.
+  if (row.issue.state === "merged" && row.issue.mergedBase && row.issue.mergedHead) {
+    const cmp = await git.compare(a.path, row.issue.mergedBase, row.issue.mergedHead);
+    return { ...cmp, mergeable: false, conflicts: [], missing: false };
+  }
   if (row.issue.state === "merged" && row.issue.mergeCommit) {
     const merged = row.issue.mergeCommit;
     const { diff, truncated } = await git.showCommit(a.path, merged);
@@ -238,6 +244,14 @@ export function stackOf(repoId: number, row: NonNullable<IssueRow>, longLived: (
   }
   return below.length || above.length ? [...below, self, ...above] : [];
 }
+
+const identity = (username: string): git.Identity => ({ name: username, email: `${username}@users.ether.invalid` });
+
+export const allowedMethods = (r: { allowMergeCommit: boolean; allowSquashMerge: boolean; allowRebaseMerge: boolean }): git.MergeMethod[] => [
+  ...(r.allowMergeCommit ? (["merge"] as const) : []),
+  ...(r.allowSquashMerge ? (["squash"] as const) : []),
+  ...(r.allowRebaseMerge ? (["rebase"] as const) : []),
+];
 
 // The stack, and whether merging may delete the head branch: not a long-lived one, nor one another open pull
 // request comes from.
@@ -393,6 +407,7 @@ export const issueRoutes = new Elysia()
       requireApproval: a.repo.requireApproval,
       requireChecks: a.repo.requireChecks,
       requireCodeOwnerReview: a.repo.requireCodeOwnerReview,
+      mergeMethods: allowedMethods(a.repo),
       codeOwners: await ownerStatus(a.repo.id, row.issue.number).catch(() => null),
       ...(await stackInfo(a, row)),
       checks: await headChecks(a, row),
@@ -402,7 +417,10 @@ export const issueRoutes = new Elysia()
     };
   })
   .post("/repos/:owner/:repo/pulls/:number/merge", async ({ request, params, body }) => {
-    const deleteBranch = (body as Body)?.deleteBranch === true;
+    const b = body as Body;
+    const deleteBranch = b?.deleteBranch === true;
+    const method = b?.method === undefined ? null : b.method;
+    if (method !== null && method !== "merge" && method !== "squash" && method !== "rebase") throw new HttpError(400, "method must be merge, squash or rebase");
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "write");
     return merges.runExclusive(async () => {
@@ -426,20 +444,33 @@ export const issueRoutes = new Elysia()
         const checks = commitChecks(a.repo.id, headAt, row.issue.number);
         if (checks && checks.status !== "success") throw new HttpError(409, "Merging requires passing checks");
       }
+      // The first method the repository allows, unless one is asked for.
+      const allowed = allowedMethods(a.repo);
+      const how = method ?? allowed[0];
+      if (!how || !allowed.includes(how)) throw new HttpError(409, `This repository doesn't allow ${how === "squash" ? "squash merging" : how === "rebase" ? "rebase merging" : "merge commits"}`);
       const before = baseAt;
-      const result = await git.mergeBranches(
-        a.path,
-        row.issue.baseRef!,
-        row.issue.headRef!,
-        `Merge pull request #${row.issue.number} from ${row.issue.headRef}\n\n${row.issue.title}`,
-        { name: viewer.username, email: `${viewer.username}@users.ether.invalid` },
-        { base: baseAt, head: headAt },
-      );
+      const committer = identity(viewer.username);
+      const commits = how === "squash" ? await git.rangeCommits(a.path, baseAt, headAt) : [];
+      const title = typeof b?.title === "string" && b.title.trim() ? str(b.title, 256).trim() : null;
+      const message =
+        how === "squash"
+          ? `${title ?? `${row.issue.title} (#${row.issue.number})`}\n\n${typeof b?.message === "string" ? str(b.message, 65536) : commits.reverse().map((c) => `* ${c.subject}`).join("\n")}`
+          : `${title ?? `Merge pull request #${row.issue.number} from ${row.issue.headRef}`}\n\n${typeof b?.message === "string" ? str(b.message, 65536) : row.issue.title}`;
+      const result = await git.mergeBranches(a.path, row.issue.baseRef!, row.issue.headRef!, message, committer, { base: baseAt, head: headAt }, { method: how, author: identity(row.author!) });
       if (!result.ok) {
-        const reason = { conflict: "The branches have conflicts", missing: "A branch no longer exists", raced: "A branch changed while merging; try again" }[result.reason];
+        const reason = {
+          conflict: how === "rebase" ? "These commits can't be rebased onto the base branch without conflicts" : "The branches have conflicts",
+          missing: "A branch no longer exists",
+          raced: "A branch changed while merging; try again",
+          merges: "This branch has merge commits, which can't be rebased; merge or squash it instead",
+          empty: "There's nothing to rebase",
+        }[result.reason];
         throw new HttpError(409, reason);
       }
-      db.update(issue).set({ state: "merged", mergeCommit: result.sha, mergedBy: viewer.id }).where(eq(issue.id, row.issue.id)).run();
+      db.update(issue)
+        .set({ state: "merged", mergeCommit: result.sha, mergedBy: viewer.id, mergeMethod: how, mergedBase: baseAt, mergedHead: headAt })
+        .where(eq(issue.id, row.issue.id))
+        .run();
       quietly(() => notifyThread(row.issue.id, "merged", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title }));
       record(a.repo.id, viewer.id, "pull_merged", { number: row.issue.number, title: row.issue.title, base: row.issue.baseRef, head: row.issue.headRef });
       // Pull requests stacked on this one now go where it went, as on GitHub: their diff stays their own changes,
@@ -458,10 +489,25 @@ export const issueRoutes = new Elysia()
             .all()
             .map((p) => p.number)
         : [];
+      // After a squash or rebase the base has new commits for the merged ones, so the pull requests moved onto it
+      // would show those changes again. Their own commits are made again on top of it, as a rebase --onto would;
+      // one that can't be (a conflict, merge commits, a protected branch) is left as it was.
+      const restacked: number[] = [];
+      const movedRefs: { before: git.Ref; after: git.Ref }[] = [{ before: { name: row.issue.baseRef!, kind: "branch", sha: before }, after: { name: row.issue.baseRef!, kind: "branch", sha: result.sha } }];
+      if (how !== "merge" && retargeted.length) {
+        const longLived = await longLivedBranches(a);
+        for (const n of retargeted) {
+          const up = db.select({ head: issue.headRef }).from(issue).where(and(eq(issue.repoId, a.repo.id), eq(issue.number, n))).get();
+          if (!up?.head || longLived(up.head)) continue;
+          const moved = await git.restack(a.path, up.head, headAt, result.sha, committer).catch(() => ({ ok: false as const }));
+          if (!moved.ok) continue;
+          restacked.push(n);
+          movedRefs.push({ before: { name: up.head, kind: "branch", sha: moved.before }, after: { name: up.head, kind: "branch", sha: moved.sha } });
+        }
+      }
       for (const n of retargeted) void requestCodeOwners(a.repo.id, n).catch(() => {});
-      // Merging moves the base branch like a push would, so its push workflows run on the merge commit.
-      const moved = (sha: string | null) => (sha ? [{ name: row.issue.baseRef!, kind: "branch" as const, sha }] : []);
-      void onPush(a.repo.id, a.path, moved(before), moved(result.sha), viewer.id).catch(() => {});
-      return { ok: true, sha: result.sha, deletedBranch, retargeted };
+      // Merging moves the base branch (and restacking the branches on it) like a push would: their workflows run.
+      void onPush(a.repo.id, a.path, movedRefs.map((m) => m.before), movedRefs.map((m) => m.after), viewer.id).catch(() => {});
+      return { ok: true, sha: result.sha, method: how, deletedBranch, retargeted, restacked };
     });
   });

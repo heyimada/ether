@@ -57,6 +57,10 @@ export const repo = sqliteTable(
     requireChecks: integer("require_checks", { mode: "boolean" }).notNull().default(false),
     // Branch protection: every changed file with code owners needs an approval from one of them.
     requireCodeOwnerReview: integer("require_code_owner_review", { mode: "boolean" }).notNull().default(false),
+    // The ways pull requests may be merged; at least one stays on.
+    allowMergeCommit: integer("allow_merge_commit", { mode: "boolean" }).notNull().default(true),
+    allowSquashMerge: integer("allow_squash_merge", { mode: "boolean" }).notNull().default(true),
+    allowRebaseMerge: integer("allow_rebase_merge", { mode: "boolean" }).notNull().default(true),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("repo_owner_name_idx").on(t.ownerId, t.name)],
@@ -96,6 +100,11 @@ export const issue = sqliteTable(
     baseRef: text("base_ref"),
     headRef: text("head_ref"),
     mergeCommit: text("merge_commit"),
+    // How it was merged, and the base and head commits it was merged from: what a merged pull request shows.
+    // Older merges have none of these and are read from the merge commit's parents.
+    mergeMethod: text("merge_method", { enum: ["merge", "squash", "rebase"] }),
+    mergedBase: text("merged_base"),
+    mergedHead: text("merged_head"),
     mergedBy: text("merged_by").references(() => user.id),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" })

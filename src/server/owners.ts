@@ -75,6 +75,8 @@ async function evaluate(repoId: number, number: number, at?: { base: string; hea
   const merged = row.issue.state === "merged" && row.issue.mergeCommit;
   const [base, head] = at
     ? [at.base, at.head]
+    : row.issue.state === "merged" && row.issue.mergedBase && row.issue.mergedHead
+    ? [row.issue.mergedBase, row.issue.mergedHead]
     : merged
     ? [`${row.issue.mergeCommit}^1`, `${row.issue.mergeCommit}^2`]
     : await Promise.all([git.resolveCommit(path, `refs/heads/${row.issue.baseRef}`), git.resolveCommit(path, `refs/heads/${row.issue.headRef}`)]);
