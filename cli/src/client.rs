@@ -56,6 +56,9 @@ impl Client {
     pub fn patch(&self, path: &str, body: Value) -> Result<Value> {
         self.request(Method::PATCH, path, Some(&body))
     }
+    pub fn put(&self, path: &str, body: Value) -> Result<Value> {
+        self.request(Method::PUT, path, Some(&body))
+    }
 }
 
 // Path segments are user input; keep them from changing the URL structure.

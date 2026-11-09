@@ -211,8 +211,15 @@ ether repo list | view ada/my-tool
 ether repo clone ada/my-tool [dir]     # git push/pull then use your login
 ether issue create --title "Bug" --body "Steps…"
 ether issue list --state closed | view 3 | comment 3 --body "…" | close 3 | reopen 3
-ether pr create --title "Fix it"       # head = current branch, base = default branch; --head, --base, --body
-ether pr list | view 4 | merge 4 | checkout 4
+ether pr create --title "Fix it"       # head = current branch, base = default branch; --head, --base, --body, --draft
+ether pr list | view 4 | checkout 4    # view shows draft, stack, reviewers, checks and waiting code owners
+ether pr ready 4                       # --undo turns it back into a draft
+ether pr edit 4 --base main --add-reviewer ana,acme/core --remove-reviewer bob   # also --title, --body
+ether pr review 4 --approve            # or --request-changes / --comment, with -b "…"
+ether pr checks 4                      # exits 1 if a check failed, 8 while some still run
+ether pr diff 4 [--name-only]
+ether pr merge 4 --squash -d           # or --merge / --rebase; -d deletes the branch (stacked PRs move and are rebuilt); --subject, -b
+ether completion zsh > ~/.zfunc/_ether # also bash, fish, powershell, elvish
 ether api /api/me                      # any endpoint, JSON out
 ether api -X POST /api/repos --input '{"name":"x"}'
 ```

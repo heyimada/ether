@@ -106,3 +106,78 @@ test("the ether CLI logs in, manages repositories, issues and pull requests, and
   ok(["auth", "logout"]);
   expect(ether(["auth", "status"]).code).not.toBe(0);
 });
+
+test("the CLI drives drafts, reviews, stacks and squash merges, and prints shell completions", async () => {
+  const admin = await loginAdmin();
+  const me = await createUser(admin);
+  const reviewer = await createUser(admin);
+  const { ether, ok, gitOk } = runner(mkdtempSync(join(tmpdir(), "ether-cli-")));
+  const other = runner(mkdtempSync(join(tmpdir(), "ether-cli-")));
+  ok(["auth", "login", "--host", baseURL(), "--with-token"], { input: `${me.token}\n` });
+  other.ok(["auth", "login", "--host", baseURL(), "--with-token"], { input: `${reviewer.token}\n` });
+
+  expect(ok(["completion", "zsh"])).toContain("#compdef ether");
+  expect(ok(["completion", "bash"])).toContain("_ether()");
+
+  const repo = unique("cli-pr");
+  const full = `${me.username}/${repo}`;
+  ok(["repo", "create", repo]);
+  await me.ctx.put(`/api/repos/${full}/collaborators/${reviewer.username}`, { data: { role: "write" }, headers: { Origin: baseURL() } });
+  const work = mkdtempSync(join(tmpdir(), "ether-cli-work-"));
+  ok(["repo", "clone", full, "w"], { cwd: work });
+  const dir = join(work, "w");
+  const commit = (file: string, msg: string) => {
+    writeFileSync(join(dir, file), `${msg}\n`);
+    gitOk(dir, ["add", "-A"]);
+    gitOk(dir, ["commit", "-q", "-m", msg]);
+  };
+  commit("README.md", "first");
+  gitOk(dir, ["branch", "-M", "main"]);
+  gitOk(dir, ["push", "-q", "origin", "main"]);
+  gitOk(dir, ["checkout", "-q", "-b", "lower"]);
+  commit("a.txt", "lower one");
+  commit("b.txt", "lower two");
+  gitOk(dir, ["push", "-q", "origin", "lower"]);
+  gitOk(dir, ["checkout", "-q", "-b", "upper"]);
+  commit("c.txt", "upper");
+  gitOk(dir, ["push", "-q", "origin", "upper"]);
+
+  // A draft can't be merged until it's ready.
+  expect(ok(["pr", "create", "--base", "main", "--head", "lower", "--title", "Lower", "--draft"], { cwd: dir })).toContain("Created draft pull request #1");
+  expect(ok(["pr", "view", "1"], { cwd: dir })).toContain("Draft: mark it ready");
+  const refused = ether(["pr", "merge", "1"], { cwd: dir });
+  expect([refused.code, refused.err]).toEqual([1, expect.stringContaining("still a draft")]);
+  ok(["pr", "ready", "1"], { cwd: dir });
+
+  // Stack a second one on it; both see the stack.
+  ok(["pr", "create", "--base", "lower", "--head", "upper", "--title", "Upper"], { cwd: dir });
+  expect(ok(["pr", "view", "2"], { cwd: dir })).toContain("Stack: #1 → [#2]");
+
+  // Ask for a review, and the reviewer approves from their own login.
+  ok(["pr", "edit", "1", "--add-reviewer", reviewer.username], { cwd: dir });
+  expect(ok(["pr", "view", "1"], { cwd: dir })).toContain(`${reviewer.username} (pending)`);
+  other.ok(["pr", "review", "1", "-R", full, "--approve", "-b", "Looks good"]);
+  expect(ok(["pr", "view", "1"], { cwd: dir })).toContain(`${reviewer.username} (approved)`);
+
+  // Checks and diff.
+  expect(ok(["pr", "checks", "1"], { cwd: dir })).toContain("No checks ran");
+  expect(ok(["pr", "diff", "1", "--name-only"], { cwd: dir }).trim().split("\n")).toEqual(["a.txt", "b.txt"]);
+  expect(ok(["pr", "diff", "2"], { cwd: dir })).toContain("+++ b/c.txt");
+
+  // Squash with a subject and delete the branch: the upper one moves to main and is rebuilt on the squash.
+  const merged = ok(["pr", "merge", "1", "--squash", "--delete-branch", "--subject", "Lower, squashed (#1)"], { cwd: dir });
+  expect(merged).toContain("Squashed and merged #1");
+  expect(merged).toContain("Moved onto its base: #2");
+  expect(merged).toContain("Rebuilt on the new commits: #2");
+  gitOk(dir, ["fetch", "-q", "--prune", "origin"]);
+  expect(gitOk(dir, ["log", "--format=%s", "origin/main"]).trim().split("\n")).toEqual(["Lower, squashed (#1)", "first"]);
+  const upper = JSON.parse(ok(["pr", "view", "2", "--json"], { cwd: dir }));
+  expect([upper.pull.base, upper.commits.map((c: { subject: string }) => c.subject)]).toEqual(["main", ["upper"]]);
+  expect(ok(["pr", "view", "1"], { cwd: dir })).toContain(`Squashed and merged by ${me.username}`);
+
+  // Edit the base, and nothing to edit is an error.
+  gitOk(dir, ["push", "-q", "origin", "main:release"]);
+  ok(["pr", "edit", "2", "--base", "release", "--title", "Upper, retitled"], { cwd: dir });
+  expect(JSON.parse(ok(["pr", "view", "2", "--json"], { cwd: dir })).pull).toMatchObject({ base: "release", title: "Upper, retitled" });
+  expect(ether(["pr", "edit", "2"], { cwd: dir }).code).toBe(1);
+});
