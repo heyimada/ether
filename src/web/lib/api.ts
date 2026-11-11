@@ -30,7 +30,7 @@ export const repoApi = (owner: string, repo: string) => `/api/repos/${encodeURIC
 export type Me = { username: string; isAdmin: boolean; accent: string | null; theme: "light" | "dark" | null };
 
 export type RepoInfo = {
-  repo: { owner: string; name: string; description: string; visibility: "private" | "public"; requireApproval: boolean; ciEnabled: boolean; requireChecks: boolean; requireCodeOwnerReview: boolean; defaultBranch: string; empty: boolean };
+  repo: { owner: string; name: string; description: string; visibility: "private" | "public"; requireApproval: boolean; ciEnabled: boolean; requireChecks: boolean; requireCodeOwnerReview: boolean; allowMergeCommit: boolean; allowSquashMerge: boolean; allowRebaseMerge: boolean; defaultBranch: string; empty: boolean };
   role: "owner" | "write" | "read";
   stars: number;
   starred: boolean;
@@ -58,6 +58,7 @@ export type Issue = {
   base: string | null;
   head: string | null;
   mergeCommit: string | null;
+  mergeMethod: "merge" | "squash" | "rebase" | null;
   mergedBy: string | null;
   author: string;
   comments: number;

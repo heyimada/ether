@@ -62,6 +62,12 @@ function RepoSettings() {
     await patch(base, { requireApproval: on });
     await router.invalidate();
   });
+  const [methods, setMethods] = useState({ allowMergeCommit: info.repo.allowMergeCommit, allowSquashMerge: info.repo.allowSquashMerge, allowRebaseMerge: info.repo.allowRebaseMerge });
+  const setMethod = useAction(async (change: Partial<typeof methods>) => {
+    await patch(base, change);
+    setMethods((m) => ({ ...m, ...change }));
+    await router.invalidate();
+  });
   const [requireOwners, setRequireOwners] = useState(info.repo.requireCodeOwnerReview);
   const protectOwners = useAction(async (on: boolean) => {
     setRequireOwners(on);
@@ -145,6 +151,30 @@ function RepoSettings() {
 
       <section className="card body stack-sm">
         <h2 className="m-0">Pull requests</h2>
+        <fieldset className="m-0 border-0 p-0 stack-sm">
+          <legend className="mb-1 font-semibold">Ways to merge</legend>
+          <ErrorNote error={setMethod.error} />
+          {(
+            [
+              ["allowMergeCommit", "Merge commits", "All commits are added to the base branch with a merge commit."],
+              ["allowSquashMerge", "Squash merging", "All commits become one commit on the base branch, written by the pull request's author."],
+              ["allowRebaseMerge", "Rebase merging", "The commits are made again on top of the base branch, one by one, without a merge commit."],
+            ] as const
+          ).map(([key, label, hint]) => (
+            <label key={key} className="radio">
+              <input
+                type="checkbox"
+                checked={methods[key]}
+                onChange={(e) => setMethod.run({ [key]: e.target.checked })}
+                // The last one allowed can't be turned off.
+                disabled={setMethod.pending || (methods[key] && Object.values(methods).filter(Boolean).length === 1)}
+              />
+              <span>
+                {label} <span className="hint m-0">{hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
         <ErrorNote error={protect.error} />
         <label className="radio">
           <input type="checkbox" checked={requireApproval} onChange={(e) => protect.run(e.target.checked)} disabled={protect.pending} />

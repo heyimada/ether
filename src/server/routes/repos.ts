@@ -111,6 +111,9 @@ export const repoRoutes = new Elysia()
         ciEnabled: a.repo.ciEnabled,
         requireChecks: a.repo.requireChecks,
         requireCodeOwnerReview: a.repo.requireCodeOwnerReview,
+        allowMergeCommit: a.repo.allowMergeCommit,
+        allowSquashMerge: a.repo.allowSquashMerge,
+        allowRebaseMerge: a.repo.allowRebaseMerge,
         defaultBranch,
         empty: refs.length === 0,
       },
@@ -124,7 +127,8 @@ export const repoRoutes = new Elysia()
   .patch("/repos/:owner/:repo", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "owner");
-    const { description, defaultBranch, visibility, requireApproval, ciEnabled, requireChecks, requireCodeOwnerReview } = (body ?? {}) as {
+    const b = (body ?? {}) as Record<string, unknown>;
+    const { description, defaultBranch, visibility, requireApproval, ciEnabled, requireChecks, requireCodeOwnerReview } = b as {
       requireCodeOwnerReview?: unknown;
       description?: unknown;
       defaultBranch?: unknown;
@@ -138,6 +142,14 @@ export const repoRoutes = new Elysia()
     if (typeof requireChecks === "boolean") db.update(repo).set({ requireChecks }).where(eq(repo.id, a.repo.id)).run();
     if (typeof requireApproval === "boolean") db.update(repo).set({ requireApproval }).where(eq(repo.id, a.repo.id)).run();
     if (typeof requireCodeOwnerReview === "boolean") db.update(repo).set({ requireCodeOwnerReview }).where(eq(repo.id, a.repo.id)).run();
+    // Merge methods: whatever is sent, at least one has to stay allowed.
+    const methods = { allowMergeCommit: b.allowMergeCommit, allowSquashMerge: b.allowSquashMerge, allowRebaseMerge: b.allowRebaseMerge };
+    const set = Object.fromEntries(Object.entries(methods).filter(([, v]) => typeof v === "boolean")) as Partial<Record<keyof typeof methods, boolean>>;
+    if (Object.keys(set).length) {
+      const next = { allowMergeCommit: a.repo.allowMergeCommit, allowSquashMerge: a.repo.allowSquashMerge, allowRebaseMerge: a.repo.allowRebaseMerge, ...set };
+      if (!next.allowMergeCommit && !next.allowSquashMerge && !next.allowRebaseMerge) throw new HttpError(400, "Allow at least one way to merge pull requests");
+      db.update(repo).set(set).where(eq(repo.id, a.repo.id)).run();
+    }
     if (visibility !== undefined) {
       if (visibility !== "private" && visibility !== "public") throw new HttpError(400, "Visibility must be private or public");
       db.update(repo).set({ visibility }).where(eq(repo.id, a.repo.id)).run();

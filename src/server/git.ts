@@ -349,32 +349,100 @@ export async function mergeTree(repo: string, base: string, head: string): Promi
   throw new GitError(["merge-tree"], res.stderr);
 }
 
+export type Identity = { name: string; email: string };
+export type MergeMethod = "merge" | "squash" | "rebase";
+export type MergeResult = { ok: true; sha: string } | { ok: false; reason: "conflict" | "missing" | "raced" | "merges" | "empty" };
+
+const identityEnv = (who: "AUTHOR" | "COMMITTER", id: Identity & { date?: string }) => ({
+  [`GIT_${who}_NAME`]: id.name,
+  [`GIT_${who}_EMAIL`]: id.email,
+  ...(id.date ? { [`GIT_${who}_DATE`]: id.date } : {}),
+});
+
+async function commitTree(repo: string, tree: string, parents: string[], message: string, author: Identity & { date?: string }, committer: Identity) {
+  const args = ["commit-tree", tree, ...parents.flatMap((p) => ["-p", p]), "-F", "-"];
+  const commit = await git(repo, args, { stdin: new TextEncoder().encode(message), env: { ...identityEnv("AUTHOR", author), ...identityEnv("COMMITTER", committer) } });
+  if (commit.code !== 0) throw new GitError(["commit-tree"], commit.stderr);
+  return new TextDecoder().decode(commit.stdout).trim();
+}
+
+type RawCommit = { sha: string; parents: string[]; author: Identity & { date: string }; message: string };
+
+// The commits in head that base lacks, oldest first, with what's needed to make them again elsewhere.
+async function rawRange(repo: string, base: string, head: string): Promise<RawCommit[]> {
+  const out = await gitText(repo, ["log", "--reverse", "--date=raw", "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%ad%x1f%B%x1e", "--end-of-options", `${base}..${head}`]);
+  return out
+    .split("\x1e")
+    .map((r) => r.replace(/^\n/, ""))
+    .filter(Boolean)
+    .map((rec) => {
+      const [sha, parents, name, email, date, message] = rec.split("\x1f");
+      return { sha, parents: parents ? parents.split(" ") : [], author: { name, email, date }, message };
+    });
+}
+
+// Makes `commits` again on top of `onto`, one by one, keeping their authors and messages: what a rebase does,
+// without a working tree. Refuses merge commits, which have no single change to replay.
+export async function replay(repo: string, commits: RawCommit[], onto: string, committer: Identity): Promise<{ ok: true; sha: string } | { ok: false; reason: "conflict" | "merges" }> {
+  let at = onto;
+  for (const c of commits) {
+    if (c.parents.length !== 1) return { ok: false, reason: "merges" };
+    const res = await git(repo, ["merge-tree", "--write-tree", "--name-only", "--no-messages", `--merge-base=${c.parents[0]}`, "--end-of-options", at, c.sha]);
+    if (res.code === 1) return { ok: false, reason: "conflict" };
+    if (res.code !== 0) throw new GitError(["merge-tree"], res.stderr);
+    const tree = new TextDecoder().decode(res.stdout).split("\n")[0];
+    at = await commitTree(repo, tree, [at], c.message, c.author, committer);
+  }
+  return { ok: true, sha: at };
+}
+
+// Moves `head`'s own commits since `since` onto `onto`, and its branch with them if it hasn't moved meanwhile.
+export async function restack(repo: string, branch: string, since: string, onto: string, committer: Identity): Promise<{ ok: true; before: string; sha: string } | { ok: false }> {
+  const before = await resolveCommit(repo, `refs/heads/${branch}`);
+  if (!before) return { ok: false };
+  const replayed = await replay(repo, await rawRange(repo, since, before), onto, committer);
+  if (!replayed.ok) return { ok: false };
+  const update = await git(repo, ["update-ref", "-m", "restack onto merged base", `refs/heads/${branch}`, replayed.sha, before]);
+  return update.code === 0 ? { ok: true, before, sha: replayed.sha } : { ok: false };
+}
+
+// Merges a pull request on the server:
+// - merge: a merge commit with both tips as parents;
+// - squash: one commit with all of head's changes on top of base, written by the pull request's author;
+// - rebase: head's commits made again on top of base, one by one.
+// Then moves the base branch with a compare-and-swap, so a push meanwhile makes it fail as raced.
 export async function mergeBranches(
   repo: string,
   baseBranch: string,
   headBranch: string,
   message: string,
-  author: { name: string; email: string },
+  committer: Identity,
   // The commits the caller checked: if either branch has moved on since, the merge is refused as raced.
   expected?: { base: string; head: string },
-): Promise<{ ok: true; sha: string } | { ok: false; reason: "conflict" | "missing" | "raced" }> {
+  opts: { method?: MergeMethod; author?: Identity } = {},
+): Promise<MergeResult> {
   const baseSha = await resolveCommit(repo, `refs/heads/${baseBranch}`);
   const headSha = await resolveCommit(repo, `refs/heads/${headBranch}`);
   if (!baseSha || !headSha) return { ok: false, reason: "missing" };
   if (expected && (expected.base !== baseSha || expected.head !== headSha)) return { ok: false, reason: "raced" };
-  const merged = await mergeTree(repo, baseSha, headSha);
-  if (!merged.clean) return { ok: false, reason: "conflict" };
-  const env = {
-    GIT_AUTHOR_NAME: author.name,
-    GIT_AUTHOR_EMAIL: author.email,
-    GIT_COMMITTER_NAME: author.name,
-    GIT_COMMITTER_EMAIL: author.email,
-  };
-  const commit = await git(repo, ["commit-tree", merged.tree, "-p", baseSha, "-p", headSha, "-m", message], { env });
-  if (commit.code !== 0) throw new GitError(["commit-tree"], commit.stderr);
-  const sha = new TextDecoder().decode(commit.stdout).trim();
+  const method = opts.method ?? "merge";
+  let sha: string;
+  if (method === "rebase") {
+    const commits = await rawRange(repo, baseSha, headSha);
+    if (!commits.length) return { ok: false, reason: "empty" };
+    const replayed = await replay(repo, commits, baseSha, committer);
+    if (!replayed.ok) return replayed;
+    sha = replayed.sha;
+  } else {
+    const merged = await mergeTree(repo, baseSha, headSha);
+    if (!merged.clean) return { ok: false, reason: "conflict" };
+    sha =
+      method === "squash"
+        ? await commitTree(repo, merged.tree, [baseSha], message, opts.author ?? committer, committer)
+        : await commitTree(repo, merged.tree, [baseSha, headSha], message, committer, committer);
+  }
   // Compare-and-swap: fails if someone pushed to the base branch meanwhile.
-  const update = await git(repo, ["update-ref", "-m", "merge pull request", `refs/heads/${baseBranch}`, sha, baseSha]);
+  const update = await git(repo, ["update-ref", "-m", `${method} pull request`, `refs/heads/${baseBranch}`, sha, baseSha]);
   if (update.code !== 0) return { ok: false, reason: "raced" };
   return { ok: true, sha };
 }
