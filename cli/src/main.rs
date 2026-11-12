@@ -1070,7 +1070,8 @@ fn unquote(path: &str) -> String {
 // Renames, binary files and mode changes have no +++ line, so the block's own header lines are read too.
 fn changed_files(diff: &str) -> Vec<String> {
     let strip = |p: &str, side: &str| {
-        let p = unquote(p);
+        // git ends ---/+++ paths that contain a space with a tab.
+        let p = unquote(p.strip_suffix('\t').unwrap_or(p));
         p.strip_prefix(side).map(str::to_string).unwrap_or(p)
     };
     let mut files = Vec::new();
