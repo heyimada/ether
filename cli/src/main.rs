@@ -32,6 +32,11 @@ enum Cmd {
     /// Work with pull requests
     #[command(subcommand)]
     Pr(PrCmd),
+    /// Print a shell completion script, e.g. `ether completion zsh > ~/.zfunc/_ether`
+    Completion {
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
     /// Call any API endpoint and print the JSON response
     Api {
         /// Path such as /api/me
@@ -176,6 +181,9 @@ enum PrCmd {
         base: Option<String>,
         #[arg(long)]
         head: Option<String>,
+        /// Open it as a draft, which can't be merged until it's marked ready
+        #[arg(long)]
+        draft: bool,
     },
     /// Show a pull request
     View {
@@ -185,11 +193,85 @@ enum PrCmd {
         #[arg(long)]
         json: bool,
     },
-    /// Merge a pull request with a merge commit
+    /// Merge a pull request; without a method flag, the repository's preferred way
     Merge {
         number: u64,
         #[command(flatten)]
         r: RepoArg,
+        /// Merge with a merge commit
+        #[arg(long, group = "method")]
+        merge: bool,
+        /// Squash all commits into one
+        #[arg(long, group = "method")]
+        squash: bool,
+        /// Make each commit again on top of the base
+        #[arg(long, group = "method")]
+        rebase: bool,
+        /// Delete the head branch afterwards; pull requests stacked on it move to its base
+        #[arg(short = 'd', long)]
+        delete_branch: bool,
+        /// Title of the merge or squash commit
+        #[arg(long)]
+        subject: Option<String>,
+        /// Message of the merge or squash commit
+        #[arg(short = 'b', long)]
+        body: Option<String>,
+    },
+    /// Mark a draft ready for review, or turn it back into a draft with --undo
+    Ready {
+        number: u64,
+        #[command(flatten)]
+        r: RepoArg,
+        #[arg(long)]
+        undo: bool,
+    },
+    /// Change a pull request's title, body, base branch or reviewers
+    Edit {
+        number: u64,
+        #[command(flatten)]
+        r: RepoArg,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        body: Option<String>,
+        /// Point it at another branch, e.g. once the one it was stacked on is merged
+        #[arg(long)]
+        base: Option<String>,
+        /// Ask users or ORG/TEAM for a review (comma-separated or repeated)
+        #[arg(long, value_delimiter = ',')]
+        add_reviewer: Vec<String>,
+        /// Take back review requests (comma-separated or repeated)
+        #[arg(long, value_delimiter = ',')]
+        remove_reviewer: Vec<String>,
+    },
+    /// Approve, request changes or comment on a pull request
+    Review {
+        number: u64,
+        #[command(flatten)]
+        r: RepoArg,
+        #[arg(short = 'a', long, group = "verdict")]
+        approve: bool,
+        #[arg(short = 'r', long, group = "verdict")]
+        request_changes: bool,
+        #[arg(short = 'c', long, group = "verdict")]
+        comment: bool,
+        #[arg(short = 'b', long, default_value = "")]
+        body: String,
+    },
+    /// Show a pull request's checks; exits 1 if any failed and 8 while some still run
+    Checks {
+        number: u64,
+        #[command(flatten)]
+        r: RepoArg,
+    },
+    /// Show what a pull request changes
+    Diff {
+        number: u64,
+        #[command(flatten)]
+        r: RepoArg,
+        /// Only the names of the changed files
+        #[arg(long)]
+        name_only: bool,
     },
     /// Check out a pull request's branch locally
     Checkout {
@@ -262,6 +344,11 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Repo(cmd) => repo(cmd),
         Cmd::Issue(cmd) => issue(cmd),
         Cmd::Pr(cmd) => pr(cmd),
+        Cmd::Completion { shell } => {
+            use clap::CommandFactory;
+            clap_complete::generate(shell, &mut Cli::command(), "ether", &mut std::io::stdout());
+            Ok(())
+        }
         Cmd::Api {
             path,
             method,
@@ -510,6 +597,100 @@ fn print_conversation(v: &Value, key: &str) {
     }
 }
 
+fn strings(v: &Value) -> Vec<String> {
+    v.as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|x| x.as_str().map(str::to_string))
+        .collect()
+}
+
+// What decides whether a pull request can be merged: draft, reviews, checks, code owners and its stack.
+fn print_pull_status(v: &Value) {
+    let p = &v["pull"];
+    if p["state"] != "open" {
+        if p["state"] == "merged" {
+            println!(
+                "\n{} by {}",
+                match p["mergeMethod"].as_str() {
+                    Some("squash") => "Squashed and merged",
+                    Some("rebase") => "Rebased and merged",
+                    _ => "Merged",
+                },
+                p["mergedBy"].as_str().unwrap_or("")
+            );
+        }
+        return;
+    }
+    println!();
+    if p["draft"] == true {
+        println!("Draft: mark it ready with `ether pr ready {}`", p["number"]);
+    }
+    let stack: Vec<Value> = v["stack"].as_array().cloned().unwrap_or_default();
+    if !stack.is_empty() {
+        let line: Vec<String> = stack
+            .iter()
+            .map(|s| {
+                if s["number"] == p["number"] {
+                    format!("[#{}]", s["number"])
+                } else {
+                    format!("#{}", s["number"])
+                }
+            })
+            .collect();
+        println!("Stack: {}", line.join(" → "));
+    }
+    // One entry per person: asked again after a verdict shows as pending, with that verdict.
+    let verdict = |who: &str| match v["reviewers"][who].as_str() {
+        Some("approved") => Some("approved"),
+        Some("changes_requested") => Some("changes requested"),
+        _ => None,
+    };
+    let requested = strings(&v["reviewRequests"]);
+    let mut reviewers: Vec<String> = Vec::new();
+    if let Some(map) = v["reviewers"].as_object() {
+        for who in map.keys().filter(|w| !requested.contains(w)) {
+            reviewers.push(format!("{who} ({})", verdict(who).unwrap_or("reviewed")));
+        }
+    }
+    for who in &requested {
+        reviewers.push(match verdict(who) {
+            Some(before) => format!("{who} (pending; {before} before)"),
+            None => format!("{who} (pending)"),
+        });
+    }
+    for team in strings(&v["teamRequests"]) {
+        reviewers.push(format!("{team} (pending)"));
+    }
+    if !reviewers.is_empty() {
+        println!("Reviewers: {}", reviewers.join(", "));
+    }
+    if let Some(status) = v["checks"]["status"].as_str() {
+        println!("Checks: {status}");
+    }
+    if let Some(groups) = v["codeOwners"]["groups"].as_array() {
+        let waiting: Vec<String> = groups
+            .iter()
+            .filter(|g| g["approvedBy"].is_null())
+            .map(|g| g["pattern"].as_str().unwrap_or("").to_string())
+            .collect();
+        if !waiting.is_empty() {
+            println!("Waiting on code owners of: {}", waiting.join(", "));
+        }
+    }
+    println!(
+        "{}",
+        if v["missing"] == true {
+            "A branch of this pull request no longer exists."
+        } else if v["mergeable"] == true {
+            "No conflicts with the base branch."
+        } else {
+            "Has conflicts; can't be merged yet."
+        }
+    );
+}
+
 fn issue(cmd: IssueCmd) -> Result<()> {
     let c = client()?;
     match cmd {
@@ -598,6 +779,7 @@ fn pr(cmd: PrCmd) -> Result<()> {
             body,
             base,
             head,
+            draft,
         } => {
             let (o, n) = resolve_repo(&r.repo, &c.host)?;
             let head = match head {
@@ -615,11 +797,12 @@ fn pr(cmd: PrCmd) -> Result<()> {
             };
             let v = c.post(
                 &format!("{}/pulls", repo_api(&o, &n)),
-                json!({ "title": title, "body": body, "base": base, "head": head }),
+                json!({ "title": title, "body": body, "base": base, "head": head, "draft": draft }),
             )?;
             let num = &v["pull"]["number"];
             println!(
-                "Created pull request #{num} ({head} into {base})\n{}/{o}/{n}/pull/{num}",
+                "Created {}pull request #{num} ({head} into {base})\n{}/{o}/{n}/pull/{num}",
+                if draft { "draft " } else { "" },
                 c.host
             );
             Ok(())
@@ -631,25 +814,210 @@ fn pr(cmd: PrCmd) -> Result<()> {
                 return print_json(&v);
             }
             print_conversation(&v, "pull");
-            if v["pull"]["state"] == "open" {
-                println!(
-                    "\n{}",
-                    if v["mergeable"] == true {
-                        "Can be merged."
-                    } else {
-                        "Has conflicts; can't be merged yet."
-                    }
-                );
+            print_pull_status(&v);
+            Ok(())
+        }
+        PrCmd::Merge {
+            number,
+            r,
+            merge,
+            squash,
+            rebase,
+            delete_branch,
+            subject,
+            body,
+        } => {
+            let (o, n) = resolve_repo(&r.repo, &c.host)?;
+            let mut req = json!({ "deleteBranch": delete_branch });
+            if let Some(m) = [(merge, "merge"), (squash, "squash"), (rebase, "rebase")]
+                .iter()
+                .find(|(on, _)| *on)
+            {
+                req["method"] = json!(m.1);
+            }
+            if let Some(t) = subject {
+                req["title"] = json!(t);
+            }
+            if let Some(b) = body {
+                req["message"] = json!(b);
+            }
+            let res = c.post(&format!("{}/pulls/{number}/merge", repo_api(&o, &n)), req)?;
+            let verb = match res["method"].as_str() {
+                Some("squash") => "Squashed and merged",
+                Some("rebase") => "Rebased and merged",
+                _ => "Merged",
+            };
+            println!("{verb} #{number}");
+            if res["deletedBranch"] == true {
+                println!("Deleted its branch");
+            }
+            for (key, what) in [
+                ("retargeted", "Moved onto its base"),
+                ("restacked", "Rebuilt on the new commits"),
+            ] {
+                let nums: Vec<String> = res[key]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|v| format!("#{v}"))
+                    .collect();
+                if !nums.is_empty() {
+                    println!("{what}: {}", nums.join(", "));
+                }
             }
             Ok(())
         }
-        PrCmd::Merge { number, r } => {
+        PrCmd::Ready { number, r, undo } => {
             let (o, n) = resolve_repo(&r.repo, &c.host)?;
-            c.post(
-                &format!("{}/pulls/{number}/merge", repo_api(&o, &n)),
-                json!({}),
+            c.patch(
+                &format!("{}/issues/{number}", repo_api(&o, &n)),
+                json!({ "draft": undo }),
             )?;
-            println!("Merged #{number}");
+            println!(
+                "{} #{number}",
+                if undo {
+                    "Turned into a draft:"
+                } else {
+                    "Ready for review:"
+                }
+            );
+            Ok(())
+        }
+        PrCmd::Edit {
+            number,
+            r,
+            title,
+            body,
+            base,
+            add_reviewer,
+            remove_reviewer,
+        } => {
+            let (o, n) = resolve_repo(&r.repo, &c.host)?;
+            let api = repo_api(&o, &n);
+            let mut fields = json!({});
+            if let Some(t) = title {
+                fields["title"] = json!(t);
+            }
+            if let Some(b) = body {
+                fields["body"] = json!(b);
+            }
+            if let Some(b) = base {
+                fields["base"] = json!(b);
+            }
+            let touched_fields = fields.as_object().is_some_and(|f| !f.is_empty());
+            // Reviewers first: if the list is refused, nothing has changed yet.
+            if !add_reviewer.is_empty() || !remove_reviewer.is_empty() {
+                let v = c.get(&format!("{api}/pulls/{number}"))?;
+                let names = |key: &str| -> Vec<String> {
+                    v[key]
+                        .as_array()
+                        .cloned()
+                        .unwrap_or_default()
+                        .iter()
+                        .filter_map(|x| x.as_str().map(str::to_lowercase))
+                        .collect()
+                };
+                let clean = |s: &String| s.trim().trim_start_matches('@').to_lowercase();
+                let removed: Vec<String> = remove_reviewer.iter().map(clean).collect();
+                let mut users = names("reviewRequests");
+                let mut teams = names("teamRequests");
+                for a in add_reviewer.iter().map(clean).filter(|a| !a.is_empty()) {
+                    let list = if a.contains('/') {
+                        &mut teams
+                    } else {
+                        &mut users
+                    };
+                    if !list.contains(&a) {
+                        list.push(a);
+                    }
+                }
+                users.retain(|u| !removed.contains(u));
+                teams.retain(|t| !removed.contains(t));
+                c.put(
+                    &format!("{api}/pulls/{number}/reviewers"),
+                    json!({ "reviewers": users, "teams": teams }),
+                )?;
+            } else if !touched_fields {
+                bail!("nothing to change; pass --title, --body, --base, --add-reviewer or --remove-reviewer");
+            }
+            if touched_fields {
+                c.patch(&format!("{api}/issues/{number}"), fields)?;
+            }
+            println!("Updated #{number}");
+            Ok(())
+        }
+        PrCmd::Review {
+            number,
+            r,
+            approve,
+            request_changes,
+            comment: _,
+            body,
+        } => {
+            let (o, n) = resolve_repo(&r.repo, &c.host)?;
+            let state = if approve {
+                "approved"
+            } else if request_changes {
+                "changes_requested"
+            } else {
+                "commented"
+            };
+            c.post(
+                &format!("{}/pulls/{number}/reviews", repo_api(&o, &n)),
+                json!({ "state": state, "body": body }),
+            )?;
+            println!(
+                "{} #{number}",
+                match state {
+                    "approved" => "Approved",
+                    "changes_requested" => "Requested changes on",
+                    _ => "Reviewed",
+                }
+            );
+            Ok(())
+        }
+        PrCmd::Checks { number, r } => {
+            let (o, n) = resolve_repo(&r.repo, &c.host)?;
+            let v = c.get(&format!("{}/pulls/{number}", repo_api(&o, &n)))?;
+            let checks = &v["checks"];
+            if checks.is_null() {
+                println!("No checks ran for the head commit.");
+                return Ok(());
+            }
+            for run in checks["runs"].as_array().cloned().unwrap_or_default() {
+                println!(
+                    "{}\t{}\t{}/{o}/{n}/ci/{}",
+                    run["status"].as_str().unwrap_or(""),
+                    run["workflow"].as_str().unwrap_or(""),
+                    c.host,
+                    run["id"]
+                );
+            }
+            match checks["status"].as_str() {
+                Some("success") => Ok(()),
+                Some("queued" | "running" | "waiting") => std::process::exit(8),
+                _ => std::process::exit(1),
+            }
+        }
+        PrCmd::Diff {
+            number,
+            r,
+            name_only,
+        } => {
+            let (o, n) = resolve_repo(&r.repo, &c.host)?;
+            let v = c.get(&format!("{}/pulls/{number}", repo_api(&o, &n)))?;
+            let diff = v["diff"].as_str().unwrap_or("");
+            if name_only {
+                for file in changed_files(diff) {
+                    println!("{file}");
+                }
+            } else {
+                print!("{diff}");
+            }
+            if v["truncated"] == true {
+                eprintln!("(the diff was cut short; see it in the browser)");
+            }
             Ok(())
         }
         PrCmd::Checkout { number, r } => {
@@ -663,5 +1031,151 @@ fn pr(cmd: PrCmd) -> Result<()> {
             println!("Switched to {head}");
             Ok(())
         }
+    }
+}
+
+// A path as git prints it in a diff: bare, or in double quotes with C escapes (octal bytes for non-ASCII).
+fn unquote(path: &str) -> String {
+    let Some(inner) = path.strip_prefix('"').and_then(|p| p.strip_suffix('"')) else {
+        return path.to_string();
+    };
+    let mut bytes = Vec::new();
+    let mut chars = inner.bytes().peekable();
+    while let Some(b) = chars.next() {
+        if b != b'\\' {
+            bytes.push(b);
+            continue;
+        }
+        match chars.next() {
+            Some(d @ b'0'..=b'7') => {
+                let mut n = u32::from(d - b'0');
+                for _ in 0..2 {
+                    if let Some(&e @ b'0'..=b'7') = chars.peek() {
+                        n = n * 8 + u32::from(e - b'0');
+                        chars.next();
+                    }
+                }
+                bytes.push(n as u8);
+            }
+            Some(b'n') => bytes.push(b'\n'),
+            Some(b't') => bytes.push(b'\t'),
+            Some(other) => bytes.push(other),
+            None => {}
+        }
+    }
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+// The files a unified diff touches, one per `diff --git` block: the new path, or the old one for a deletion.
+// Renames, binary files and mode changes have no +++ line, so the block's own header lines are read too.
+fn changed_files(diff: &str) -> Vec<String> {
+    let strip = |p: &str, side: &str| {
+        // git ends ---/+++ paths that contain a space with a tab.
+        let p = unquote(p.strip_suffix('\t').unwrap_or(p));
+        p.strip_prefix(side).map(str::to_string).unwrap_or(p)
+    };
+    let mut files = Vec::new();
+    let mut current: Option<(Option<String>, Option<String>, Option<String>)> = None; // (new, old, header)
+                                                                                      // Past a block's first @@ every line is content, even one that starts with "--- " or "+++ ".
+    let mut in_hunks = false;
+    let flush = |c: Option<(Option<String>, Option<String>, Option<String>)>,
+                 files: &mut Vec<String>| {
+        if let Some((new, old, header)) = c {
+            if let Some(f) = new.or(old).or(header) {
+                files.push(f);
+            }
+        }
+    };
+    for line in diff.lines() {
+        if let Some(rest) = line.strip_prefix("diff --git ") {
+            flush(current.take(), &mut files);
+            // "a/X b/X": the b/ side, found from the end so spaces in X survive.
+            let header = rest
+                .rfind(" b/")
+                .map(|i| rest[i + 3..].to_string())
+                .or_else(|| rest.rfind(" \"b/").map(|i| strip(&rest[i + 1..], "b/")));
+            current = Some((None, None, header));
+            in_hunks = false;
+            continue;
+        }
+        if line.starts_with("@@") {
+            in_hunks = true;
+        }
+        if in_hunks {
+            continue;
+        }
+        let Some((new, old, _)) = current.as_mut() else {
+            continue;
+        };
+        if let Some(p) = line.strip_prefix("+++ ") {
+            if p != "/dev/null" {
+                *new = Some(strip(p, "b/"));
+            }
+        } else if let Some(p) = line.strip_prefix("--- ") {
+            if p != "/dev/null" {
+                *old = Some(strip(p, "a/"));
+            }
+        } else if let Some(p) = line.strip_prefix("rename to ") {
+            *new = Some(unquote(p));
+        }
+    }
+    flush(current, &mut files);
+    files
+}
+
+#[cfg(test)]
+mod tests {
+    use super::changed_files;
+
+    #[test]
+    fn changed_files_covers_every_kind_of_change() {
+        let diff = "\
+diff --git a/old.txt b/old.txt
+deleted file mode 100644
+--- a/old.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-gone
+diff --git a/logo.png b/logo.png
+new file mode 100644
+Binary files /dev/null and b/logo.png differ
+diff --git a/from.txt b/to.txt
+similarity index 100%
+rename from from.txt
+rename to to.txt
+diff --git a/notes.md b/notes.md
+--- a/notes.md
++++ b/notes.md
+@@ -1,2 +1,2 @@
+--- a/not-a-file
++++ b/not-a-file
+diff --git a/run.sh b/run.sh
+old mode 100644
+new mode 100755
+diff --git a/with space.txt b/with space.txt
+--- a/with space.txt
++++ b/with space.txt
+@@ -1 +1 @@
+-a
++b
+diff --git \"a/caf\\303\\251.txt\" \"b/caf\\303\\251.txt\"
+--- \"a/caf\\303\\251.txt\"
++++ \"b/caf\\303\\251.txt\"
+@@ -1 +1 @@
+-x
++y
+";
+        assert_eq!(
+            changed_files(diff),
+            [
+                "old.txt",
+                "logo.png",
+                "to.txt",
+                "notes.md",
+                "run.sh",
+                "with space.txt",
+                "café.txt"
+            ]
+        );
     }
 }

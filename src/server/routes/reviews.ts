@@ -138,14 +138,19 @@ export const reviewRoutes = new Elysia()
           })
           // The same team written two ways ("org/core", "@Org/Core") is asked once.
           .filter((id, i, all) => all.indexOf(id) === i);
-    const ids = [...new Set(names as string[])].map((n) => {
+    // Who's asked already: sent back unchanged, someone who has since lost access is dropped rather than refused,
+    // so a stale request doesn't block every other change to the list.
+    const before = new Set(db.select({ id: reviewRequest.userId }).from(reviewRequest).where(eq(reviewRequest.issueId, row.issue.id)).all().map((r) => r.id));
+    const ids = [...new Set(names as string[])].flatMap((n) => {
       const u = findUser(n);
-      if (!u || !repoAccess({ id: u.id }, a.owner, a.repo.name)) throw new HttpError(400, `${n} can't see this repository`);
+      if (!u || !repoAccess({ id: u.id }, a.owner, a.repo.name)) {
+        if (u && before.has(u.id)) return [];
+        throw new HttpError(400, `${n} can't see this repository`);
+      }
       if (u.id === row.issue.authorId) throw new HttpError(400, "Authors can't review their own pull request");
-      return u.id;
+      return [u.id];
     });
     // Who's newly asked hears about it; those asked already don't hear again.
-    const before = new Set(db.select({ id: reviewRequest.userId }).from(reviewRequest).where(eq(reviewRequest.issueId, row.issue.id)).all().map((r) => r.id));
     const teamsBefore = new Set(db.select({ id: teamReviewRequest.teamId }).from(teamReviewRequest).where(eq(teamReviewRequest.issueId, row.issue.id)).all().map((r) => r.id));
     db.transaction((tx) => {
       tx.delete(reviewRequest).where(eq(reviewRequest.issueId, row.issue.id)).run();
