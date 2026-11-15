@@ -1,16 +1,20 @@
-import { and, count, eq, inArray } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-import { HttpError, findUser, isOrg, readableRepos, requireRepo, requireUser, readerOrVisitor } from "../access";
+import { rmSync } from "node:fs";
+import { releaseDir } from "../config";
+import { HttpError, findUser, isOrg, orgRole, readableRepos, requireRepo, requireUser, readerOrVisitor } from "../access";
 import { ownerText, ownersFor } from "../codeowners";
 import { readCodeOwners } from "../owners";
 import { db } from "../db/client";
-import { collaborator, orgMember, repo, star, user } from "../db/schema";
+import { collaborator, release, repo, star, user } from "../db/schema";
 import * as git from "../git";
 import { ciAllowed } from "../ci";
 import { usernamesByEmail } from "../contrib";
 import { lastActivity, record } from "../events";
 import { languages } from "../languages";
-import { addDefaultLabels } from "./labels";
+import { addDefaultLabels } from "../labels";
+import { starCounts } from "../stars";
+import { DESCRIPTION_MAX } from "../../shared/repos";
 
 type Q = Record<string, string | undefined>;
 
@@ -31,19 +35,6 @@ const cleanPath = (p: string | undefined) => {
 function withUsernames<T extends { email: string }>(items: T[]): (T & { username: string | null })[] {
   const names = usernamesByEmail(items.map((c) => c.email));
   return items.map((c) => ({ ...c, username: names.get(c.email.toLowerCase()) ?? null }));
-}
-
-export function starCounts(repoIds: number[]): Map<number, number> {
-  if (repoIds.length === 0) return new Map();
-  return new Map(
-    db
-      .select({ repoId: star.repoId, n: count() })
-      .from(star)
-      .where(inArray(star.repoId, repoIds))
-      .groupBy(star.repoId)
-      .all()
-      .map((r) => [r.repoId, r.n]),
-  );
 }
 
 export const repoRoutes = new Elysia()
@@ -77,8 +68,7 @@ export const repoRoutes = new Elysia()
     if (typeof owner === "string" && owner.toLowerCase() !== viewer.username) {
       const target = findUser(owner);
       if (!target || !isOrg(target.id)) throw new HttpError(403, "You can only create repositories for yourself or an organization");
-      const membership = db.select().from(orgMember).where(and(eq(orgMember.orgId, target.id), eq(orgMember.userId, viewer.id))).get();
-      if (membership?.role !== "owner") throw new HttpError(403, "Only organization owners can create repositories there");
+      if (orgRole(target.id, viewer.id) !== "owner") throw new HttpError(403, "Only organization owners can create repositories there");
       ownerRow = { id: target.id, username: target.username! };
     }
     const lower = name.toLowerCase();
@@ -89,7 +79,7 @@ export const repoRoutes = new Elysia()
     await git.initBare(path);
     const created = db
       .insert(repo)
-      .values({ ownerId: ownerRow.id, name: lower, description: typeof description === "string" ? description.slice(0, 500) : "", visibility: visibility ?? "private" })
+      .values({ ownerId: ownerRow.id, name: lower, description: typeof description === "string" ? description.slice(0, DESCRIPTION_MAX) : "", visibility: visibility ?? "private" })
       .returning({ id: repo.id })
       .get();
     addDefaultLabels(created.id);
@@ -154,7 +144,7 @@ export const repoRoutes = new Elysia()
       if (visibility !== "private" && visibility !== "public") throw new HttpError(400, "Visibility must be private or public");
       db.update(repo).set({ visibility }).where(eq(repo.id, a.repo.id)).run();
     }
-    if (typeof description === "string") db.update(repo).set({ description: description.slice(0, 500) }).where(eq(repo.id, a.repo.id)).run();
+    if (typeof description === "string") db.update(repo).set({ description: description.slice(0, DESCRIPTION_MAX) }).where(eq(repo.id, a.repo.id)).run();
     if (typeof defaultBranch === "string") {
       if (!(await git.resolveCommit(a.path, `refs/heads/${defaultBranch}`))) throw new HttpError(400, "No such branch");
       await git.gitText(a.path, ["symbolic-ref", "HEAD", `refs/heads/${defaultBranch}`]);
@@ -178,9 +168,12 @@ export const repoRoutes = new Elysia()
   .delete("/repos/:owner/:repo", async ({ request, params }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "owner");
+    // Its releases' rows go with it (cascade); their uploaded files have to be removed by hand.
+    const releases = db.select({ id: release.id }).from(release).where(eq(release.repoId, a.repo.id)).all();
     db.delete(repo).where(eq(repo.id, a.repo.id)).run();
     git.removeRepo(a.path);
     git.removeRepo(git.wikiPath(a.path));
+    for (const r of releases) rmSync(releaseDir(r.id), { recursive: true, force: true });
     return { ok: true };
   })
   // ---------- collaborators ----------
@@ -281,16 +274,15 @@ export const repoRoutes = new Elysia()
   .get("/repos/:owner/:repo/activity", async ({ request, params }) => {
     const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
-    const sha = await git.resolveCommit(a.path, await git.headBranch(a.path));
+    const sha = await git.headCommit(a.path);
     if (!sha) return { since: null, weeks: [], total: 0, authors: [] };
     const act = await git.activity(a.path, sha);
     return { ...act, authors: withUsernames(act.authors) };
   })
-  // Languages of the default branch by bytes, largest first.
   .get("/repos/:owner/:repo/languages", async ({ request, params }) => {
     const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
-    const sha = await git.resolveCommit(a.path, await git.headBranch(a.path));
+    const sha = await git.headCommit(a.path);
     return { languages: sha ? await languages(a.path, sha) : [] };
   })
   .get("/repos/:owner/:repo/commit/:sha", async ({ request, params }) => {

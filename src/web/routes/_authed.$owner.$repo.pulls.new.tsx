@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { DiffView } from "../components/content";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { api, post, repoApi, type Commit } from "../lib/api";
+import { plural } from "../lib/format";
+import { TITLE_MAX } from "../../shared/issues";
 
 type Compare = { commits: Commit[]; diff: string; truncated: boolean; mergeable: boolean };
 
@@ -74,7 +76,7 @@ function NewPull() {
       <form className="card body" onSubmit={onSubmit(() => create.run(false))}>
         <ErrorNote error={create.error} />
         <Field id="title" label="Title">
-          <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={256} />
+          <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={TITLE_MAX} />
         </Field>
         <Field id="body" label="Body" hint="Markdown is supported.">
           <textarea id="body" value={body} onChange={(e) => setBody(e.target.value)} />
@@ -96,7 +98,7 @@ function NewPull() {
       {compare && (
         <>
           <h3>
-            {compare.commits.length} commit{compare.commits.length === 1 ? "" : "s"}
+            {plural(compare.commits.length, "commit")}
           </h3>
           <DiffView diff={compare.diff} truncated={compare.truncated} />
         </>

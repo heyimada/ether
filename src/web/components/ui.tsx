@@ -2,17 +2,29 @@ import { useRouterState } from "@tanstack/react-router";
 import { Check, CircleCheck, CircleDot, Copy, GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, MessageSquareText, Workflow } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { createContext, useContext, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import type { Person } from "../lib/api";
 import { snappy } from "../lib/motion";
 
-// Class lists shared by many screens.
 export const ROW = "flex flex-wrap items-center gap-3";
 export const MENU_LABEL = "px-2.5 py-2 text-sm wrap-anywhere";
 export const MENU_SEP = "my-1 h-px bg-border";
 export const PEOPLE = "m-0 flex list-none flex-col gap-2 p-0";
 export const PERSON = "flex items-center gap-2 text-sm";
 export const SIDE_HEAD = "flex items-center justify-between gap-2";
+export const SIDE_TEXT = "m-0 text-base text-muted wrap-anywhere";
+export const SETUP = "overflow-x-auto rounded-sm border border-border bg-surface-2 p-3";
+export const SIDE_HEADING = "m-0 mb-2 text-base";
+export const TAB_BUTTON =
+  "min-h-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-1.5 shadow-none [transition:border-color_220ms_var(--ease-out),background-color_150ms_ease] hover:not-disabled:border-transparent hover:not-disabled:bg-surface-3 active:transform-none aria-selected:border-b-accent aria-selected:font-semibold aria-selected:hover:not-disabled:border-b-accent";
+export const LANG_DOT = "inline-block size-2.5 flex-none rounded-full shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--text)_15%,transparent)]";
 
-// Wraps an async submit handler with pending and error state.
+export const Status = ({ text }: { text: string }) =>
+  text ? (
+    <span role="status" className="text-muted">
+      {text}
+    </span>
+  ) : null;
+
 export function useAction<A extends unknown[]>(fn: (...args: A) => Promise<unknown>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,8 +65,6 @@ export function Field({ id, label, hint, children }: { id: string; label: string
   );
 }
 
-export type Person = { username: string; isAdmin: boolean; displayName: string; avatarVersion: number | null };
-
 // Everyone on this server, loaded once per session so avatars need no extra lookups.
 export const PeopleContext = createContext<Map<string, Person>>(new Map());
 
@@ -91,7 +101,7 @@ export function StateBadge({ state, draft = false }: { state: "open" | "closed" 
   return <span className={`badge border-0 px-3 py-1 text-sm text-on-state shadow-xs ${STATE_FILL[state]}`}>{state[0].toUpperCase() + state.slice(1)}</span>;
 }
 
-export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
+export function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -108,7 +118,7 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
           {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
         </motion.span>
       </AnimatePresence>
-      {copied ? "Copied" : label}
+      {copied ? "Copied" : "Copy"}
     </button>
   );
 }

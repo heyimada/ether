@@ -1,17 +1,15 @@
 import { expect, request, test } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ADMIN, baseURL, cloneUrl, createUser, git, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { ADMIN, baseURL, cloneUrl, createUser, git, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
 
 test("an admin can let visitors without an account read public repositories, and only those", async ({ page, browser }, info) => {
   const admin = await loginAdmin();
   const owner = await createUser(admin);
   const open = unique("open");
   const closed = unique("closed");
-  await owner.ctx.post("/api/repos", { data: { name: open, visibility: "public" }, headers: headers() });
-  await owner.ctx.post("/api/repos", { data: { name: closed, visibility: "private" }, headers: headers() });
+  await owner.ctx.post("/api/repos", { data: { name: open, visibility: "public" }, headers: originHeaders() });
+  await owner.ctx.post("/api/repos", { data: { name: closed, visibility: "private" }, headers: originHeaders() });
   for (const name of [open, closed]) {
     const src = workdir();
     gitOk(src, ["init", "-q"]);
@@ -20,7 +18,7 @@ test("an admin can let visitors without an account read public repositories, and
     gitOk(src, ["commit", "-q", "-m", "seed"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, name), "main"], { username: owner.username, token: owner.token });
   }
-  await owner.ctx.post(`/api/repos/${owner.username}/${open}/issues`, { data: { title: "Public discussion", body: "" }, headers: headers() });
+  await owner.ctx.post(`/api/repos/${owner.username}/${open}/issues`, { data: { title: "Public discussion", body: "" }, headers: originHeaders() });
 
   const visitorCtx = await browser.newContext();
   const visitor = await visitorCtx.newPage();
@@ -51,7 +49,7 @@ test("an admin can let visitors without an account read public repositories, and
     await visitor.getByRole("link", { name: "Public discussion" }).click();
     await expect(visitor.getByRole("heading", { name: /Public discussion/ })).toBeVisible();
     await expect(visitor.getByLabel("Comment")).toHaveCount(0);
-    expect((await anon.post(`/api/repos/${owner.username}/${open}/issues`, { data: { title: "spam", body: "" }, headers: headers() })).status()).toBe(401);
+    expect((await anon.post(`/api/repos/${owner.username}/${open}/issues`, { data: { title: "spam", body: "" }, headers: originHeaders() })).status()).toBe(401);
     // Pushing still needs an account with a role.
     writeFileSync(join(dir, "c", "x.txt"), "x\n");
     gitOk(join(dir, "c"), ["add", "-A"]);

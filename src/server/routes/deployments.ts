@@ -2,16 +2,15 @@ import { LABEL_RE, MAX_LABELS } from "../../runner/protocol";
 import { Elysia } from "elysia";
 import { allows, findUser, HttpError, isOrg, readerOrVisitor, repoAccess, requireRepo, requireUser, type RepoAccess } from "../access";
 import { patternProblem } from "../branch-rules";
-import { abandonEnvironment, reconsiderEnvironment, reviewDeployment, ReviewError } from "../ci";
-import { deleteEnvironmentSecret, listEnvironmentSecrets, MAX_SECRET, SECRET_NAME_RE, setEnvironmentSecret } from "../ci-secrets";
+import { abandonEnvironment, reconsiderEnvironment, reviewDeployment } from "../ci";
+import { deleteEnvironmentSecret, listEnvironmentSecrets, secretValue, setEnvironmentSecret } from "../ci-secrets";
 import { ENVIRONMENT_RE } from "../ci-workflow";
 import { db } from "../db/client";
 import { environment } from "../db/schema";
 import { ensureEnvironment, environmentsOverview, findEnvironment, listDeployments, reviewerIds, setEnvironmentRules } from "../deploy";
 import { eq } from "drizzle-orm";
+import { MAX_REVIEWERS, MAX_WAIT_MINUTES } from "../../shared/ci";
 
-const MAX_REVIEWERS = 6;
-const MAX_WAIT_MINUTES = 30 * 24 * 60;
 
 function environmentOf(a: RepoAccess, name: string) {
   const env = findEnvironment(a.repo.id, name);
@@ -79,7 +78,7 @@ export const deploymentRoutes = new Elysia()
     const a = requireRepo(await requireUser(request), params.owner, params.repo, "owner");
     const env = environmentOf(a, params.name);
     // Its deployment history and secrets go with it; jobs that name it again start a fresh one.
-    await abandonEnvironment(a.repo.id, env.name);
+    abandonEnvironment(a.repo.id, env.name);
     db.delete(environment).where(eq(environment.id, env.id)).run();
     return { ok: true };
   })
@@ -91,11 +90,7 @@ export const deploymentRoutes = new Elysia()
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "owner");
     const env = environmentOf(a, params.name);
-    if (!SECRET_NAME_RE.test(params.secret)) throw new HttpError(400, "Secret names are upper-case letters, digits and _, not starting with a digit, and not CI or CI_…");
-    const value = (body as { value?: unknown } | undefined)?.value;
-    if (typeof value !== "string" || value.length === 0) throw new HttpError(400, "Enter a value");
-    if (value.length > MAX_SECRET) throw new HttpError(413, "Secrets can be at most 64 KB");
-    setEnvironmentSecret(env.id, params.secret, value, viewer.id);
+    setEnvironmentSecret(env.id, params.secret, secretValue(params.secret, body), viewer.id);
     return { ok: true };
   })
   .delete("/repos/:owner/:repo/environments/:name/secrets/:secret", async ({ request, params }) => {
@@ -109,18 +104,12 @@ export const deploymentRoutes = new Elysia()
     const env = name ? environmentOf(a, name) : undefined;
     return { deployments: listDeployments(a.repo.id, env?.id) };
   })
-  // A reviewer approves or rejects a deploy job that waits for one.
   .post("/repos/:owner/:repo/ci/jobs/:id/review", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "write");
     const approve = (body as { approve?: unknown } | undefined)?.approve;
     if (typeof approve !== "boolean") throw new HttpError(400, "approve must be true or false");
     if (!/^\d{1,15}$/.test(params.id)) throw new HttpError(400, "Invalid job id");
-    try {
-      await reviewDeployment(Number(params.id), a.repo.id, viewer.id, approve);
-    } catch (e) {
-      if (e instanceof ReviewError) throw new HttpError(e.status, e.message);
-      throw e;
-    }
+    reviewDeployment(Number(params.id), a.repo.id, viewer.id, approve);
     return { ok: true };
   });

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { api, post } from "../lib/api";
 import { requireAccount } from "../lib/require-account";
+import { DESCRIPTION_MAX, REPO_NAME_MAX } from "../../shared/repos";
 
 export const Route = createFileRoute("/_authed/new")({
   beforeLoad: ({ context, location }) => requireAccount(context.me, location.href),
@@ -43,11 +44,11 @@ function NewRepo() {
             /
           </span>
           <Field id="name" label="Repository name">
-            <input id="name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={100} autoFocus />
+            <input id="name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={REPO_NAME_MAX} autoFocus />
           </Field>
         </div>
         <Field id="description" label="Description" hint="Optional.">
-          <input id="description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} />
+          <input id="description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={DESCRIPTION_MAX} />
         </Field>
         <fieldset className="fieldset flex flex-col gap-2">
           <legend>Visibility</legend>

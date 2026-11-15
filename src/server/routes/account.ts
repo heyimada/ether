@@ -14,21 +14,19 @@ import {
   requireAdmin,
   requireUser,
 } from "../access";
-import { auth, placeholderEmail } from "../auth";
-import { USERNAME_RE } from "../auth-plugins";
+import { auth } from "../auth";
+import { placeholderEmail } from "../git";
+import { RESERVED, USERNAME_RE } from "../auth-plugins";
 import { ciAllowed, ciIsolation } from "../ci";
-import { containerRuntime } from "../ci-container";
+import { containerRuntime } from "../../runner/container";
 import { config } from "../config";
 import { db } from "../db/client";
 import { accessToken, instanceSetting, invite, profile, user, userPref } from "../db/schema";
 import { hostKeyInfo } from "../ssh";
+import { MIN_PASSWORD, TOKEN_NAME_MAX } from "../../shared/accounts";
 
-const MIN_PASSWORD = 10;
 // The accent ends up inside a stylesheet, so nothing but a plain hex colour is stored.
 const HEX_RE = /^#[0-9a-f]{6}$/i;
-// First path segments the web app uses for its own pages; a user with one of these names
-// would have unreachable repository URLs.
-export const RESERVED = new Set(["api", "assets", "login", "register", "new", "settings", "site-admin", "organizations", "notifications", "_shell"]);
 const registration = new Mutex();
 
 type RegisterBody = { code?: unknown; username?: unknown; password?: unknown };
@@ -148,7 +146,7 @@ export const accountRoutes = new Elysia()
   .post("/tokens", async ({ request, body }) => {
     const viewer = await requireUser(request);
     const name = String((body as { name?: unknown } | undefined)?.name ?? "").trim();
-    if (!name || name.length > 100) throw new HttpError(400, "Give the token a name");
+    if (!name || name.length > TOKEN_NAME_MAX) throw new HttpError(400, "Give the token a name");
     return createAccessToken(viewer.id, name);
   })
   .delete("/tokens/:id", async ({ request, params }) => {

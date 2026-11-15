@@ -1,9 +1,7 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
 
 const WORKFLOW = `jobs:
   build:
@@ -44,7 +42,7 @@ async function settled(ctx: APIRequestContext, api: string, sha: string, want = 
 test("deploy jobs go to environments, wait for a reviewer where required, and show on the repository and pull requests", async ({ page }, info) => {
   test.setTimeout(3 * 60_000);
   const admin = await loginAdmin();
-  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: headers() });
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: originHeaders() });
   try {
     const owner = await createUser(admin);
     const reviewer = await createUser(admin);
@@ -52,16 +50,16 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     const repo = await createRepo(owner.ctx, unique("deploy"));
     const api = `/api/repos/${owner.username}/${repo}`;
     const auth = { username: owner.username, token: owner.token };
-    for (const u of [reviewer, writer]) await owner.ctx.put(`${api}/collaborators/${u.username}`, { data: { role: "write" }, headers: headers() });
-    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() })).ok()).toBe(true);
+    for (const u of [reviewer, writer]) await owner.ctx.put(`${api}/collaborators/${u.username}`, { data: { role: "write" }, headers: originHeaders() });
+    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() })).ok()).toBe(true);
 
     // Production: only main, and someone has to approve. Reviewers need write access.
-    expect((await owner.ctx.put(`${api}/environments/production`, { data: { branches: ["main"], reviewers: [reviewer.username] }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.put(`${api}/environments/production`, { data: { branches: ["main"], reviewers: [reviewer.username] }, headers: originHeaders() })).ok()).toBe(true);
     const reader = await createUser(admin);
-    await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: headers() });
-    expect((await owner.ctx.put(`${api}/environments/production`, { data: { reviewers: [reader.username] }, headers: headers() })).status()).toBe(400);
-    expect((await writer.ctx.put(`${api}/environments/production`, { data: { reviewers: [writer.username] }, headers: headers() })).status()).toBe(403);
-    expect((await owner.ctx.put(`${api}/environments/production`, { data: { branches: ["refs/heads/main"] }, headers: headers() })).status()).toBe(400);
+    await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: originHeaders() });
+    expect((await owner.ctx.put(`${api}/environments/production`, { data: { reviewers: [reader.username] }, headers: originHeaders() })).status()).toBe(400);
+    expect((await writer.ctx.put(`${api}/environments/production`, { data: { reviewers: [writer.username] }, headers: originHeaders() })).status()).toBe(403);
+    expect((await owner.ctx.put(`${api}/environments/production`, { data: { branches: ["refs/heads/main"] }, headers: originHeaders() })).status()).toBe(400);
 
     const src = workdir();
     gitOk(src, ["init", "-q"]);
@@ -84,7 +82,7 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
 
     // Only a reviewer may answer: not another writer, not even the owner.
     for (const who of [writer, owner])
-      expect((await who.ctx.post(`${api}/ci/jobs/${jobs.production.id}/review`, { data: { approve: true }, headers: headers() })).status()).toBe(403);
+      expect((await who.ctx.post(`${api}/ci/jobs/${jobs.production.id}/review`, { data: { approve: true }, headers: originHeaders() })).status()).toBe(403);
 
     await uiLogin(page, reviewer.username, reviewer.password);
     await page.goto(`${baseURL()}/${owner.username}/${repo}/ci/${run.id}`);
@@ -97,7 +95,7 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     expect(run.status).toBe("success");
     expect(jobs.production.log).toContain(`Approved by ${reviewer.username}`);
     expect(jobs.production.log).toContain("live on production");
-    expect((await reviewer.ctx.post(`${api}/ci/jobs/${jobs.production.id}/review`, { data: { approve: true }, headers: headers() })).status()).toBe(409);
+    expect((await reviewer.ctx.post(`${api}/ci/jobs/${jobs.production.id}/review`, { data: { approve: true }, headers: originHeaders() })).status()).toBe(409);
 
     // The repository home shows what runs where.
     await page.goto(`${baseURL()}/${owner.username}/${repo}`);
@@ -108,7 +106,7 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
 
     // A pull request from a feature branch: staging takes it, production skips the branch, and with
     // required checks the pull request can still merge, since deployments aren't checks.
-    expect((await owner.ctx.patch(api, { data: { requireChecks: true }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.patch(api, { data: { requireChecks: true }, headers: originHeaders() })).ok()).toBe(true);
     gitOk(src, ["checkout", "-q", "-b", "feature"]);
     writeFileSync(join(src, "app.txt"), "v2\n");
     gitOk(src, ["commit", "-qam", "v2"]);
@@ -120,7 +118,7 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     expect(jobs.production.status).toBe("skipped");
     expect(jobs.production.log).toContain("feature isn't allowed to deploy here");
     expect(jobs.production.deployment).toBeNull();
-    const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "v2", body: "", base: "main", head: "feature" }, headers: headers() })).json();
+    const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "v2", body: "", base: "main", head: "feature" }, headers: originHeaders() })).json();
     await page.goto(`${baseURL()}/${owner.username}/${repo}/pull/${pull.number}`);
     await expect(page.getByRole("link", { name: "Deployed to staging" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Deployed to production" })).toHaveCount(0);
@@ -128,7 +126,7 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     await expect(page.getByRole("button", { name: "Merge pull request" })).toBeEnabled();
 
     // A deploy job waiting for its review doesn't hold the pull request's checks either.
-    await owner.ctx.put(`${api}/environments/staging`, { data: { reviewers: [reviewer.username] }, headers: headers() });
+    await owner.ctx.put(`${api}/environments/staging`, { data: { reviewers: [reviewer.username] }, headers: originHeaders() });
     writeFileSync(join(src, "app.txt"), "v2b\n");
     gitOk(src, ["commit", "-qam", "v2b"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "feature"], auth);
@@ -136,11 +134,11 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     ({ run, jobs } = await settled(owner.ctx, api, v2b));
     expect(run.status).toBe("waiting");
     expect((await (await owner.ctx.get(`${api}/pulls/${pull.number}`)).json()).checks.status).toBe("success");
-    expect((await owner.ctx.post(`${api}/ci/runs/${run.id}/cancel`, { headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.post(`${api}/ci/runs/${run.id}/cancel`, { headers: originHeaders() })).ok()).toBe(true);
     // Dropping the waiting deployment by cancelling the run leaves the passed checks alone.
     ({ run } = await settled(owner.ctx, api, v2b, ["cancelled"]));
     expect((await (await owner.ctx.get(`${api}/pulls/${pull.number}`)).json()).checks.status).toBe("success");
-    await owner.ctx.put(`${api}/environments/staging`, { data: { reviewers: [] }, headers: headers() });
+    await owner.ctx.put(`${api}/environments/staging`, { data: { reviewers: [] }, headers: originHeaders() });
 
     // A reviewer can turn a deployment down, which fails the run; a waiting run can also be cancelled.
     gitOk(src, ["checkout", "-q", "main"]);
@@ -149,7 +147,7 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
     const v3 = gitOk(src, ["rev-parse", "HEAD"]).trim();
     ({ run, jobs } = await settled(owner.ctx, api, v3));
-    expect((await reviewer.ctx.post(`${api}/ci/jobs/${jobs.production.id}/review`, { data: { approve: false }, headers: headers() })).ok()).toBe(true);
+    expect((await reviewer.ctx.post(`${api}/ci/jobs/${jobs.production.id}/review`, { data: { approve: false }, headers: originHeaders() })).ok()).toBe(true);
     ({ run, jobs } = await settled(owner.ctx, api, v3, ["success", "failure"]));
     expect(run.status).toBe("failure");
     expect(jobs.production.log).toContain(`Rejected by ${reviewer.username}`);
@@ -164,7 +162,7 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     const v4 = gitOk(src, ["rev-parse", "HEAD"]).trim();
     ({ run } = await settled(owner.ctx, api, v4));
     expect(run.status).toBe("waiting");
-    expect((await owner.ctx.post(`${api}/ci/runs/${run.id}/cancel`, { headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.post(`${api}/ci/runs/${run.id}/cancel`, { headers: originHeaders() })).ok()).toBe(true);
     ({ run, jobs } = await settled(owner.ctx, api, v4, ["cancelled"]));
     expect(jobs.production.status).toBe("cancelled");
     expect(jobs.production.deployment!.status).toBe("cancelled");
@@ -188,7 +186,7 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     await page.getByRole("listitem", { name: "Environment staging" }).getByRole("button", { name: "Save environment" }).click();
     await expect(page.getByRole("listitem", { name: "Environment staging" })).toContainText("any branch · no approval · waits 5 min");
     expect((await writer.ctx.get(`${api}/environments/production/secrets`)).status()).toBe(403);
-    expect((await owner.ctx.put(`${api}/environments/production/secrets/DEPLOY_TOKEN`, { data: { value: "s3cret" }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.put(`${api}/environments/production/secrets/DEPLOY_TOKEN`, { data: { value: "s3cret" }, headers: originHeaders() })).ok()).toBe(true);
     expect(JSON.stringify(await (await owner.ctx.get(`${api}/environments/production/secrets`)).json())).not.toContain("s3cret");
 
     const pushMain = async (content: string) => {
@@ -200,10 +198,10 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
       return { sha, ...settledRun };
     };
     const activeSha = async () => (await (await reader.ctx.get(`${api}/environments`)).json()).environments.find((e: { name: string }) => e.name === "production").active.sha;
-    const approve = (jobId: number) => reviewer.ctx.post(`${api}/ci/jobs/${jobId}/review`, { data: { approve: true }, headers: headers() });
+    const approve = (jobId: number) => reviewer.ctx.post(`${api}/ci/jobs/${jobId}/review`, { data: { approve: true }, headers: originHeaders() });
 
     // Staging's wait timer from the editor above would hold every run below for 5 minutes.
-    expect((await owner.ctx.put(`${api}/environments/staging`, { data: { waitMinutes: 0 }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.put(`${api}/environments/staging`, { data: { waitMinutes: 0 }, headers: originHeaders() })).ok()).toBe(true);
 
     // A newer run approved first deploys, and the older one waiting for approval is superseded rather than
     // put the older commit back later.
@@ -220,24 +218,24 @@ test("deploy jobs go to environments, wait for a reviewer where required, and sh
     // Dropping the reviewers lets a deployment that waits for one go ahead.
     const v7 = await pushMain("v7");
     expect(v7.run.status).toBe("waiting");
-    expect((await owner.ctx.put(`${api}/environments/production`, { data: { reviewers: [] }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.put(`${api}/environments/production`, { data: { reviewers: [] }, headers: originHeaders() })).ok()).toBe(true);
     expect((await settled(owner.ctx, api, v7.sha, ["success", "failure"])).run.status).toBe("success");
     expect(await activeSha()).toBe(v7.sha);
 
     // Deleting an environment fails what waits for it instead of leaving it waiting for good.
-    await owner.ctx.put(`${api}/environments/production`, { data: { reviewers: [reviewer.username] }, headers: headers() });
+    await owner.ctx.put(`${api}/environments/production`, { data: { reviewers: [reviewer.username] }, headers: originHeaders() });
     const v8 = await pushMain("v8");
     expect(v8.run.status).toBe("waiting");
-    expect((await owner.ctx.delete(`${api}/environments/production`, { headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.delete(`${api}/environments/production`, { headers: originHeaders() })).ok()).toBe(true);
     const gone = await settled(owner.ctx, api, v8.sha, ["success", "failure"]);
     expect(gone.run.status).toBe("failure");
     expect(gone.jobs.production.log).toContain("the environment production was deleted");
 
     // A refused request doesn't create the environment it names.
-    expect((await owner.ctx.put(`${api}/environments/newenv`, { data: { reviewers: ["nobody-here"] }, headers: headers() })).status()).toBe(400);
+    expect((await owner.ctx.put(`${api}/environments/newenv`, { data: { reviewers: ["nobody-here"] }, headers: originHeaders() })).status()).toBe(400);
     const names = (await (await owner.ctx.get(`${api}/environments`)).json()).environments.map((e: { name: string }) => e.name);
     expect(names).not.toContain("newenv");
   } finally {
-    await admin.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+    await admin.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
   }
 });

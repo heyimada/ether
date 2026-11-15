@@ -5,18 +5,10 @@ import { useId, useState, type ReactNode } from "react";
 import { CiBadge, type CiStatus } from "../components/ci";
 import { Feed, type FeedPage } from "../components/feed";
 import { Avatar } from "../components/ui";
-import { api, timeAgo } from "../lib/api";
+import { api, type RepoRow } from "../lib/api";
+import { timeAgo } from "../lib/format";
 import { rise, staggered } from "../lib/motion";
 
-type RepoRow = {
-  owner: string;
-  name: string;
-  description: string;
-  visibility: "private" | "public";
-  relation: "owner" | "org" | "collaborator" | "public";
-  stars: number;
-  updatedAt: string;
-};
 type OrgRow = { name: string; role: "owner" | "member" };
 type Ref = { owner: string; repo: string; number: number; title: string };
 type Work = {
@@ -144,7 +136,6 @@ function Dashboard() {
 
 const TOP = 6;
 
-// A compact list of repository names, most recently active first, with the rest a click away.
 function RepoSection({
   title,
   repos,

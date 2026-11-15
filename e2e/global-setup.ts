@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 
 export const ADMIN = { username: "admin", password: "admin-password-1" };
 
-function freePort(): Promise<number> {
+export function freePort(): Promise<number> {
   return new Promise((ok, fail) => {
     const srv = createServer();
     srv.once("error", fail);

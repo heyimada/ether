@@ -1,23 +1,18 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
-
-type Run = { id: number; sha: string; workflowName: string; event: string; status: string; ref: string; message: string };
-const runsOf = async (ctx: APIRequestContext, api: string): Promise<Run[]> => (await (await ctx.get(`${api}/ci/runs`)).json()).runs;
+import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, runsOf, uiLogin, unique, workdir, type Run } from "./helpers";
 
 test("a workflow on a schedule runs from the default branch in the minute its cron names", async ({ page }, info) => {
   test.setTimeout(4 * 60_000);
   const admin = await loginAdmin();
-  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: headers() });
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: originHeaders() });
   try {
     const owner = await createUser(admin);
     const repo = await createRepo(owner.ctx, unique("cron"));
     const api = `/api/repos/${owner.username}/${repo}`;
     const auth = { username: owner.username, token: owner.token };
-    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() })).ok()).toBe(true);
     const remote = cloneUrl(owner.username, repo);
 
     // The next minute that's far enough off for the push to land first, as a cron for just that minute.
@@ -66,6 +61,6 @@ test("a workflow on a schedule runs from the default branch in the minute its cr
     const bad = gitOk(src, ["rev-parse", "HEAD"]).trim();
     await expect.poll(async () => (await runsOf(owner.ctx, api)).find((r) => r.sha === bad)?.message ?? "").toContain("more often than every 5 minutes");
   } finally {
-    await (await loginAdmin()).put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+    await (await loginAdmin()).put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
   }
 });

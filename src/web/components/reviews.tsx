@@ -2,9 +2,10 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Check, CircleDot, MessageSquare, Settings2, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { api, post, put, repoApi, timeAgo, type Issue, type RepoInfo } from "../lib/api";
+import { api, canWrite, post, put, repoApi, type Issue, type RepoInfo } from "../lib/api";
+import { plural, timeAgo } from "../lib/format";
 import { Markdown } from "./content";
-import { Avatar, ErrorNote, MENU_LABEL, onSubmit, PEOPLE, PERSON, SIDE_HEAD, useAction } from "./ui";
+import { Avatar, ErrorNote, MENU_LABEL, onSubmit, PEOPLE, PERSON, SIDE_HEAD, SIDE_TEXT, useAction } from "./ui";
 
 export type Review = {
   id: number;
@@ -29,7 +30,6 @@ export type ReviewData = {
 };
 
 const VERB = { approved: "approved these changes", changes_requested: "requested changes", commented: "reviewed" } as const;
-const SIDE_TEXT = "m-0 text-base text-muted wrap-anywhere";
 const REVIEW_STATE = "inline-flex items-center gap-1 whitespace-nowrap text-xs";
 const VERDICT_TEXT: Record<"approved" | "changes_requested" | "pending", string> = { approved: "text-open", changes_requested: "text-danger", pending: "text-muted" };
 const REVIEW_CARD: Record<Review["state"], string> = {
@@ -42,7 +42,7 @@ const LINE_COMMENT = "grid grid-cols-[minmax(0,2fr)_90px_minmax(0,3fr)_auto] max
 // Requested and past reviewers with their latest verdict; writers pick who to ask.
 export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: Issue; data: ReviewData }) {
   const router = useRouter();
-  const canEdit = info.role !== "read" && pull.state === "open";
+  const canEdit = canWrite(info.role) && pull.state === "open";
   const [people, setPeople] = useState<string[] | null>(null);
   const [teams, setTeams] = useState<string[]>([]);
   const [requested, setRequested] = useState(data.reviewRequests);
@@ -113,7 +113,7 @@ export function ReviewersSection({ info, pull, data }: { info: RepoInfo; pull: I
             <li className={PERSON}>
               <Users size={18} aria-hidden className="text-muted" />
               <span className="min-w-0 flex-1">
-                {data.teamRequestCount - requestedTeams.length} team{data.teamRequestCount - requestedTeams.length === 1 ? "" : "s"}
+                {plural(data.teamRequestCount - requestedTeams.length, "team")}
               </span>
               <span className={`${REVIEW_STATE} ${VERDICT_TEXT.pending}`}>
                 <CircleDot size={14} aria-hidden /> Pending
@@ -194,7 +194,6 @@ export function ReviewList({ reviews }: { reviews: Review[] }) {
   );
 }
 
-// Files from a unified diff, in order.
 const changedFiles = (diff: string) => [...diff.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((m) => m[1]);
 
 // Shown on the Files changed tab: collect line comments, then submit them with a verdict.
@@ -207,7 +206,7 @@ export function ReviewPanel({ info, pull, diff, me }: { info: RepoInfo; pull: Is
   const [pending, setPending] = useState<{ path: string; line: number; body: string }[]>([]);
   const [summary, setSummary] = useState("");
   const isAuthor = pull.author === me;
-  const canJudge = !isAuthor && info.role !== "read";
+  const canJudge = !isAuthor && canWrite(info.role);
   const [state, setState] = useState<"commented" | "approved" | "changes_requested">("commented");
   const submit = useAction(async () => {
     await post(`${repoApi(info.repo.owner, info.repo.name)}/pulls/${pull.number}/reviews`, { state, body: summary, comments: pending });

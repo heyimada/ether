@@ -1,9 +1,7 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
 
 const GRAPH = `name: Graph
 on: push
@@ -175,13 +173,13 @@ const at = (s: string | null) => new Date(s!).getTime();
 test("jobs wait for their needs, run side by side, fan out over a matrix and follow if:", async ({ page }, info) => {
   test.setTimeout(3 * 60_000);
   const admin = await loginAdmin();
-  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: headers() });
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: originHeaders() });
   try {
     const owner = await createUser(admin);
     const repo = await createRepo(owner.ctx, unique("graph"));
     const api = `/api/repos/${owner.username}/${repo}`;
     const auth = { username: owner.username, token: owner.token };
-    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() })).ok()).toBe(true);
 
     const src = workdir();
     gitOk(src, ["init", "-q", "-b", "main"]);
@@ -247,7 +245,7 @@ test("jobs wait for their needs, run side by side, fan out over a matrix and fol
     expect(at(newer.jobs.deploy.startedAt)).toBeGreaterThanOrEqual(at(first.jobs.deploy.finishedAt));
 
     // An older deploy waiting for a review doesn't hold back a newer one; once the newer one deploys, the older is superseded.
-    expect((await owner.ctx.put(`${api}/environments/production`, { data: { reviewers: [owner.username] }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.put(`${api}/environments/production`, { data: { reviewers: [owner.username] }, headers: originHeaders() })).ok()).toBe(true);
     writeFileSync(join(src, ".ether", "workflows", "graph.yml"), REVIEWED);
     gitOk(src, ["commit", "-qam", "reviewed"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
@@ -257,14 +255,14 @@ test("jobs wait for their needs, run side by side, fan out over a matrix and fol
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
     const fresh = gitOk(src, ["rev-parse", "HEAD"]).trim();
     const [waiting] = await waitingRun(owner.ctx, api, fresh);
-    expect((await owner.ctx.post(`${api}/ci/jobs/${waiting.id}/review`, { data: { approve: true }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.post(`${api}/ci/jobs/${waiting.id}/review`, { data: { approve: true }, headers: originHeaders() })).ok()).toBe(true);
     expect((await finishedRun(owner.ctx, api, fresh)).jobs.deploy.status).toBe("success");
     const superseded = (await finishedRun(owner.ctx, api, stale)).jobs.deploy;
     expect(superseded.status).toBe("skipped");
     expect(superseded.log).toContain("a newer run of main deploys to production");
 
     // Expressions: outputs across jobs, conditions on the run, and an if: that can't be decided fails its job.
-    await owner.ctx.delete(`${api}/environments/production`, { headers: headers() });
+    await owner.ctx.delete(`${api}/environments/production`, { headers: originHeaders() });
     writeFileSync(join(src, ".ether", "workflows", "graph.yml"), EXPRESSIONS);
     gitOk(src, ["commit", "-qam", "expressions"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
@@ -292,6 +290,6 @@ test("jobs wait for their needs, run side by side, fan out over a matrix and fol
     expect(fast.jobs["test (2)"].status).toBe("cancelled");
     expect(fast.run.status).toBe("failure");
   } finally {
-    await (await loginAdmin()).put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+    await (await loginAdmin()).put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
   }
 });

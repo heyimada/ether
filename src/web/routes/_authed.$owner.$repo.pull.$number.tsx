@@ -6,7 +6,11 @@ import { CiBadge, ciDone, EVENT_LABEL, type CiEvent, type CiStatus } from "../co
 import { IssueSidebar } from "../components/labels";
 import { ReviewList, ReviewPanel, ReviewersSection, type ReviewData } from "../components/reviews";
 import { ErrorNote, onSubmit, TabBar, useAction } from "../components/ui";
-import { api, patch, post, repoApi, shortSha, type Comment, type Commit, type Issue } from "../lib/api";
+import { api, canWrite, patch, post, repoApi, type Comment, type Commit, type Issue, type Role } from "../lib/api";
+import { plural, shortSha } from "../lib/format";
+import type { OwnerStatus } from "../../server/owners";
+import type { StackEntry } from "../../server/pulls";
+import { TITLE_MAX } from "../../shared/issues";
 
 type PullData = ReviewData & {
   pull: Issue;
@@ -15,18 +19,14 @@ type PullData = ReviewData & {
   // The ways this repository allows merging, its preferred one first.
   mergeMethods: MergeMethod[];
   // Open pull requests stacked with this one, bottom first (this one included); empty when it stands alone.
-  stack: { number: number; title: string; draft: boolean; base: string; head: string }[];
+  stack: StackEntry[];
   // Whether merging may delete the head branch: not the default or a protected branch, nor shared with another open pull request.
   headDeletable: boolean;
-  codeOwners: {
-    path: string;
-    groups: { pattern: string; line: number; owners: { name: string; valid: boolean }[]; files: string[]; fileCount: number; approvedBy: string | null }[];
-    incomplete: boolean;
-  } | null;
+  codeOwners: OwnerStatus | null;
   checks: { status: CiStatus; runs: { id: number; workflow: string; event: CiEvent; status: CiStatus }[] } | null;
   deployments: { environment: string; url: string | null; runId: number }[];
   comments: Comment[];
-  role: "owner" | "write" | "read";
+  role: Role;
   mergeable: boolean;
   conflicts: string[];
   commits: Commit[];
@@ -100,7 +100,6 @@ function PullPage() {
   );
 }
 
-// Point an open pull request at another branch: the author or anyone with write access.
 function BaseEditor({ pull }: { pull: Issue }) {
   const router = useRouter();
   const { info, me } = Route.useRouteContext();
@@ -111,7 +110,7 @@ function BaseEditor({ pull }: { pull: Issue }) {
     setEditing(false);
     await router.invalidate();
   });
-  if (!me || pull.state !== "open" || (me.username !== pull.author && info.role === "read")) return null;
+  if (!me || pull.state !== "open" || (me.username !== pull.author && !canWrite(info.role))) return null;
   if (!editing)
     return (
       <button
@@ -145,7 +144,6 @@ function BaseEditor({ pull }: { pull: Issue }) {
   );
 }
 
-// The pull requests stacked with this one, bottom first, so reviewers can walk the stack.
 function StackSection({ data }: { data: PullData }) {
   const { info } = Route.useRouteContext();
   return (
@@ -198,7 +196,7 @@ function MergeBox({ data }: { data: PullData }) {
     await router.invalidate();
   });
   // The author can move their own pull request between draft and ready, as can anyone who can merge.
-  const canToggleDraft = !!me && (me.username === pull.author || data.role !== "read");
+  const canToggleDraft = !!me && (me.username === pull.author || canWrite(data.role));
 
   if (pull.state === "merged")
     return (
@@ -225,7 +223,7 @@ function MergeBox({ data }: { data: PullData }) {
       </section>
     );
 
-  const canMerge = data.role !== "read";
+  const canMerge = canWrite(data.role);
   const needsApproval = data.requireApproval && data.reviewDecision !== "approved";
   const needsChecks = data.requireChecks && !!data.checks && data.checks.status !== "success";
   // The pull request whose branch this one goes into, if it's still open.
@@ -316,7 +314,7 @@ function MergeBox({ data }: { data: PullData }) {
                 {g.owners.length === 0 && <span className="text-muted">no owners</span>}
                 <span className="text-muted">
                   {" "}
-                  · {g.approvedBy ? `approved by ${g.approvedBy}` : `${g.fileCount} file${g.fileCount === 1 ? "" : "s"}`}
+                  · {g.approvedBy ? `approved by ${g.approvedBy}` : plural(g.fileCount, "file")}
                 </span>
               </li>
             ))}
@@ -341,7 +339,7 @@ function MergeBox({ data }: { data: PullData }) {
       {canMerge && method === "squash" && (
         <div className="mb-3 stack-sm">
           <label htmlFor="squash-title">Commit title</label>
-          <input id="squash-title" value={squashTitle} onChange={(e) => setSquashTitle(e.target.value)} maxLength={256} />
+          <input id="squash-title" value={squashTitle} onChange={(e) => setSquashTitle(e.target.value)} maxLength={TITLE_MAX} />
           <label htmlFor="squash-message">Commit message</label>
           <textarea id="squash-message" value={squashMessage} onChange={(e) => setSquashMessage(e.target.value)} rows={4} />
         </div>

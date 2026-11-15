@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { baseURL, createRepo, createUser, loginAdmin, uiLogin } from "./helpers";
+import { baseURL, createRepo, createUser, loginAdmin, originHeaders, uiLogin } from "./helpers";
 
 type RGB = [number, number, number];
 
@@ -104,8 +104,8 @@ test("the accent only accepts a hex colour", async () => {
   const admin = await loginAdmin();
   const me = await createUser(admin);
   for (const accent of ["red", "#12345", "#0b7285; } body { display: none", "url(x)", 7]) {
-    expect((await me.ctx.put("/api/me/appearance", { data: { accent }, headers: { Origin: baseURL() } })).status(), String(accent)).toBe(400);
+    expect((await me.ctx.put("/api/me/appearance", { data: { accent }, headers: originHeaders() })).status(), String(accent)).toBe(400);
   }
-  expect((await me.ctx.put("/api/me/appearance", { data: { accent: "#AbCdEf" }, headers: { Origin: baseURL() } })).ok()).toBe(true);
+  expect((await me.ctx.put("/api/me/appearance", { data: { accent: "#AbCdEf" }, headers: originHeaders() })).ok()).toBe(true);
   expect((await (await me.ctx.get("/api/me")).json()).user.accent).toBe("#abcdef");
 });

@@ -1,9 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
 
 test("stacked pull requests show their stack, move down when the one below merges, and can change base", async ({ page }, info) => {
   const admin = await loginAdmin();
@@ -11,7 +9,7 @@ test("stacked pull requests show their stack, move down when the one below merge
   const reader = await createUser(admin);
   const repo = await createRepo(author.ctx, unique("stack"));
   const api = `/api/repos/${author.username}/${repo}`;
-  await author.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: headers() });
+  await author.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: originHeaders() });
 
   // main ← a ← b ← c, one file each.
   const src = workdir();
@@ -27,7 +25,7 @@ test("stacked pull requests show their stack, move down when the one below merge
   }
   gitOk(src, ["push", "-q", cloneUrl(author.username, repo), "main", "a", "b", "c", "release"], { username: author.username, token: author.token });
   const open = async (title: string, base: string, head: string) =>
-    (await (await author.ctx.post(`${api}/pulls`, { data: { title, body: "", base, head }, headers: headers() })).json()).pull.number as number;
+    (await (await author.ctx.post(`${api}/pulls`, { data: { title, body: "", base, head }, headers: originHeaders() })).json()).pull.number as number;
   // A pull request out of the default branch (main into release) isn't something the others stack on.
   await open("Release", "release", "main");
   const one = await open("Add a", "main", "a");
@@ -50,7 +48,7 @@ test("stacked pull requests show their stack, move down when the one below merge
   await info.attach("stack", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 
   // Merging the bottom one moves the next one onto main; its diff is still just its own change.
-  const merged = await (await author.ctx.post(`${api}/pulls/${one}/merge`, { data: { deleteBranch: true }, headers: headers() })).json();
+  const merged = await (await author.ctx.post(`${api}/pulls/${one}/merge`, { data: { deleteBranch: true }, headers: originHeaders() })).json();
   expect([merged.deletedBranch, merged.retargeted]).toEqual([true, [two]]);
   const after = await get(two);
   expect(after.pull.base).toBe("main");
@@ -68,7 +66,7 @@ test("stacked pull requests show their stack, move down when the one below merge
   expect((await get(three)).stack).toEqual([]);
 
   // What a base can't be, and who can't change it.
-  const setBase = (ctx: typeof author.ctx, n: number, base: string) => ctx.patch(`${api}/issues/${n}`, { data: { base }, headers: headers() });
+  const setBase = (ctx: typeof author.ctx, n: number, base: string) => ctx.patch(`${api}/issues/${n}`, { data: { base }, headers: originHeaders() });
   expect((await setBase(author.ctx, three, "c")).status()).toBe(400);
   expect((await setBase(author.ctx, three, "nope")).status()).toBe(400);
   expect((await setBase(reader.ctx, three, "b")).status()).toBe(403);
@@ -95,9 +93,9 @@ test("merging without deleting the branch, or out of a long-lived one, moves not
   }
   gitOk(src, ["push", "-q", cloneUrl(author.username, repo), "main", "develop", "feat"], { username: author.username, token: author.token });
   // develop is protected: a long-lived branch, never deleted on merge.
-  await author.ctx.post(`${api}/branch-protection`, { data: { pattern: "develop", requirePullRequest: false, allowForcePush: false, allowDeletion: false }, headers: headers() });
+  await author.ctx.post(`${api}/branch-protection`, { data: { pattern: "develop", requirePullRequest: false, allowForcePush: false, allowDeletion: false }, headers: originHeaders() });
   const open = async (title: string, base: string, head: string) =>
-    (await (await author.ctx.post(`${api}/pulls`, { data: { title, body: "", base, head }, headers: headers() })).json()).pull.number as number;
+    (await (await author.ctx.post(`${api}/pulls`, { data: { title, body: "", base, head }, headers: originHeaders() })).json()).pull.number as number;
   // An open back-merge (develop into feat) would go from develop into itself, so feat isn't deleted with it there.
   const back = await open("Back-merge", "feat", "develop");
   const release = await open("Release", "main", "develop");
@@ -105,11 +103,11 @@ test("merging without deleting the branch, or out of a long-lived one, moves not
   const get = async (n: number) => (await author.ctx.get(`${api}/pulls/${n}`)).json();
   expect((await get(feat)).stack).toEqual([]);
   expect((await get(release)).headDeletable).toBe(false);
-  const merged = await (await author.ctx.post(`${api}/pulls/${release}/merge`, { data: { deleteBranch: true }, headers: headers() })).json();
+  const merged = await (await author.ctx.post(`${api}/pulls/${release}/merge`, { data: { deleteBranch: true }, headers: originHeaders() })).json();
   expect([merged.deletedBranch, merged.retargeted]).toEqual([false, []]);
   expect((await get(feat)).pull.base).toBe("develop");
   expect((await get(feat)).headDeletable).toBe(false);
-  const kept = await (await author.ctx.post(`${api}/pulls/${feat}/merge`, { data: { deleteBranch: true }, headers: headers() })).json();
+  const kept = await (await author.ctx.post(`${api}/pulls/${feat}/merge`, { data: { deleteBranch: true }, headers: originHeaders() })).json();
   expect([kept.deletedBranch, kept.retargeted]).toEqual([false, []]);
   expect((await get(back)).missing).toBe(false);
 });

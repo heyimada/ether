@@ -1,8 +1,11 @@
 import { useRouter } from "@tanstack/react-router";
+import type { Isolation } from "../../runner/protocol";
 import { LockKeyhole } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
-import { del, put, timeAgo } from "../lib/api";
+import { del, put } from "../lib/api";
+import { timeAgo } from "../lib/format";
 import { ErrorNote, Field, onSubmit, useAction } from "./ui";
+import { SECRET_MAX_KB, SECRET_NAME_MAX } from "../../shared/ci";
 
 export type CiSecret = { name: string; updatedAt: string; updatedBy: string | null };
 
@@ -17,7 +20,7 @@ export function CiSecrets({
 }: {
   base: string;
   secrets: CiSecret[];
-  isolation: "container" | "host";
+  isolation: Isolation;
   endpoint?: string;
   title?: string;
   intro?: ReactNode;
@@ -81,9 +84,9 @@ export function CiSecrets({
         <form className="stack-sm" onSubmit={onSubmit(save.run)}>
           <ErrorNote error={save.error} />
           <Field id={`${uid}-name`} label="Secret name" hint="Upper-case letters, digits and _, for example DEPLOY_KEY. Saving an existing name replaces its value.">
-            <input id={`${uid}-name`} className="font-mono" value={name} onChange={(e) => setName(e.target.value.toUpperCase())} required maxLength={64} pattern="[A-Z_][A-Z0-9_]*" />
+            <input id={`${uid}-name`} className="font-mono" value={name} onChange={(e) => setName(e.target.value.toUpperCase())} required maxLength={SECRET_NAME_MAX} pattern="[A-Z_][A-Z0-9_]*" />
           </Field>
-          <Field id={`${uid}-value`} label="Secret value" hint="Up to 64 KB. Several lines are fine, for example a private key.">
+          <Field id={`${uid}-value`} label="Secret value" hint={`Up to ${SECRET_MAX_KB} KB. Several lines are fine, for example a private key.`}>
             <textarea id={`${uid}-value`} className="font-mono min-h-[80px]" value={value} onChange={(e) => setValue(e.target.value)} required autoComplete="off" spellCheck={false} />
           </Field>
           <div>

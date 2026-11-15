@@ -6,8 +6,9 @@ import { ActivityCalendar, type Activity as Day } from "react-activity-calendar"
 import { Markdown } from "../components/content";
 import { toast } from "sonner";
 import { EventItem, type FeedEvent } from "../components/feed";
-import { Avatar, ErrorNote, ROW, TabBar, useAction } from "../components/ui";
-import { api, del, put, timeAgo } from "../lib/api";
+import { Avatar, ErrorNote, LANG_DOT, ROW, SIDE_HEADING, TabBar, useAction } from "../components/ui";
+import { api, del, put, type Person as ApiPerson } from "../lib/api";
+import { noun, plural, timeAgo } from "../lib/format";
 import { rise, staggered } from "../lib/motion";
 
 type RepoCard = {
@@ -51,7 +52,7 @@ type ProfileData = {
   contributions: { days: { date: string; count: number }[]; total: number; summary: { commits: number; pulls: number; issues: number; reviews: number } };
   activity: FeedEvent[];
 };
-type Person = { username: string; displayName: string; avatarVersion: number | null };
+type Person = Pick<ApiPerson, "username" | "displayName" | "avatarVersion">;
 type Tab = "overview" | "repositories" | "stars" | "followers" | "following";
 
 // Search params are matched partially by default, so the link without a tab counted as active on every
@@ -75,17 +76,14 @@ export const Route = createFileRoute("/_authed/$owner/")({
   component: Profile,
 });
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const linkText = (url: string) => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 
 const SECTION_TITLE = "m-0 text-lg";
-const SIDE_HEADING = "m-0 mb-2 text-base";
 const SUMMARY_ITEM = "px-4 py-3 text-sm text-muted";
 const PROFILE_NAME = "m-0 text-4xl tracking-tighter wrap-anywhere";
 const REPO_LINK = "inline-flex items-center gap-2 font-semibold wrap-anywhere";
 const REPO_GRID = "m-0 grid list-none grid-cols-[repeat(2,minmax(0,1fr))] gap-4 p-0 max-lg:grid-cols-[minmax(0,1fr)]";
 const META_ITEM = "inline-flex items-center gap-1";
-const LANG_DOT = "inline-block flex-none size-2.5 rounded-full shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--text)_15%,transparent)]";
 const FACT = "flex min-w-0 items-center gap-2 wrap-anywhere";
 const FACT_ICON = "flex-none text-muted";
 const FIGURE = "block text-2xl tracking-tighter tabular-nums text-fg";
@@ -230,7 +228,6 @@ function ProfileCard({ data }: { data: ProfileData }) {
   );
 }
 
-// Language, stars and last activity: what tells repositories apart at a glance.
 function RepoMeta({ r, updated = false }: { r: RepoCard; updated?: boolean }) {
   return (
     <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
@@ -323,16 +320,16 @@ function Overview({ data }: { data: ProfileData }) {
           </div>
           <ul className="m-0 grid list-none grid-cols-[repeat(4,minmax(0,1fr))] p-0 max-sm:grid-cols-[repeat(2,minmax(0,1fr))]" aria-label="Contribution summary">
             <li className={SUMMARY_ITEM}>
-              <strong className={FIGURE}>{s.commits}</strong> {s.commits === 1 ? "commit" : "commits"}
+              <strong className={FIGURE}>{s.commits}</strong> {noun(s.commits, "commit")}
             </li>
             <li className={`${SUMMARY_ITEM} border-border border-l`}>
-              <strong className={FIGURE}>{s.pulls}</strong> {s.pulls === 1 ? "pull request" : "pull requests"}
+              <strong className={FIGURE}>{s.pulls}</strong> {noun(s.pulls, "pull request")}
             </li>
             <li className={`${SUMMARY_ITEM} border-border border-l max-sm:border-t max-sm:border-l-0`}>
-              <strong className={FIGURE}>{s.issues}</strong> {s.issues === 1 ? "issue" : "issues"}
+              <strong className={FIGURE}>{s.issues}</strong> {noun(s.issues, "issue")}
             </li>
             <li className={`${SUMMARY_ITEM} border-border border-l max-sm:border-t`}>
-              <strong className={FIGURE}>{s.reviews}</strong> {s.reviews === 1 ? "review" : "reviews"}
+              <strong className={FIGURE}>{s.reviews}</strong> {noun(s.reviews, "review")}
             </li>
           </ul>
         </div>

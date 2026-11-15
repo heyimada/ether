@@ -1,9 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createToken, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { baseURL, cloneUrl, createRepo, createToken, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
 
 test("a second branch can be created from the branch picker, and the API checks what push would", async ({ page }, info) => {
   const admin = await loginAdmin();
@@ -12,7 +10,7 @@ test("a second branch can be created from the branch picker, and the API checks 
   const auth = { username: owner.username, token: await createToken(owner.ctx) };
   const repo = await createRepo(owner.ctx, unique("branches"));
   const api = `/api/repos/${owner.username}/${repo}`;
-  await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: headers() });
+  await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: originHeaders() });
 
   const src = workdir();
   gitOk(src, ["init", "-q", "-b", "main"]);
@@ -54,7 +52,7 @@ test("a second branch can be created from the branch picker, and the API checks 
   // The error belongs to that name: typing another one, or closing the picker, clears it.
   await picker.getByRole("combobox").fill("feature/other");
   await expect(picker.getByRole("alert")).toHaveCount(0);
-  const post = (data: object, ctx = owner.ctx) => ctx.post(`${api}/branches`, { data, headers: headers() });
+  const post = (data: object, ctx = owner.ctx) => ctx.post(`${api}/branches`, { data, headers: originHeaders() });
   expect((await post({ name: "docs", from: "main" })).status()).toBe(409);
   for (const name of ["a..b", "-x", "HEAD", "x.lock", "a b"]) expect((await post({ name, from: "main" })).status(), name).toBe(400);
   expect((await post({ name: "y", from: "nope" })).status()).toBe(400);
@@ -76,7 +74,7 @@ test("a second branch can be created from the branch picker, and the API checks 
   await expect(picker.getByRole("option")).toHaveCount(0);
 
   // Branch protection applies as it would to a push that creates the branch.
-  expect((await owner.ctx.post(`${api}/branch-protection`, { data: { pattern: "release/*", requirePullRequest: true, allowDeletion: true }, headers: headers() })).ok()).toBe(true);
+  expect((await owner.ctx.post(`${api}/branch-protection`, { data: { pattern: "release/*", requirePullRequest: true, allowDeletion: true }, headers: originHeaders() })).ok()).toBe(true);
   const refused = await post({ name: "release/1", from: "main" });
   expect(refused.status()).toBe(409);
   expect((await refused.json()).error).toContain("release/1 is protected");
@@ -84,7 +82,7 @@ test("a second branch can be created from the branch picker, and the API checks 
   // In a repository with only tags, the first branch becomes the default, as after a push.
   const tagsOnly = await createRepo(owner.ctx, unique("tags-only"));
   gitOk(src, ["push", "-q", cloneUrl(owner.username, tagsOnly), "v1"], auth);
-  const first = await owner.ctx.post(`/api/repos/${owner.username}/${tagsOnly}/branches`, { data: { name: "dev", from: "v1" }, headers: headers() });
+  const first = await owner.ctx.post(`/api/repos/${owner.username}/${tagsOnly}/branches`, { data: { name: "dev", from: "v1" }, headers: originHeaders() });
   expect(first.ok(), await first.text()).toBe(true);
   expect((await (await owner.ctx.get(`/api/repos/${owner.username}/${tagsOnly}`)).json()).repo.defaultBranch).toBe("dev");
 

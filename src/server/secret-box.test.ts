@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { LogMasker } from "./log-mask";
+import { LogMasker } from "../runner/log-mask";
 import { deriveKey, open, seal } from "./secret-box";
 
 const key = deriveKey("server secret", "ci secrets");

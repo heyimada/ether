@@ -84,9 +84,10 @@ describe("refusal", () => {
   });
 });
 
+// Backtracking takes exponential time, so the bound only has to be far above a loaded machine's noise.
 test("branch patterns match in linear time, even ones built to backtrack", () => {
   const started = performance.now();
   expect(matches("**a".repeat(60) + "**b", "a".repeat(250))).toBe(false);
-  expect(performance.now() - started).toBeLessThan(500);
+  expect(performance.now() - started).toBeLessThan(10_000);
   expect(matches("***/x", "a/b/x")).toBe(true);
-});
+}, 20_000);

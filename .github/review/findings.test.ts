@@ -215,7 +215,10 @@ test("an open code fence in model text is closed so it can't swallow the marker"
 
 test("a suggestion comes before the failure, so nothing the failure opens can swallow it", () => {
   for (const failure of ["```ts\nfoo(", "<pre>\nfoo(", "<script>"]) {
-    const f = finding({ failure, suggestion: { endLine: 10, code: "x\n" } });
-    expect(findingBody(f, "s1")).toStartWith(`**Important** (correctness): ${f.title}\n\n\`\`\`suggestion\nx\n\`\`\`\n\n${failure}`);
+    const body = findingBody(finding({ failure, suggestion: { endLine: 10, code: "x\n" } }), "s1");
+    expect(body).toStartWith("**Important** (correctness): Stream left open when the client disconnects\n\n```suggestion\nx\n```\n\n");
+    const at = (text: string) => body.indexOf(text);
+    expect(at("```suggestion")).toBeLessThan(at(failure));
+    expect(at(failure)).toBeLessThan(at("<!-- ether-review"));
   }
 });

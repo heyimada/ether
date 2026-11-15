@@ -4,6 +4,7 @@ import { auth } from "./auth";
 import { db } from "./db/client";
 import { accessToken, collaborator, instanceSetting, invite, orgMember, organization, repo, teamMember, teamRepo, user } from "./db/schema";
 import { repoPath } from "./git";
+import { INVITE_DAYS } from "../shared/accounts";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -40,7 +41,6 @@ export function anonymousRead(): boolean {
   return db.select().from(instanceSetting).where(eq(instanceSetting.key, "anonymousRead")).get()?.value === "true";
 }
 
-// For read-only endpoints: the signed-in user, or the visitor identity when allowed.
 export async function readerOrVisitor(req: Request): Promise<Viewer> {
   const viewer = await currentUser(req);
   if (viewer) return viewer;
@@ -58,6 +58,23 @@ export const findUser = (username: string) =>
   db.select({ id: user.id, username: user.username }).from(user).where(eq(user.username, username.toLowerCase())).get();
 
 export const isOrg = (userId: string) => !!db.select({ id: organization.userId }).from(organization).where(eq(organization.userId, userId)).get();
+
+// ---------- organizations ----------
+
+export function requireOrg(name: string) {
+  const row = findUser(name);
+  if (!row || !isOrg(row.id)) throw new HttpError(404, "No such organization");
+  return { id: row.id, name: row.username! };
+}
+
+export const orgRole = (orgId: string, userId: string) =>
+  db.select({ role: orgMember.role }).from(orgMember).where(and(eq(orgMember.orgId, orgId), eq(orgMember.userId, userId))).get()?.role ?? null;
+
+export function requireOrgOwner(viewer: Viewer, name: string) {
+  const org = requireOrg(name);
+  if (orgRole(org.id, viewer.id) !== "owner") throw new HttpError(403, "Only organization owners can do that");
+  return org;
+}
 
 // ---------- repositories ----------
 
@@ -205,34 +222,26 @@ export function createAccessToken(userId: string, name: string) {
   return { id: row.id, token };
 }
 
-// The account a personal access token belongs to, from the token alone (tokens are unique).
-export function tokenOwner(token: string): Viewer | null {
+function lookupToken(token: string, username?: string): Viewer | null {
   const row = db
     .select({ id: user.id, username: user.username, role: user.role, tokenId: accessToken.id })
     .from(accessToken)
     .innerJoin(user, eq(accessToken.userId, user.id))
-    .where(eq(accessToken.tokenHash, sha256(token)))
+    .where(and(eq(accessToken.tokenHash, sha256(token)), username === undefined ? undefined : eq(user.username, username.toLowerCase())))
     .get();
   if (!row?.username) return null;
   db.update(accessToken).set({ lastUsedAt: new Date() }).where(eq(accessToken.id, row.tokenId)).run();
   return { id: row.id, username: row.username, isAdmin: row.role === "admin" };
 }
 
-export function tokenUser(username: string, token: string): Viewer | null {
-  const row = db
-    .select({ id: user.id, username: user.username, role: user.role, tokenId: accessToken.id })
-    .from(accessToken)
-    .innerJoin(user, eq(accessToken.userId, user.id))
-    .where(and(eq(accessToken.tokenHash, sha256(token)), eq(user.username, username.toLowerCase())))
-    .get();
-  if (!row?.username) return null;
-  db.update(accessToken).set({ lastUsedAt: new Date() }).where(eq(accessToken.id, row.tokenId)).run();
-  return { id: row.id, username: row.username, isAdmin: row.role === "admin" };
-}
+// The account a personal access token belongs to, from the token alone (tokens are unique).
+export const tokenOwner = (token: string) => lookupToken(token);
+
+export const tokenUser = (username: string, token: string) => lookupToken(token, username);
 
 // ---------- invites ----------
 
-const INVITE_TTL = 7 * 24 * 3600 * 1000;
+const INVITE_TTL = INVITE_DAYS * 24 * 3600 * 1000;
 
 export function createInvite(createdBy: string) {
   const code = secret("inv_");

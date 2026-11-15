@@ -4,9 +4,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PROTOCOL } from "../src/runner/protocol";
-import { baseURL, cloneUrl, createRepo, createUser, git, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
+import { baseURL, cloneUrl, createRepo, createUser, git, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
 
-const headers = () => ({ Origin: baseURL() });
 const runner = (args: string[]) => spawnSync("bun", ["src/runner/main.ts", ...args], { encoding: "utf8" });
 
 const WORKFLOW = `on: push
@@ -55,25 +54,25 @@ const FINISHED = ["success", "failure", "cancelled", "error"];
 
 async function removeAllRunners(admin: APIRequestContext) {
   const { runners } = await (await admin.get("/api/admin/runners")).json();
-  for (const r of runners) await admin.delete(`/api/admin/runners/${r.id}`, { headers: headers() });
+  for (const r of runners) await admin.delete(`/api/admin/runners/${r.id}`, { headers: originHeaders() });
 }
 
 async function removeAllServerWide(admin: APIRequestContext) {
   const { runners } = await (await admin.get("/api/admin/runners")).json();
-  for (const r of runners) if (r.scope === "server") await admin.delete(`/api/admin/runners/${r.id}`, { headers: headers() });
+  for (const r of runners) if (r.scope === "server") await admin.delete(`/api/admin/runners/${r.id}`, { headers: originHeaders() });
 }
 
 test("a runner on another machine registers, runs jobs, reports back and can be stopped", async ({ page }, info) => {
   test.setTimeout(3 * 60_000);
   const admin = await loginAdmin();
-  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: headers() });
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: originHeaders() });
   let proc: ChildProcess | null = null;
   try {
     const owner = await createUser(admin);
     const repo = await createRepo(owner.ctx, unique("runner"));
     const api = `/api/repos/${owner.username}/${repo}`;
     const auth = { username: owner.username, token: owner.token };
-    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() })).ok()).toBe(true);
 
     // An admin adds a runner: the page shows the command to run on the other machine.
     await uiLogin(page, "admin", "admin-password-1");
@@ -124,7 +123,7 @@ test("a runner on another machine registers, runs jobs, reports back and can be 
     expect(first.jobs.build.log).not.toContain("GIT_CONFIG");
 
     // A runner on its host doesn't get secrets, as with the built-in one.
-    expect((await owner.ctx.put(`${api}/ci/secrets/DEPLOY_TOKEN`, { data: { value: "s3cret-value" }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.put(`${api}/ci/secrets/DEPLOY_TOKEN`, { data: { value: "s3cret-value" }, headers: originHeaders() })).ok()).toBe(true);
     writeFileSync(join(src, ".ether", "workflows", "w.yml"), SECRET);
     gitOk(src, ["commit", "-qam", "secret"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
@@ -144,7 +143,7 @@ test("a runner on another machine registers, runs jobs, reports back and can be 
       const { jobs } = await (await owner.ctx.get(`${api}/ci/runs/${started.run.id}`)).json();
       expect(jobs[0].log).toContain("started");
     }).toPass({ timeout: 20_000 });
-    expect((await owner.ctx.post(`${api}/ci/runs/${started.run.id}/cancel`, { headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.post(`${api}/ci/runs/${started.run.id}/cancel`, { headers: originHeaders() })).ok()).toBe(true);
     await expect(async () => {
       const { jobs } = await (await owner.ctx.get(`${api}/ci/runs/${started.run.id}`)).json();
       expect(jobs[0].status).toBe("cancelled");
@@ -184,30 +183,30 @@ test("a runner on another machine registers, runs jobs, reports back and can be 
     proc?.kill("SIGKILL");
     const fresh = await loginAdmin();
     await removeAllRunners(fresh);
-    await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+    await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
   }
 });
 
 test("a job's token opens its own repository, read-only, while the job runs; runners need their own token", async () => {
   const admin = await loginAdmin();
-  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: headers() });
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: originHeaders() });
   try {
     const owner = await createUser(admin);
     const repo = await createRepo(owner.ctx, unique("jobtoken"));
     const other = await createRepo(owner.ctx, unique("jobtoken-other"));
     const api = `/api/repos/${owner.username}/${repo}`;
     const auth = { username: owner.username, token: owner.token };
-    await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() });
+    await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() });
     const post = (path: string, token: string | null, data: unknown) =>
       fetch(`${baseURL()}/api${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(data) });
 
     // Only admins hand out registration tokens, and bad ones get nowhere.
-    expect((await owner.ctx.post("/api/admin/runners/registration", { headers: headers() })).status()).toBe(403);
+    expect((await owner.ctx.post("/api/admin/runners/registration", { headers: originHeaders() })).status()).toBe(403);
     expect((await owner.ctx.get("/api/admin/runners")).status()).toBe(403);
     expect((await post("/runner/register", null, { token: "nope", name: "x", isolation: "host" })).status).toBe(401);
     expect((await post("/runner/claim", "nope", { protocol: PROTOCOL })).status).toBe(401);
 
-    const { token: registration } = await (await admin.post("/api/admin/runners/registration", { headers: headers() })).json();
+    const { token: registration } = await (await admin.post("/api/admin/runners/registration", { headers: originHeaders() })).json();
     expect((await post("/runner/register", null, { token: registration, name: "bad name!", isolation: "host" })).status).toBe(400);
     const { token: runnerToken } = await (await post("/runner/register", null, { token: registration, name: "by-hand", isolation: "host" })).json();
     expect(runnerToken).toBeTruthy();
@@ -256,8 +255,8 @@ test("a job's token opens its own repository, read-only, while the job runs; run
     expect(git(workdir(), ["clone", "-q", cloneUrl(owner.username, repo), into()], jobAuth).code).not.toBe(0);
 
     // A runner with containers gets the job's secrets, and what it reports is masked here as well.
-    expect((await owner.ctx.put(`${api}/ci/secrets/DEPLOY_TOKEN`, { data: { value: "s3cret-value" }, headers: headers() })).ok()).toBe(true);
-    const { token: secondRegistration } = await (await admin.post("/api/admin/runners/registration", { headers: headers() })).json();
+    expect((await owner.ctx.put(`${api}/ci/secrets/DEPLOY_TOKEN`, { data: { value: "s3cret-value" }, headers: originHeaders() })).ok()).toBe(true);
+    const { token: secondRegistration } = await (await admin.post("/api/admin/runners/registration", { headers: originHeaders() })).json();
     const { token: containerToken } = await (await post("/runner/register", null, { token: secondRegistration, name: "in-containers", isolation: "container" })).json();
     writeFileSync(join(src, ".ether", "workflows", "w.yml"), SECRET);
     gitOk(src, ["commit", "-qam", "secret"]);
@@ -298,21 +297,21 @@ test("a job's token opens its own repository, read-only, while the job runs; run
   } finally {
     const fresh = await loginAdmin();
     await removeAllRunners(fresh);
-    await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+    await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
   }
 });
 
 test("a runner that gets removed ends what it runs before it exits", async () => {
   test.setTimeout(2 * 60_000);
   const admin = await loginAdmin();
-  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: headers() });
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: originHeaders() });
   let proc: ChildProcess | null = null;
   try {
     const owner = await createUser(admin);
     const repo = await createRepo(owner.ctx, unique("removed"));
     const api = `/api/repos/${owner.username}/${repo}`;
-    await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() });
-    const { token } = await (await admin.post("/api/admin/runners/registration", { headers: headers() })).json();
+    await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() });
+    const { token } = await (await admin.post("/api/admin/runners/registration", { headers: originHeaders() })).json();
     const config = join(mkdtempSync(join(tmpdir(), "ether-runner-e2e-")), "config.json");
     expect(runner(["register", "--url", baseURL(), "--token", token, "--name", "goes-away", "--isolation", "host", "--config", config]).status).toBe(0);
     // Two slots: the idle one is the first to hear the runner is gone.
@@ -344,14 +343,14 @@ test("a runner that gets removed ends what it runs before it exits", async () =>
     proc?.kill("SIGKILL");
     const fresh = await loginAdmin();
     await removeAllRunners(fresh);
-    await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+    await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
   }
 });
 
 test("runs-on, an environment's labels and a runner's scope decide who takes a job", async ({ page }, info) => {
   test.setTimeout(2 * 60_000);
   const admin = await loginAdmin();
-  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: headers() });
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: originHeaders() });
   try {
     const owner = await createUser(admin);
     const outsider = await createUser(admin);
@@ -360,12 +359,12 @@ test("runs-on, an environment's labels and a runner's scope decide who takes a j
     const ownApi = `/api/repos/${owner.username}/${own}`;
     const plainApi = `/api/repos/${owner.username}/${plain}`;
     const auth = { username: owner.username, token: owner.token };
-    for (const api of [ownApi, plainApi]) await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() });
+    for (const api of [ownApi, plainApi]) await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() });
 
     const post = (path: string, token: string | null, data: unknown = {}) =>
       fetch(`${baseURL()}/api${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(data) });
     const register = async (ctx: APIRequestContext, path: string, name: string, labels: string[]) => {
-      const { token } = await (await ctx.post(`${path}/runners/registration`, { headers: headers() })).json();
+      const { token } = await (await ctx.post(`${path}/runners/registration`, { headers: originHeaders() })).json();
       return (await (await post("/runner/register", null, { token, name, isolation: "container", labels })).json()).token as string;
     };
     const src = workdir();
@@ -393,16 +392,16 @@ test("runs-on, an environment's labels and a runner's scope decide who takes a j
     };
 
     // Who may add runners where.
-    await owner.ctx.put(`${ownApi}/collaborators/${outsider.username}`, { data: { role: "write" }, headers: headers() });
-    expect((await outsider.ctx.post(`${ownApi}/runners/registration`, { headers: headers() })).status()).toBe(403);
+    await owner.ctx.put(`${ownApi}/collaborators/${outsider.username}`, { data: { role: "write" }, headers: originHeaders() });
+    expect((await outsider.ctx.post(`${ownApi}/runners/registration`, { headers: originHeaders() })).status()).toBe(403);
     expect((await outsider.ctx.get(`${ownApi}/runners`)).status()).toBe(403);
     const org = unique("runnerorg").toLowerCase();
-    expect((await owner.ctx.post("/api/orgs", { data: { name: org }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.post("/api/orgs", { data: { name: org }, headers: originHeaders() })).ok()).toBe(true);
     const orgRepo = unique("inorg");
-    expect((await owner.ctx.post("/api/repos", { data: { name: orgRepo, owner: org }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.post("/api/repos", { data: { name: orgRepo, owner: org }, headers: originHeaders() })).ok()).toBe(true);
     const orgApi = `/api/repos/${org}/${orgRepo}`;
-    await owner.ctx.patch(orgApi, { data: { ciEnabled: true }, headers: headers() });
-    expect((await outsider.ctx.post(`/api/orgs/${org}/runners/registration`, { headers: headers() })).status()).toBe(403);
+    await owner.ctx.patch(orgApi, { data: { ciEnabled: true }, headers: originHeaders() });
+    expect((await outsider.ctx.post(`/api/orgs/${org}/runners/registration`, { headers: originHeaders() })).status()).toBe(403);
 
     const server = await register(admin, "/api/admin", "server-wide", ["linux"]);
     const repoOnly = await register(owner.ctx, ownApi, "repo-only", ["gpu"]);
@@ -412,7 +411,7 @@ test("runs-on, an environment's labels and a runner's scope decide who takes a j
     expect(everyone.runners.find((r: { name: string }) => r.name === "repo-only")).toMatchObject({ scope: "repository", labels: ["gpu"] });
     // An owner can't touch a runner outside their scope.
     const serverId = everyone.runners.find((r: { name: string }) => r.name === "server-wide").id;
-    expect((await owner.ctx.delete(`${ownApi}/runners/${serverId}`, { headers: headers() })).status()).toBe(404);
+    expect((await owner.ctx.delete(`${ownApi}/runners/${serverId}`, { headers: originHeaders() })).status()).toBe(404);
 
     // A repository's runner stays with its repository, and labels pick among those that can.
     await onlyFor(server, [repoOnly], plainApi, push(plain, ""));
@@ -430,11 +429,11 @@ test("runs-on, an environment's labels and a runner's scope decide who takes a j
     const { jobs } = await (await owner.ctx.get(`${plainApi}/ci/runs/${waiting.run.id}`)).json();
     expect(jobs[0].runnerProblem).toBe("none");
     expect((await claim(server)).status).toBe(204);
-    await owner.ctx.post(`${plainApi}/ci/runs/${waiting.run.id}/cancel`, { headers: headers() });
+    await owner.ctx.post(`${plainApi}/ci/runs/${waiting.run.id}/cancel`, { headers: originHeaders() });
 
     // An environment's labels hold whatever the workflow says.
-    expect((await owner.ctx.put(`${plainApi}/environments/production`, { data: { runners: ["secure"] }, headers: headers() })).ok()).toBe(true);
-    expect((await owner.ctx.put(`${plainApi}/environments/production`, { data: { runners: ["not valid"] }, headers: headers() })).status()).toBe(400);
+    expect((await owner.ctx.put(`${plainApi}/environments/production`, { data: { runners: ["secure"] }, headers: originHeaders() })).ok()).toBe(true);
+    expect((await owner.ctx.put(`${plainApi}/environments/production`, { data: { runners: ["not valid"] }, headers: originHeaders() })).status()).toBe(400);
     await uiLogin(page, owner.username, owner.password);
     await page.goto(`${baseURL()}/${owner.username}/${own}/settings`);
     const section = page.getByRole("region", { name: "Runners" });
@@ -467,7 +466,7 @@ test("runs-on, an environment's labels and a runner's scope decide who takes a j
     expect(gatedJobs[0].runnerProblem).toBe("none");
     await page.goto(`${baseURL()}/${owner.username}/${plain}/ci/${gatedRun.run.id}`);
     await expect(page.getByRole("region", { name: "Job job" })).toContainText("Waiting for a runner with secure: none that can take this job is registered.");
-    expect((await owner.ctx.put(`${plainApi}/environments/production`, { data: { runners: [] }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.put(`${plainApi}/environments/production`, { data: { runners: [] }, headers: originHeaders() })).ok()).toBe(true);
     expect((await runOf(owner.ctx, plainApi, gated, FINISHED)).jobs.job.runner).toBeNull();
 
     // A label that comes to nothing is refused, not dropped: the built-in runner mustn't take a job that asked
@@ -480,12 +479,12 @@ test("runs-on, an environment's labels and a runner's scope decide who takes a j
     expect(feed.some((e) => e.kind === "ci_failed" && e.payload.sha === empty)).toBe(true);
 
     // Deleting a repository takes its runners along.
-    expect((await owner.ctx.delete(ownApi, { headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.delete(ownApi, { headers: originHeaders() })).ok()).toBe(true);
     expect((await claim(repoOnly)).status).toBe(401);
   } finally {
     const fresh = await loginAdmin();
     await removeAllRunners(fresh);
-    await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+    await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
   }
 });
 
@@ -498,15 +497,15 @@ test("the built program runs a job in a container, with its secret masked", asyn
   const built = spawnSync("bun", ["build", "--compile", "src/runner/main.ts", "--outfile", binary], { encoding: "utf8" });
   expect(built.status, built.stderr).toBe(0);
   const admin = await loginAdmin();
-  await admin.put("/api/admin/settings", { data: { ciEnabled: true }, headers: headers() });
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true }, headers: originHeaders() });
   let proc: ChildProcess | null = null;
   try {
     const owner = await createUser(admin);
     const repo = await createRepo(owner.ctx, unique("built"));
     const api = `/api/repos/${owner.username}/${repo}`;
-    await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() });
-    await owner.ctx.put(`${api}/ci/secrets/DEPLOY_TOKEN`, { data: { value: "s3cret-value" }, headers: headers() });
-    const { token } = await (await admin.post("/api/admin/runners/registration", { headers: headers() })).json();
+    await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() });
+    await owner.ctx.put(`${api}/ci/secrets/DEPLOY_TOKEN`, { data: { value: "s3cret-value" }, headers: originHeaders() });
+    const { token } = await (await admin.post("/api/admin/runners/registration", { headers: originHeaders() })).json();
     const config = join(dir, "config.json");
     const registered = spawnSync(binary, ["register", "--url", baseURL(), "--token", token, "--name", "built", "--config", config], { encoding: "utf8" });
     expect(registered.status, registered.stderr).toBe(0);
@@ -532,6 +531,6 @@ test("the built program runs a job in a container, with its secret masked", asyn
     proc?.kill("SIGTERM");
     const fresh = await loginAdmin();
     await removeAllRunners(fresh);
-    await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+    await fresh.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
   }
 });
