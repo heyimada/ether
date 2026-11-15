@@ -4,7 +4,6 @@ import { refusal } from "../branch-rules";
 import * as git from "../git";
 import { branchRules, freshRepo } from "../protection";
 import { refsPushed } from "../push";
-import { sideEffect } from "../side-effect";
 
 // Git's own rules for branch names, plus what `git branch` refuses on top: a leading - and HEAD.
 function validBranch(name: string) {
@@ -47,8 +46,6 @@ export const branchRoutes = new Elysia().post("/repos/:owner/:repo/branches", as
   } catch {
     throw new HttpError(409, `${name} clashes with an existing branch`);
   }
-  // The first branch of a repository with only tags becomes its default, as after a push.
-  await sideEffect("Fixing HEAD", () => git.fixHead(a.path));
   // Creating a branch here is a push as far as the activity feed and CI are concerned. Only this branch is
   // news: anything someone pushed meanwhile is reported by their own push. The branch exists by now, so a
   // failure here mustn't turn into an error for it.

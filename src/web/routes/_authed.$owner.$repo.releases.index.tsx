@@ -1,7 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
-import { ReleaseCard, type Release } from "../components/releases";
-import { api, canWrite, repoApi } from "../lib/api";
+import { ReleaseCard } from "../components/releases";
+import { api, canWrite, repoApi, type Release } from "../lib/api";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/releases/")({
   loader: ({ context: { info } }) => api<{ releases: Release[] }>(`${repoApi(info.repo.owner, info.repo.name)}/releases`),

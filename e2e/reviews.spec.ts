@@ -1,9 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
 
 test("reviewers are requested, review with line comments, and can be required before merging", async ({ page, browser }, info) => {
   const admin = await loginAdmin();
@@ -11,8 +9,8 @@ test("reviewers are requested, review with line comments, and can be required be
   const reviewer = await createUser(admin);
   const repo = await createRepo(author.ctx, unique("review"));
   const api = `/api/repos/${author.username}/${repo}`;
-  await author.ctx.put(`${api}/collaborators/${reviewer.username}`, { data: { role: "write" }, headers: headers() });
-  expect((await author.ctx.patch(api, { data: { requireApproval: true }, headers: headers() })).ok()).toBe(true);
+  await author.ctx.put(`${api}/collaborators/${reviewer.username}`, { data: { role: "write" }, headers: originHeaders() });
+  expect((await author.ctx.patch(api, { data: { requireApproval: true }, headers: originHeaders() })).ok()).toBe(true);
 
   const src = workdir();
   gitOk(src, ["init", "-q"]);
@@ -23,7 +21,7 @@ test("reviewers are requested, review with line comments, and can be required be
   writeFileSync(join(src, "app.ts"), "export const a = 1;\nexport const b = eval('2');\n");
   gitOk(src, ["commit", "-qam", "add b"]);
   gitOk(src, ["push", "-q", cloneUrl(author.username, repo), "main", "change"], { username: author.username, token: author.token });
-  const { pull } = await (await author.ctx.post(`${api}/pulls`, { data: { title: "Add b", body: "", base: "main", head: "change" }, headers: headers() })).json();
+  const { pull } = await (await author.ctx.post(`${api}/pulls`, { data: { title: "Add b", body: "", base: "main", head: "change" }, headers: originHeaders() })).json();
 
   // The author requests a review from the sidebar.
   await uiLogin(page, author.username, author.password);
@@ -57,12 +55,12 @@ test("reviewers are requested, review with line comments, and can be required be
   await info.attach("changes-requested", { body: await r.screenshot({ fullPage: true }), contentType: "image/png" });
 
   // Authors can't approve their own pull request.
-  expect((await author.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "approved", body: "" }, headers: headers() })).status()).toBe(400);
+  expect((await author.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "approved", body: "" }, headers: originHeaders() })).status()).toBe(400);
   // Line comments must point at a line of the diff's new side.
   expect(
-    (await reviewer.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "commented", body: "", comments: [{ path: "nope.ts", line: 1, body: "x" }] }, headers: headers() })).status(),
+    (await reviewer.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "commented", body: "", comments: [{ path: "nope.ts", line: 1, body: "x" }] }, headers: originHeaders() })).status(),
   ).toBe(400);
-  expect((await author.ctx.post(`${api}/pulls/${pull.number}/merge`, { data: {}, headers: headers() })).status()).toBe(409);
+  expect((await author.ctx.post(`${api}/pulls/${pull.number}/merge`, { data: {}, headers: originHeaders() })).status()).toBe(409);
 
   // Approving unblocks the merge.
   await r.goto(`${baseURL()}/${author.username}/${repo}/pull/${pull.number}?tab=files`);

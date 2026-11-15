@@ -4,7 +4,6 @@ import { BookLock, CircleDot, Plus, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, repoApi, type Issue, type RepoRow } from "../lib/api";
 
-// Header search: jumps to any repository you can see, or to #number in the current one.
 export function JumpBox() {
   const navigate = useNavigate();
   const params = useParams({ strict: false }) as { owner?: string; repo?: string };

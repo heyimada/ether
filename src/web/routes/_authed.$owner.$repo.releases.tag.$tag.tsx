@@ -1,8 +1,8 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { ReleaseCard, type Release } from "../components/releases";
+import { ReleaseCard } from "../components/releases";
 import { ErrorNote, useAction } from "../components/ui";
-import { api, canWrite, del, repoApi } from "../lib/api";
+import { api, canWrite, del, repoApi, type Release } from "../lib/api";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/releases/tag/$tag")({
   loader: ({ context: { info }, params }) => api<{ release: Release }>(`${repoApi(info.repo.owner, info.repo.name)}/releases/${encodeURIComponent(params.tag)}`),

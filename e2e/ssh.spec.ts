@@ -3,9 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { closeSync, createReadStream, openSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, createRepo, createUser, loginAdmin, sshIdentity, sshUrl, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { baseURL, createRepo, createUser, loginAdmin, originHeaders, sshIdentity, sshUrl, uiLogin, unique, workdir } from "./helpers";
 
 test("people add SSH keys in Settings and use git over SSH with their repository permissions", async ({ page }, info) => {
   const admin = await loginAdmin();
@@ -13,7 +11,7 @@ test("people add SSH keys in Settings and use git over SSH with their repository
   const reader = await createUser(admin);
   const stranger = await createUser(admin);
   const repo = await createRepo(owner.ctx, unique("ssh"));
-  await owner.ctx.put(`/api/repos/${owner.username}/${repo}/collaborators/${reader.username}`, { data: { role: "read" }, headers: headers() });
+  await owner.ctx.put(`/api/repos/${owner.username}/${repo}/collaborators/${reader.username}`, { data: { role: "read" }, headers: originHeaders() });
 
   const mine = sshIdentity();
   await uiLogin(page, owner.username, owner.password);
@@ -31,7 +29,6 @@ test("people add SSH keys in Settings and use git over SSH with their repository
   await page.getByRole("tab", { name: "SSH" }).click();
   await expect(page.getByRole("textbox", { name: "Clone URL" })).toHaveValue(sshUrl(owner.username, repo));
 
-  // Clone, commit and push over SSH.
   const work = workdir();
   const cloned = mine.git(work, ["clone", "-q", sshUrl(owner.username, repo), "w"]);
   expect(cloned.code, cloned.err).toBe(0);
@@ -46,7 +43,7 @@ test("people add SSH keys in Settings and use git over SSH with their repository
 
   // A reader's key can fetch but not push; a stranger's key sees nothing.
   const theirs = sshIdentity();
-  expect((await reader.ctx.post("/api/me/ssh-keys", { data: { title: "r", key: theirs.publicKey }, headers: headers() })).ok()).toBe(true);
+  expect((await reader.ctx.post("/api/me/ssh-keys", { data: { title: "r", key: theirs.publicKey }, headers: originHeaders() })).ok()).toBe(true);
   const rwork = workdir();
   expect(theirs.git(rwork, ["clone", "-q", sshUrl(owner.username, repo), "w"]).code).toBe(0);
   writeFileSync(join(rwork, "w", "x.txt"), "x\n");
@@ -54,12 +51,12 @@ test("people add SSH keys in Settings and use git over SSH with their repository
   theirs.git(join(rwork, "w"), ["commit", "-q", "-m", "x"]);
   expect(theirs.git(join(rwork, "w"), ["push", "-q", "origin", "HEAD:main"]).code).not.toBe(0);
   const outsider = sshIdentity();
-  await stranger.ctx.post("/api/me/ssh-keys", { data: { title: "s", key: outsider.publicKey }, headers: headers() });
+  await stranger.ctx.post("/api/me/ssh-keys", { data: { title: "s", key: outsider.publicKey }, headers: originHeaders() });
   expect(outsider.git(workdir(), ["clone", "-q", sshUrl(owner.username, repo), "w"]).code).not.toBe(0);
   // Unregistered keys are refused, and a key can belong to one account only.
   expect(sshIdentity().git(workdir(), ["clone", "-q", sshUrl(owner.username, repo), "w"]).code).not.toBe(0);
-  expect((await stranger.ctx.post("/api/me/ssh-keys", { data: { title: "dup", key: mine.publicKey }, headers: headers() })).status()).toBe(409);
-  expect((await stranger.ctx.post("/api/me/ssh-keys", { data: { title: "junk", key: "ssh-rsa not-a-key" }, headers: headers() })).status()).toBe(400);
+  expect((await stranger.ctx.post("/api/me/ssh-keys", { data: { title: "dup", key: mine.publicKey }, headers: originHeaders() })).status()).toBe(409);
+  expect((await stranger.ctx.post("/api/me/ssh-keys", { data: { title: "junk", key: "ssh-rsa not-a-key" }, headers: originHeaders() })).status()).toBe(400);
 
   // Removing the key cuts access.
   await page.goto(`${baseURL()}/settings`);
@@ -86,7 +83,7 @@ test("git over SSH speaks protocol v2 when asked and still serves v0", async () 
   const owner = await createUser(admin);
   const repo = await createRepo(owner.ctx, unique("sshv2"));
   const me = sshIdentity();
-  await owner.ctx.post("/api/me/ssh-keys", { data: { title: "k", key: me.publicKey }, headers: headers() });
+  await owner.ctx.post("/api/me/ssh-keys", { data: { title: "k", key: me.publicKey }, headers: originHeaders() });
   const work = workdir();
   me.git(work, ["init", "-q", "-b", "main", "w"]);
   writeFileSync(join(work, "w", "a.txt"), "a\n");
@@ -113,7 +110,7 @@ test("a large incompressible push and clone stream through SSH intact", async ()
   const owner = await createUser(admin);
   const repo = await createRepo(owner.ctx, unique("sshbig"));
   const me = sshIdentity();
-  await owner.ctx.post("/api/me/ssh-keys", { data: { title: "k", key: me.publicKey }, headers: headers() });
+  await owner.ctx.post("/api/me/ssh-keys", { data: { title: "k", key: me.publicKey }, headers: originHeaders() });
   const src = workdir();
   me.git(src, ["init", "-q", "-b", "main"]);
   const fd = openSync(join(src, "blob.bin"), "w");
@@ -143,11 +140,10 @@ test("deploy keys reach one repository with their own role, managed by its owner
   const writer = await createUser(admin);
   const repo = await createRepo(owner.ctx, unique("deploy"));
   const other = await createRepo(owner.ctx, unique("other"));
-  await owner.ctx.put(`/api/repos/${owner.username}/${repo}/collaborators/${writer.username}`, { data: { role: "write" }, headers: headers() });
+  await owner.ctx.put(`/api/repos/${owner.username}/${repo}/collaborators/${writer.username}`, { data: { role: "write" }, headers: originHeaders() });
 
-  // Seed the repository with a personal key.
   const mine = sshIdentity();
-  await owner.ctx.post("/api/me/ssh-keys", { data: { title: "me", key: mine.publicKey }, headers: headers() });
+  await owner.ctx.post("/api/me/ssh-keys", { data: { title: "me", key: mine.publicKey }, headers: originHeaders() });
   const seed = workdir();
   mine.git(seed, ["init", "-q", "-b", "main", "w"]);
   writeFileSync(join(seed, "w", "a.txt"), "a\n");
@@ -182,7 +178,7 @@ test("deploy keys reach one repository with their own role, managed by its owner
 
   // A key with write access pushes.
   const pusher = sshIdentity();
-  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "Release bot", key: pusher.publicKey, write: true }, headers: headers() })).ok()).toBe(true);
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "Release bot", key: pusher.publicKey, write: true }, headers: originHeaders() })).ok()).toBe(true);
   const pwork = workdir();
   expect(pusher.git(pwork, ["clone", "-q", sshUrl(owner.username, repo), "w"]).code).toBe(0);
   writeFileSync(join(pwork, "w", "c.txt"), "c\n");
@@ -198,15 +194,15 @@ test("deploy keys reach one repository with their own role, managed by its owner
   expect(push?.actor).toBe(owner.username);
 
   // Keys are unique across accounts and repositories, and only owners manage deploy keys.
-  expect((await owner.ctx.post(`/api/repos/${owner.username}/${other}/deploy-keys`, { data: { title: "again", key: reader.publicKey }, headers: headers() })).status()).toBe(409);
-  expect((await writer.ctx.post("/api/me/ssh-keys", { data: { title: "stolen", key: reader.publicKey }, headers: headers() })).status()).toBe(409);
-  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "mine", key: mine.publicKey }, headers: headers() })).status()).toBe(409);
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${other}/deploy-keys`, { data: { title: "again", key: reader.publicKey }, headers: originHeaders() })).status()).toBe(409);
+  expect((await writer.ctx.post("/api/me/ssh-keys", { data: { title: "stolen", key: reader.publicKey }, headers: originHeaders() })).status()).toBe(409);
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "mine", key: mine.publicKey }, headers: originHeaders() })).status()).toBe(409);
   expect((await writer.ctx.get(`/api/repos/${owner.username}/${repo}/deploy-keys`)).status()).toBe(403);
-  expect((await writer.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "w", key: sshIdentity().publicKey }, headers: headers() })).status()).toBe(403);
+  expect((await writer.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "w", key: sshIdentity().publicKey }, headers: originHeaders() })).status()).toBe(403);
 
   // Titles lose control characters, so a key can't send escape sequences to whoever uses it.
   const shady = sshIdentity();
-  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "\u001b[31mevil\u0007\u202e", key: shady.publicKey }, headers: headers() })).ok()).toBe(true);
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/deploy-keys`, { data: { title: "\u001b[31mevil\u0007\u202e", key: shady.publicKey }, headers: originHeaders() })).ok()).toBe(true);
   const stored = await (await owner.ctx.get(`/api/repos/${owner.username}/${repo}/deploy-keys`)).json();
   expect(stored.keys.map((k: { title: string }) => k.title)).toContain("[31mevil");
   const hello = shady.ssh(["-T", `git@127.0.0.1`, "-p", String(process.env.ETHER_SSH_PORT)]);

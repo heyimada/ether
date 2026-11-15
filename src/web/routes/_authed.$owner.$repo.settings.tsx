@@ -6,7 +6,7 @@ import { DeployKeys, type DeployKey } from "../components/deploy-keys";
 import { Environments, type EnvironmentInfo } from "../components/environments";
 import { Runners, type RunnerInfo } from "../components/runners";
 import { ErrorNote, Field, onSubmit, ROW, useAction } from "../components/ui";
-import { api, del, isOwner, patch, put, repoApi } from "../lib/api";
+import { api, del, isOwner, patch, put, repoApi, type Person } from "../lib/api";
 import { DESCRIPTION_MAX } from "../../shared/repos";
 
 type Collaborator = { username: string; role: "read" | "write" };
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/_authed/$owner/$repo/settings")({
     const base = repoApi(info.repo.owner, info.repo.name);
     const [collabs, users, deploy, protection, secrets, envs, runners] = await Promise.all([
       api<{ collaborators: Collaborator[] }>(`${base}/collaborators`),
-      api<{ users: { username: string; isOrg: boolean }[] }>("/api/users"),
+      api<{ users: Pick<Person, "username" | "isOrg">[] }>("/api/users"),
       api<{ keys: DeployKey[] }>(`${base}/deploy-keys`),
       api<{ rules: BranchRule[] }>(`${base}/branch-protection`),
       api<{ secrets: CiSecret[] }>(`${base}/ci/secrets`),
@@ -167,7 +167,6 @@ function RepoSettings() {
                 type="checkbox"
                 checked={methods[key]}
                 onChange={(e) => setMethod.run({ [key]: e.target.checked })}
-                // The last one allowed can't be turned off.
                 disabled={setMethod.pending || (methods[key] && Object.values(methods).filter(Boolean).length === 1)}
               />
               <span>

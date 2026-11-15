@@ -76,7 +76,6 @@ export const reviewRoutes = new Elysia()
     db.transaction((tx) => {
       tx.delete(reviewRequest).where(eq(reviewRequest.issueId, row.issue.id)).run();
       if (ids.length) tx.insert(reviewRequest).values(ids.map((userId) => ({ issueId: row.issue.id, userId }))).run();
-      // Leaving `teams` out keeps the team requests as they are.
       if (teamIds) {
         tx.delete(teamReviewRequest).where(eq(teamReviewRequest.issueId, row.issue.id)).run();
         if (teamIds.length) tx.insert(teamReviewRequest).values(teamIds.map((teamId) => ({ issueId: row.issue.id, teamId }))).run();

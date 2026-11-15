@@ -3,19 +3,17 @@ import { BookOpen, FileText, Folder, FolderGit2, GitBranch, History, Star, Tag }
 import { motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import formatSize from "pretty-bytes";
-import { api, canWrite, repoApi, type Commit, type RepoInfo, type TreeEntry } from "../lib/api";
+import { api, canWrite, repoApi, type Commit, type Release, type RepoInfo, type TreeEntry } from "../lib/api";
 import { noun, plural, shortSha, timeAgo } from "../lib/format";
 import { rise, staggered } from "../lib/motion";
 import { CodeView, Markdown } from "./content";
-import { RefPicker, TAB_BUTTON } from "./ref-picker";
-import type { Release } from "./releases";
-import { Avatar, CopyButton, ROW, SETUP } from "./ui";
+import { RefPicker } from "./ref-picker";
+import { Avatar, CopyButton, ROW, SETUP, SIDE_HEADING, TAB_BUTTON } from "./ui";
 
 const LAYOUT_2 = "grid grid-cols-[1fr_260px] gap-6 max-lg:grid-cols-[1fr]";
 const MAIN_COL = "flex min-w-0 flex-col gap-4";
 const SIDE_COL = "flex min-w-0 flex-col gap-6";
 const CARD_HEADER = "flex flex-wrap items-center gap-3 rounded-t-md border-b border-border bg-surface-2 px-4 py-2.5";
-const SIDE_HEADING = "mt-0 mb-2 text-base";
 const SIDE_BODY = "m-0 text-base wrap-anywhere";
 const TD = "border-t border-border px-4 py-2 transition-colors duration-150";
 

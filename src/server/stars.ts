@@ -1,4 +1,4 @@
-import { count, inArray } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "./db/client";
 import { star } from "./db/schema";
 
@@ -14,3 +14,7 @@ export function starCounts(repoIds: number[]): Map<number, number> {
       .map((r) => [r.repoId, r.n]),
   );
 }
+
+// The repositories someone starred, most recent first.
+export const starredBy = (userId: string) =>
+  db.select({ repoId: star.repoId }).from(star).where(eq(star.userId, userId)).orderBy(desc(star.createdAt)).all().map((s) => s.repoId);

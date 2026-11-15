@@ -16,7 +16,6 @@ function findRun(a: RepoAccess, id: string) {
   return run;
 }
 
-// What the run page shows about a deploy job: where it goes, who may approve it, and whether the viewer can.
 function deploymentView(job: typeof ciJob.$inferSelect, repoId: number, viewerId: string) {
   const env = environmentOfJob(job, repoId);
   const d = deploymentOfJob(job.id);
@@ -39,7 +38,6 @@ async function subject(path: string, sha: string) {
 }
 
 export const ciRoutes = new Elysia()
-  // Newest first; ?workflow=<path> keeps one workflow's runs.
   .get("/repos/:owner/:repo/ci/runs", async ({ request, params, query }) => {
     const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
     const workflow = typeof query.workflow === "string" && query.workflow ? query.workflow : null;
@@ -61,7 +59,6 @@ export const ciRoutes = new Elysia()
       ),
     };
   })
-  // The default branch's workflows: when they run, what a manual run asks for, or why the file doesn't parse.
   .get("/repos/:owner/:repo/ci/workflows", async ({ request, params }) => {
     const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
     const branch = await git.headBranch(a.path);
@@ -79,7 +76,6 @@ export const ciRoutes = new Elysia()
       }),
     };
   })
-  // Runs a workflow that has workflow_dispatch, on a branch, with its inputs.
   .post("/repos/:owner/:repo/ci/workflows/dispatch", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "write");

@@ -334,7 +334,7 @@ async function boundedDiff(repo: string, args: string[]): Promise<{ diff: string
 
 export async function showCommit(repo: string, sha: string) {
   const [commit] = parseLog(await gitText(repo, ["log", "-1", `--format=${LOG_FORMAT}`, "--end-of-options", sha]));
-  // --first-parent style diff for merges keeps the view meaningful.
+  // A merge is diffed against its first parent only, so the view shows what the merge brought in.
   const parent = commit.parents[0];
   const { diff, truncated } = parent
     ? await boundedDiff(repo, ["diff", "--no-color", "-M", "--end-of-options", parent, sha])

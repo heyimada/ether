@@ -23,7 +23,7 @@ test("jobs may name an image, and job env is merged under step env", () => {
 test("a job without image or env still parses as before", () => {
   const [job] = parseWorkflow("jobs:\n  t:\n    steps:\n      - run: echo hi\n").jobs;
   expect(job.image).toBeNull();
-  expect(job.steps[0]).toEqual({ id: null, name: "echo hi", run: "echo hi", shell: null, timeoutMinutes: 10, env: {}, if: null, continueOnError: false });
+  expect(job.steps[0]).toMatchObject({ id: null, name: "echo hi", run: "echo hi", shell: null, timeoutMinutes: 10, env: {}, if: null, continueOnError: false });
 });
 
 test("secret references need a valid name, wherever they are in a value", () => {

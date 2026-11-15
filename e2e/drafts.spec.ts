@@ -1,9 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
 
 test("a draft pull request can't be merged until it's marked ready for review", async ({ page }, info) => {
   const admin = await loginAdmin();
@@ -11,7 +9,7 @@ test("a draft pull request can't be merged until it's marked ready for review", 
   const reader = await createUser(admin);
   const repo = await createRepo(author.ctx, unique("draft"));
   const api = `/api/repos/${author.username}/${repo}`;
-  await author.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: headers() });
+  await author.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: originHeaders() });
 
   const src = workdir();
   gitOk(src, ["init", "-q"]);
@@ -35,7 +33,7 @@ test("a draft pull request can't be merged until it's marked ready for review", 
   await info.attach("draft", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 
   // The API refuses the merge, and the list can show drafts on their own.
-  expect((await author.ctx.post(`${api}/pulls/${number}/merge`, { headers: headers() })).status()).toBe(409);
+  expect((await author.ctx.post(`${api}/pulls/${number}/merge`, { headers: originHeaders() })).status()).toBe(409);
   const drafts = await (await author.ctx.get(`${api}/pulls?draft=true`)).json();
   expect(drafts.items.map((p: { number: number; draft: boolean }) => [p.number, p.draft])).toEqual([[Number(number), true]]);
   expect((await (await author.ctx.get(`${api}/pulls?draft=false`)).json()).items).toEqual([]);
@@ -43,7 +41,7 @@ test("a draft pull request can't be merged until it's marked ready for review", 
   await expect(page.getByRole("img", { name: "Draft" })).toBeVisible();
 
   // Someone with read access who didn't write it can't change that.
-  expect((await reader.ctx.patch(`${api}/issues/${number}`, { data: { draft: false }, headers: headers() })).status()).toBe(403);
+  expect((await reader.ctx.patch(`${api}/issues/${number}`, { data: { draft: false }, headers: originHeaders() })).status()).toBe(403);
 
   // Ready for review: now it merges like any other, and can go back to being a draft.
   await page.goto(`${baseURL()}/${author.username}/${repo}/pull/${number}`);
@@ -56,5 +54,5 @@ test("a draft pull request can't be merged until it's marked ready for review", 
   await expect(page.getByText("merged this pull request")).toBeVisible();
 
   // A merged pull request can't become a draft again.
-  expect((await author.ctx.patch(`${api}/issues/${number}`, { data: { draft: true }, headers: headers() })).status()).toBe(409);
+  expect((await author.ctx.patch(`${api}/issues/${number}`, { data: { draft: true }, headers: originHeaders() })).status()).toBe(409);
 });

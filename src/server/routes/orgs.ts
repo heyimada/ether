@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
+import { NAME_MAX } from "../../shared/accounts";
 import { randomUUID } from "node:crypto";
 import { HttpError, findUser, isOrg, orgRole, requireOrg, requireOrgOwner, requireUser } from "../access";
 import { RESERVED, USERNAME_RE } from "../auth-plugins";
@@ -7,7 +8,7 @@ import { db } from "../db/client";
 import { orgMember, organization, profile, repo, team, teamMember, teamRepo, user } from "../db/schema";
 import { applyProfilePatch, saveAvatar, upsertProfile } from "../profile";
 
-const TEAM_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+const TEAM_RE = new RegExp(`^[A-Za-z0-9][A-Za-z0-9-]{0,${NAME_MAX - 1}}$`);
 
 function requireTeam(orgId: string, name: string) {
   const t = db.select().from(team).where(and(eq(team.orgId, orgId), eq(team.name, name.toLowerCase()))).get();

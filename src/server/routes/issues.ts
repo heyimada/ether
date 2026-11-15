@@ -19,7 +19,6 @@ const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max
 
 export type LabelOut = { name: string; color: string; description: string };
 
-// Labels and assignees for a batch of issues, in two queries.
 function issueMeta(issueIds: number[]) {
   const labels = new Map<number, LabelOut[]>();
   const assignees = new Map<number, string[]>();
@@ -101,7 +100,6 @@ function listIssues(a: RepoAccess, isPull: boolean, q: Record<string, string | u
         db.select({ id: issueLabel.issueId }).from(issueLabel).innerJoin(label, eq(label.id, issueLabel.labelId)).where(and(eq(label.repoId, a.repo.id), eq(label.name, q.label.toLowerCase()))),
       ),
     );
-  // ?draft=true lists only drafts, ?draft=false only pull requests ready for review.
   if (isPull && (q.draft === "true" || q.draft === "false")) filters.push(eq(issue.draft, q.draft === "true"));
   if (q.assignee)
     filters.push(
@@ -125,7 +123,6 @@ function listIssues(a: RepoAccess, isPull: boolean, q: Record<string, string | u
   return { items: presentAll(rows), open, closed };
 }
 
-// Environments currently running the pull request's head commit.
 async function headDeployments(a: RepoAccess, row: IssueRow) {
   if (!row.issue.headRef) return [];
   const sha = await git.resolveCommit(a.path, `refs/heads/${row.issue.headRef}`);

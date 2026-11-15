@@ -90,11 +90,9 @@ export function notifyThread(issueId: number, reason: Reason, actorId: string, t
   notify(rest, reason, actorId, t);
 }
 
-// Team members, for review requests made of a team.
 export const teamMembers = (teamIds: number[]) =>
   teamIds.length ? db.select({ id: teamMember.userId }).from(teamMember).where(inArray(teamMember.teamId, teamIds)).all().map((m) => m.id) : [];
 
-// Seeing an issue or pull request reads its notifications.
 export function markRead(userId: string, repoId: number, issueNumber: number) {
   db.update(notification)
     .set({ readAt: new Date() })

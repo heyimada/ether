@@ -194,7 +194,6 @@ export function ReviewList({ reviews }: { reviews: Review[] }) {
   );
 }
 
-// Files from a unified diff, in order.
 const changedFiles = (diff: string) => [...diff.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((m) => m[1]);
 
 // Shown on the Files changed tab: collect line comments, then submit them with a verdict.

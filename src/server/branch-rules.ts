@@ -1,4 +1,4 @@
-// Pure branch protection logic, shared by the server and the pre-receive hook (which has no database).
+// Pure branch protection logic, shared by the server and the `update` hook (which has no database).
 
 export type BranchRule = { pattern: string; requirePullRequest: boolean; allowForcePush: boolean; allowDeletion: boolean };
 
@@ -71,9 +71,7 @@ export type RefUpdate = { old: string; new: string; ref: string };
 const isZero = (sha: string) => /^0+$/.test(sha);
 
 export type PushContext = {
-  // Whether old is contained in new, asked of git.
   isAncestor: (old: string, next: string) => Promise<boolean>;
-  // The repository's branch names right now.
   branches: () => Promise<string[]>;
   // Ether has never seen a branch in this repository, so nothing created now can be a deleted one coming back.
   freshRepo: boolean;

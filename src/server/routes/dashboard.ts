@@ -2,7 +2,8 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { readableRepos, readerOrVisitor, requireUser } from "../access";
 import { db } from "../db/client";
-import { issue, issueAssignee, orgMember, organization, star, user } from "../db/schema";
+import { starredBy } from "../stars";
+import { issue, issueAssignee, orgMember, organization, user } from "../db/schema";
 import { listEvents } from "../events";
 import { headChecks, requestedOf, reviewDecision } from "../pulls";
 
@@ -58,13 +59,8 @@ export const dashboardRoutes = new Elysia()
       author: db.select({ u: user.username }).from(user).where(eq(user.id, p.authorId)).get()?.u ?? "",
     }));
 
-    const starred = db
-      .select({ repoId: star.repoId })
-      .from(star)
-      .where(eq(star.userId, viewer.id))
-      .orderBy(desc(star.createdAt))
-      .all()
-      .flatMap((s) => (byId.has(s.repoId) ? [{ ...at(s.repoId), description: byId.get(s.repoId)!.description }] : []))
+    const starred = starredBy(viewer.id)
+      .flatMap((id) => (byId.has(id) ? [{ ...at(id), description: byId.get(id)!.description }] : []))
       .slice(0, 5);
 
     // Counts of what the viewer can see, never of the whole server.

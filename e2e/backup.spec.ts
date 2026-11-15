@@ -1,22 +1,12 @@
 import { expect, request, test } from "@playwright/test";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ADMIN, cloneUrl, createRepo, createToken, git, gitOk, loginAdmin, workdir } from "./helpers";
+import { ADMIN, cloneUrl, createRepo, createToken, freePort, git, gitOk, loginAdmin, workdir } from "./helpers";
 
 const root = join(import.meta.dirname, "..");
 const cli = (env: Record<string, string>, ...args: string[]) => spawnSync("bun", ["src/server/cli.ts", ...args], { cwd: root, env: { ...process.env, ...env }, encoding: "utf8" });
-
-const freePort = () =>
-  new Promise<number>((ok) => {
-    const s = createServer();
-    s.listen(0, "127.0.0.1", () => {
-      const port = (s.address() as { port: number }).port;
-      s.close(() => ok(port));
-    });
-  });
 
 test("a backup taken while the server runs restores into a working instance", async () => {
   const admin = await loginAdmin();

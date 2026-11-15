@@ -49,7 +49,6 @@ const ICONS: Record<FeedEvent["kind"], LucideIcon> = {
   ci_failed: CircleX,
 };
 
-// Colour of the event's icon: the same state colours as issue and pull request lists.
 const TONE: Partial<Record<FeedEvent["kind"], string>> = {
   issue_opened: "text-open",
   issue_reopened: "text-open",
@@ -99,7 +98,6 @@ function IssueLink({ e }: { e: FeedEvent<IssueKind> }) {
 
 const REVIEW_VERB = { approved: "approved", changes_requested: "requested changes on", commented: "reviewed" } as Record<string, string>;
 
-// What happened, as a sentence that starts with who did it.
 function sentence(e: FeedEvent): ReactNode {
   const who = (
     <Link to="/$owner" params={{ owner: e.actor }} className="font-bold text-fg">
@@ -202,7 +200,6 @@ function sentence(e: FeedEvent): ReactNode {
 
 const SHOWN = 3;
 
-// Extra lines under the sentence: commit subjects, a comment excerpt, the failed run.
 function Detail({ e }: { e: FeedEvent }) {
   const params = { owner: e.owner, repo: e.repo };
   if (e.kind === "push" && e.payload.shown?.length) {
@@ -279,7 +276,6 @@ export function EventItem({ e, i, avatar = true }: { e: FeedEvent; i: number; av
 
 const dayLabel = (d: Date) => (isToday(d) ? "Today" : isYesterday(d) ? "Yesterday" : format(d, d.getFullYear() === new Date().getFullYear() ? "EEEE, MMMM d" : "MMMM d, yyyy"));
 
-// Events grouped under a heading per day, newest first, with older pages on demand.
 export function Feed({ initial, empty }: { initial: FeedPage; empty: ReactNode }) {
   const [events, setEvents] = useState(initial.events);
   const [next, setNext] = useState(initial.next);

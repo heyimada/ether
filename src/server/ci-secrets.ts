@@ -9,7 +9,6 @@ import { SECRET_NAME_RE } from "./ci-workflow";
 import { MAX_SECRET, SECRET_MAX_KB } from "../shared/ci";
 
 
-// The value to store for a secret someone sets, in a repository or an environment.
 export function secretValue(name: string, body: unknown): string {
   if (!SECRET_NAME_RE.test(name)) throw new HttpError(400, "Secret names are upper-case letters, digits and _, not starting with a digit, and not CI or CI_…");
   const value = (body as { value?: unknown } | undefined)?.value;
@@ -78,8 +77,8 @@ export function deleteEnvironmentSecret(environmentId: number, name: string): bo
   return true;
 }
 
-// The values a job asks for, or a message saying which one can't be provided. A deploy job looks in its
-// environment first, then in the repository.
+// Throws naming a secret that isn't set or can't be decrypted. A deploy job looks in its environment first,
+// then in the repository.
 export function loadSecrets(repoId: number, names: string[], environmentId: number | null = null): Map<string, string> {
   if (!names.length) return new Map();
   const repoRows = db.select().from(ciSecret).where(and(eq(ciSecret.repoId, repoId), inArray(ciSecret.name, names))).all();

@@ -2,9 +2,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
 
 // The container runtime the server would find, if any.
 const runtime = ["docker", "podman"].find((cli) => spawnSync(cli, ["version"], { stdio: "ignore" }).status === 0) ?? null;
@@ -32,7 +30,7 @@ test("owners manage CI secrets that can't be read back; writers and readers can'
   const writer = await createUser(admin);
   const repo = await createRepo(owner.ctx, unique("secrets"));
   const api = `/api/repos/${owner.username}/${repo}`;
-  await owner.ctx.put(`${api}/collaborators/${writer.username}`, { data: { role: "write" }, headers: headers() });
+  await owner.ctx.put(`${api}/collaborators/${writer.username}`, { data: { role: "write" }, headers: originHeaders() });
 
   await uiLogin(page, owner.username, owner.password);
   await page.goto(`${baseURL()}/${owner.username}/${repo}/settings`);
@@ -49,11 +47,11 @@ test("owners manage CI secrets that can't be read back; writers and readers can'
   expect(JSON.stringify(listed)).not.toContain("QUFBQUJC");
   expect(listed.secrets.map((s: { name: string }) => s.name)).toEqual(["DEPLOY_KEY"]);
   expect((await writer.ctx.get(`${api}/ci/secrets`)).status()).toBe(403);
-  expect((await writer.ctx.put(`${api}/ci/secrets/STOLEN`, { data: { value: "x" }, headers: headers() })).status()).toBe(403);
-  expect((await owner.ctx.put(`${api}/ci/secrets/lower`, { data: { value: "x" }, headers: headers() })).status()).toBe(400);
-  expect((await owner.ctx.put(`${api}/ci/secrets/CI_TOKEN`, { data: { value: "x" }, headers: headers() })).status()).toBe(400);
-  expect((await owner.ctx.put(`${api}/ci/secrets/EMPTY`, { data: { value: "" }, headers: headers() })).status()).toBe(400);
-  expect((await owner.ctx.delete(`${api}/ci/secrets/NOPE`, { headers: headers() })).status()).toBe(404);
+  expect((await writer.ctx.put(`${api}/ci/secrets/STOLEN`, { data: { value: "x" }, headers: originHeaders() })).status()).toBe(403);
+  expect((await owner.ctx.put(`${api}/ci/secrets/lower`, { data: { value: "x" }, headers: originHeaders() })).status()).toBe(400);
+  expect((await owner.ctx.put(`${api}/ci/secrets/CI_TOKEN`, { data: { value: "x" }, headers: originHeaders() })).status()).toBe(400);
+  expect((await owner.ctx.put(`${api}/ci/secrets/EMPTY`, { data: { value: "" }, headers: originHeaders() })).status()).toBe(400);
+  expect((await owner.ctx.delete(`${api}/ci/secrets/NOPE`, { headers: originHeaders() })).status()).toBe(404);
 
   await page.getByRole("button", { name: "Remove DEPLOY_KEY" }).click();
   await expect(page.getByRole("list", { name: "CI secrets" })).toHaveCount(0);
@@ -62,16 +60,16 @@ test("owners manage CI secrets that can't be read back; writers and readers can'
 // A repository with both secrets and a workflow that checks isolation, pushed with CI turned on as `isolation`.
 async function pushIsolationWorkflow(isolation: "container" | "host") {
   const admin = await loginAdmin();
-  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: isolation }, headers: headers() });
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: isolation }, headers: originHeaders() });
   const owner = await createUser(admin);
   const repo = await createRepo(owner.ctx, unique("isolated"));
   const api = `/api/repos/${owner.username}/${repo}`;
   for (const [name, value] of [["DEPLOY_KEY", DEPLOY_KEY], ["TOKEN", TOKEN]])
-    expect((await owner.ctx.put(`${api}/ci/secrets/${name}`, { data: { value }, headers: headers() })).ok()).toBe(true);
-  expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() })).ok()).toBe(true);
+    expect((await owner.ctx.put(`${api}/ci/secrets/${name}`, { data: { value }, headers: originHeaders() })).ok()).toBe(true);
+  expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() })).ok()).toBe(true);
   // A deploy job's environment secret replaces the repository secret of the same name.
-  expect((await owner.ctx.put(`${api}/environments/prod-test`, { data: {}, headers: headers() })).ok()).toBe(true);
-  expect((await owner.ctx.put(`${api}/environments/prod-test/secrets/TOKEN`, { data: { value: ENV_TOKEN }, headers: headers() })).ok()).toBe(true);
+  expect((await owner.ctx.put(`${api}/environments/prod-test`, { data: {}, headers: originHeaders() })).ok()).toBe(true);
+  expect((await owner.ctx.put(`${api}/environments/prod-test/secrets/TOKEN`, { data: { value: ENV_TOKEN }, headers: originHeaders() })).ok()).toBe(true);
 
   const hostDb = join(process.env.ETHER_DATA!, "ether.db");
   const src = workdir();
@@ -139,7 +137,7 @@ test("on the host, jobs that use secrets are refused before anything runs", asyn
     expect(jobs.build.log).toContain("only passed to jobs that run in containers");
     expect(jobs.build.log).not.toContain("checkout ok");
   } finally {
-    await admin.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+    await admin.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
   }
 });
 
@@ -168,6 +166,6 @@ test("in a container, a job gets its checkout and secrets (masked in the log) bu
     // Every job's container is gone afterwards.
     expect(spawnSync(runtime!, ["ps", "--all", "--quiet", "--filter", "label=ether.ci=1"], { encoding: "utf8" }).stdout.trim()).toBe("");
   } finally {
-    await admin.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
+    await admin.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
   }
 });

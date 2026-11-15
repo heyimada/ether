@@ -1,9 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createUser, git, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { baseURL, cloneUrl, createRepo, createUser, git, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
 
 test("pull requests squash or rebase onto their base, and the ones stacked on them follow", async ({ page }, info) => {
   const admin = await loginAdmin();
@@ -36,16 +34,16 @@ test("pull requests squash or rebase onto their base, and the ones stacked on th
   commit("s2.txt", "side two");
   gitOk(src, ["push", "-q", remote, "main", "feat", "upper", "upper2", "side"], auth);
   const open = async (title: string, base: string, head: string) =>
-    (await (await author.ctx.post(`${api}/pulls`, { data: { title, body: "", base, head }, headers: headers() })).json()).pull.number as number;
+    (await (await author.ctx.post(`${api}/pulls`, { data: { title, body: "", base, head }, headers: originHeaders() })).json()).pull.number as number;
   const feat = await open("Feature", "main", "feat");
   const upper = await open("Upper", "feat", "upper");
   const upper2 = await open("Upper two", "upper", "upper2");
   const side = await open("Side", "main", "side");
 
   // The repository can turn merge commits off, but not every way to merge.
-  expect((await author.ctx.patch(api, { data: { allowMergeCommit: false }, headers: headers() })).ok()).toBe(true);
-  expect((await author.ctx.patch(api, { data: { allowSquashMerge: false, allowRebaseMerge: false }, headers: headers() })).status()).toBe(400);
-  expect((await author.ctx.post(`${api}/pulls/${side}/merge`, { data: { method: "merge" }, headers: headers() })).status()).toBe(409);
+  expect((await author.ctx.patch(api, { data: { allowMergeCommit: false }, headers: originHeaders() })).ok()).toBe(true);
+  expect((await author.ctx.patch(api, { data: { allowSquashMerge: false, allowRebaseMerge: false }, headers: originHeaders() })).status()).toBe(400);
+  expect((await author.ctx.post(`${api}/pulls/${side}/merge`, { data: { method: "merge" }, headers: originHeaders() })).status()).toBe(409);
 
   // Squash from the page, with an edited title; the branch is deleted, so the pull request on it moves to main.
   await uiLogin(page, author.username, author.password);
@@ -85,7 +83,7 @@ test("pull requests squash or rebase onto their base, and the ones stacked on th
   expect(git(join(probe, "p"), ["push", "origin", "HEAD:refs/ether/pull/1/head"], auth).code).not.toBe(0);
 
   // Rebase keeps each commit, without a merge commit.
-  const rebased = await (await author.ctx.post(`${api}/pulls/${side}/merge`, { data: { method: "rebase" }, headers: headers() })).json();
+  const rebased = await (await author.ctx.post(`${api}/pulls/${side}/merge`, { data: { method: "rebase" }, headers: originHeaders() })).json();
   expect(rebased.method).toBe("rebase");
   expect(log("main")).toEqual([["side two", 1], ["side one", 1], ["Add the feature (#1)", 1], ["base", 1]]);
 });

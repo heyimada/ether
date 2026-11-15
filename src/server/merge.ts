@@ -107,7 +107,7 @@ async function restackOnto(a: RepoAccess, retargeted: number[], since: string, o
     const { n, since, onto } = queue.shift()!;
     const up = db.select({ head: issue.headRef }).from(issue).where(and(eq(issue.repoId, a.repo.id), eq(issue.number, n))).get();
     if (!up?.head || longLived(up.head)) continue;
-    const moved = await git.restack(a.path, up.head, since, onto, committer).catch(() => ({ ok: false as const }));
+    const moved = await git.restack(a.path, up.head, since, onto, committer).catch((e) => (console.error(`Restacking ${up.head} failed:`, e), { ok: false as const }));
     if (!moved.ok) continue;
     restacked.push(n);
     movedRefs.push({ before: { name: up.head, kind: "branch", sha: moved.before }, after: { name: up.head, kind: "branch", sha: moved.sha } });

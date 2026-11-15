@@ -50,7 +50,6 @@ test("a job runs its steps in a checkout of its commit, with the run's variables
   expect(log).toContain("first.txt");
   expect(log).not.toContain("second.txt");
   expect(log).toContain("true/uno/dos");
-  // env is the step's own.
   expect(log).toContain("second step: .");
 });
 
@@ -80,12 +79,16 @@ test("stopping a job ends what its step started", async () => {
   let log = "";
   const started = Date.now();
   const job = startJob(assignment([step("echo started; sleep 60 & wait"), step("echo never")]), { log: (t) => void (log += t) }, "test");
-  while (!log.includes("started")) await Bun.sleep(20);
+  // The step's own output line, not the "▶ echo started" line printed before it spawns.
+  while (!/^started$/m.test(log)) {
+    if (Date.now() - started > 20_000) throw new Error(`step never started:\n${log}`);
+    await Bun.sleep(20);
+  }
   job.stop();
   expect(await job.done).toBe("cancelled");
   expect(Date.now() - started).toBeLessThan(30_000);
   expect(log).not.toContain("▶ echo never");
-});
+}, 45_000);
 
 test("a job stopped during its checkout ends there", async () => {
   let log = "";

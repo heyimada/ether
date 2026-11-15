@@ -9,7 +9,6 @@ import { MAX_ASSIGNEES } from "../../shared/issues";
 
 const PILL = "inline-flex items-center rounded-full px-2 text-xs font-semibold leading-5 whitespace-nowrap transition-transform duration-150 ease-out";
 
-// A label in its own colour, with whichever text colour reads on it.
 export function LabelPill({ label, info }: { label: Label; info?: RepoInfo }) {
   const bg = colord(label.color);
   const style = { background: label.color, color: bg.contrast("#ffffff") >= bg.contrast("#1f2328") ? "#ffffff" : "#1f2328" };
@@ -33,7 +32,6 @@ export function LabelPill({ label, info }: { label: Label; info?: RepoInfo }) {
   );
 }
 
-// Labels and assignees beside an issue or pull request; writers edit them from menus.
 export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue: Issue; children?: ReactNode }) {
   const router = useRouter();
   const base = `${repoApi(info.repo.owner, info.repo.name)}/issues/${issue.number}`;

@@ -2,13 +2,12 @@ import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { CopyButton, ErrorNote, useAction } from "../components/ui";
 import { Runners, type RunnerInfo } from "../components/runners";
-import { api, post, put, type Instance } from "../lib/api";
+import { api, post, put, type Instance, type Person } from "../lib/api";
 import { timeAgo } from "../lib/format";
 import { requireAccount } from "../lib/require-account";
 import { INVITE_DAYS } from "../../shared/accounts";
 
 type Invite = { createdAt: string; expiresAt: string; usedBy: string | null };
-type UserRow = { username: string; isAdmin: boolean; isOrg: boolean };
 
 export const Route = createFileRoute("/_authed/site-admin")({
   beforeLoad: ({ context, location }) => {
@@ -19,7 +18,7 @@ export const Route = createFileRoute("/_authed/site-admin")({
   loader: async () => {
     const [invites, users, instance, ci, runners] = await Promise.all([
       api<{ invites: Invite[] }>("/api/invites"),
-      api<{ users: UserRow[] }>("/api/users"),
+      api<{ users: Pick<Person, "username" | "isAdmin" | "isOrg">[] }>("/api/users"),
       api<Pick<Instance, "anonymousRead" | "ciEnabled" | "ciIsolation">>("/api/instance"),
       api<{ runtime: string | null }>("/api/admin/ci-runtime"),
       api<{ runners: RunnerInfo[] }>("/api/admin/runners"),

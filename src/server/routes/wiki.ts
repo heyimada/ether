@@ -3,10 +3,10 @@ import { Elysia } from "elysia";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
 import { record } from "../events";
 import * as git from "../git";
-import { titleToSlug, WIKI_MESSAGE_MAX } from "../../shared/repos";
+import { titleToSlug, WIKI_MESSAGE_MAX, WIKI_TITLE_MAX } from "../../shared/repos";
 
 // Page slugs are file names without ".md"; titles show hyphens as spaces, like GitHub wikis.
-const SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+const SLUG_RE = new RegExp(`^[A-Za-z0-9][A-Za-z0-9._-]{0,${WIKI_TITLE_MAX - 1}}$`);
 const slugToTitle = (slug: string) => slug.replace(/-/g, " ");
 
 function checkSlug(slug: string) {

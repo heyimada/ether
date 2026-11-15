@@ -5,7 +5,6 @@ import { createContext, useContext, useLayoutEffect, useRef, useState, type Form
 import type { Person } from "../lib/api";
 import { snappy } from "../lib/motion";
 
-// Class lists shared by many screens.
 export const ROW = "flex flex-wrap items-center gap-3";
 export const MENU_LABEL = "px-2.5 py-2 text-sm wrap-anywhere";
 export const MENU_SEP = "my-1 h-px bg-border";
@@ -14,6 +13,9 @@ export const PERSON = "flex items-center gap-2 text-sm";
 export const SIDE_HEAD = "flex items-center justify-between gap-2";
 export const SIDE_TEXT = "m-0 text-base text-muted wrap-anywhere";
 export const SETUP = "overflow-x-auto rounded-sm border border-border bg-surface-2 p-3";
+export const SIDE_HEADING = "m-0 mb-2 text-base";
+export const TAB_BUTTON =
+  "min-h-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-1.5 shadow-none [transition:border-color_220ms_var(--ease-out),background-color_150ms_ease] hover:not-disabled:border-transparent hover:not-disabled:bg-surface-3 active:transform-none aria-selected:border-b-accent aria-selected:font-semibold aria-selected:hover:not-disabled:border-b-accent";
 export const LANG_DOT = "inline-block size-2.5 flex-none rounded-full shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--text)_15%,transparent)]";
 
 export const Status = ({ text }: { text: string }) =>
@@ -23,7 +25,6 @@ export const Status = ({ text }: { text: string }) =>
     </span>
   ) : null;
 
-// Wraps an async submit handler with pending and error state.
 export function useAction<A extends unknown[]>(fn: (...args: A) => Promise<unknown>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);

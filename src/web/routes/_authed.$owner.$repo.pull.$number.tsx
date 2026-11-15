@@ -100,7 +100,6 @@ function PullPage() {
   );
 }
 
-// Point an open pull request at another branch: the author or anyone with write access.
 function BaseEditor({ pull }: { pull: Issue }) {
   const router = useRouter();
   const { info, me } = Route.useRouteContext();
@@ -145,7 +144,6 @@ function BaseEditor({ pull }: { pull: Issue }) {
   );
 }
 
-// The pull requests stacked with this one, bottom first, so reviewers can walk the stack.
 function StackSection({ data }: { data: PullData }) {
   const { info } = Route.useRouteContext();
   return (

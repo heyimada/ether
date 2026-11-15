@@ -5,9 +5,9 @@ import { db } from "../db/client";
 import { issue, issueAssignee, issueLabel, label, team, user } from "../db/schema";
 import { notify } from "../notify";
 import { sideEffect } from "../side-effect";
-import { LABEL_DESCRIPTION_MAX, MAX_ASSIGNEES } from "../../shared/issues";
+import { LABEL_DESCRIPTION_MAX, LABEL_NAME_MAX, MAX_ASSIGNEES } from "../../shared/issues";
 
-const LABEL_RE = /^[^\s,][^,]{0,49}$/;
+const LABEL_RE = new RegExp(`^[^\\s,][^,]{0,${LABEL_NAME_MAX - 1}}$`);
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
 
 const labelsOf = (repoId: number) =>

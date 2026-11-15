@@ -12,7 +12,6 @@ import { parseOutputs, readOutputFile } from "./step-output";
 // By default each job runs in a container (see container.ts) and sees nothing of the machine. Everything
 // this does on Ether's behalf comes in through the assignment and goes out through the channel.
 
-// The shell a host step runs with when it names none.
 const hostShell = (shell: Shell | null): Shell => shell ?? (Bun.which("bash") ? "bash" : process.platform === "win32" ? "cmd" : "sh");
 
 // Runs a step's script file. Only the path is on the command line, where `ps` would show a secret in the script.
@@ -180,7 +179,6 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
         }
         append(masked(`▶ ${name}\n`));
         const started = Date.now();
-        // Steps write their outputs to this file, a fresh one each, and their script is read from another.
         const tag = `${index}-${randomBytes(6).toString("hex")}`;
         const outputFile = box ? `/tmp/ether-ci-output-${tag}` : join(work!, `output-${tag}`);
         const shell = box ? step.shell : hostShell(step.shell);

@@ -1,19 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import formatSize from "pretty-bytes";
 import { FileArchive, Package, Tag } from "lucide-react";
-import { repoApi, type RepoInfo } from "../lib/api";
+import { repoApi, type Release, type RepoInfo } from "../lib/api";
 import { timeAgo } from "../lib/format";
 import { Markdown } from "./content";
-
-export type Release = {
-  tag: string;
-  title: string;
-  notes: string;
-  prerelease: boolean;
-  author: string | null;
-  createdAt: string;
-  assets: { name: string; size: number }[];
-};
 
 export function ReleaseCard({ info, release, latest, headingLevel = 2 }: { info: RepoInfo; release: Release; latest?: boolean; headingLevel?: 1 | 2 }) {
   const params = { owner: info.repo.owner, repo: info.repo.name };

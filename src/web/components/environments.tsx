@@ -11,7 +11,6 @@ import { ENVIRONMENT_NAME_MAX, MAX_REVIEWERS, MAX_WAIT_MINUTES } from "../../sha
 export type DeploymentRow = { id: number; runId: number; sha: string; ref: string; status: string; url: string | null; actor: string | null; createdAt: string };
 export type EnvironmentInfo = { name: string; branches: string[]; waitMinutes: number; reviewers: string[]; runners: string[]; latest: DeploymentRow | null; active: DeploymentRow | null };
 
-// What an environment's rules amount to, in words.
 export function rulesSummary(e: Pick<EnvironmentInfo, "branches" | "reviewers" | "waitMinutes" | "runners">) {
   return [
     e.branches.length ? `only ${e.branches.join(", ")}` : "any branch",

@@ -1,7 +1,7 @@
 import { and, count, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { rmSync } from "node:fs";
-import { dataPath } from "../config";
+import { releaseDir } from "../config";
 import { HttpError, findUser, isOrg, orgRole, readableRepos, requireRepo, requireUser, readerOrVisitor } from "../access";
 import { ownerText, ownersFor } from "../codeowners";
 import { readCodeOwners } from "../owners";
@@ -173,7 +173,7 @@ export const repoRoutes = new Elysia()
     db.delete(repo).where(eq(repo.id, a.repo.id)).run();
     git.removeRepo(a.path);
     git.removeRepo(git.wikiPath(a.path));
-    for (const r of releases) rmSync(dataPath("releases", String(r.id)), { recursive: true, force: true });
+    for (const r of releases) rmSync(releaseDir(r.id), { recursive: true, force: true });
     return { ok: true };
   })
   // ---------- collaborators ----------
@@ -279,7 +279,6 @@ export const repoRoutes = new Elysia()
     const act = await git.activity(a.path, sha);
     return { ...act, authors: withUsernames(act.authors) };
   })
-  // Languages of the default branch by bytes, largest first.
   .get("/repos/:owner/:repo/languages", async ({ request, params }) => {
     const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");

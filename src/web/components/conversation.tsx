@@ -136,7 +136,6 @@ function CommentCard({ author, at, body, i = 0 }: { author: string; at: string; 
   );
 }
 
-// The opening post, its comments, the reply box, and close/reopen.
 export function Conversation({ info, issue, comments, me }: { info: RepoInfo; issue: Issue; comments: Comment[]; me: string | null }) {
   const router = useRouter();
   const [body, setBody] = useState("");

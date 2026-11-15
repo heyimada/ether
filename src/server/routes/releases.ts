@@ -3,7 +3,7 @@ import { Elysia } from "elysia";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
-import { dataPath } from "../config";
+import { releaseDir } from "../config";
 import { db } from "../db/client";
 import { release, releaseAsset, user } from "../db/schema";
 import { record } from "../events";
@@ -12,7 +12,6 @@ import { BodyIncomplete, BodyTooLarge, writeBody } from "../upload";
 import { ASSET_MAX_MB, MAX_ASSET, RELEASE_TITLE_MAX, TAG_MAX } from "../../shared/repos";
 
 const ASSET_RE = /^[A-Za-z0-9_][A-Za-z0-9._+-]{0,127}$/;
-const releaseDir = (id: number) => dataPath("releases", String(id));
 
 // Git's own rules for ref names; no repository needed.
 function validTag(tag: string) {

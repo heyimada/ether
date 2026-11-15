@@ -12,7 +12,6 @@ import { sideEffect } from "./side-effect";
 
 export type LoadedOwners = { path: string; co: CodeOwners } | { path: string; co: null; problems: Problem[] };
 
-// The first CODEOWNERS file at a commit, parsed.
 export async function readCodeOwners(repoPath: string, rev: string): Promise<LoadedOwners | null> {
   for (const path of CODEOWNERS_PATHS) {
     const blob = await git.readBlob(repoPath, rev, path);
@@ -132,7 +131,6 @@ export async function requestCodeOwners(repoId: number, number: number) {
   void sideEffect("Notifying", () => notify(asked, "review_requested", pr.authorId, { repoId, issueNumber: number, title: pr.title }));
 }
 
-// A review by a team member answers the requests made of their teams.
 export function answerTeamRequests(issueId: number, userId: string) {
   const mine = db.select({ id: teamMember.teamId }).from(teamMember).where(eq(teamMember.userId, userId)).all().map((t) => t.id);
   if (mine.length) db.delete(teamReviewRequest).where(and(eq(teamReviewRequest.issueId, issueId), inArray(teamReviewRequest.teamId, mine))).run();

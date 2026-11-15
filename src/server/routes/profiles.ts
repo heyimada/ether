@@ -1,16 +1,16 @@
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { HttpError, findUser, orgRole, readableRepos, readerOrVisitor, requireUser, type ReadableRepo } from "../access";
 import { db } from "../db/client";
-import { comment, commitEmail, follow, issue, orgMember, organization, pin, profile, review, star, team, user } from "../db/schema";
+import { comment, commitEmail, follow, issue, orgMember, organization, pin, profile, review, team, user } from "../db/schema";
 import { pushSuggestions } from "../contrib";
 import { lastActivity, listEvents } from "../events";
 import { primaryLanguage } from "../languages";
 import * as git from "../git";
 import { applyProfilePatch, avatarDir, profileRow, saveAvatar, upsertProfile } from "../profile";
-import { starCounts } from "../stars";
+import { starCounts, starredBy } from "../stars";
 import { MAX_PINS } from "../../shared/profiles";
 
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
@@ -173,13 +173,7 @@ export const profileRoutes = new Elysia()
       ? people(db.select({ id: orgMember.userId }).from(orgMember).where(eq(orgMember.orgId, target.id)).all().map((m) => m.id))
       : [];
     const myOrgRole = org ? orgRole(target.id, viewer.id) : null;
-    const starredRepos = db
-      .select({ repoId: star.repoId })
-      .from(star)
-      .where(eq(star.userId, target.id))
-      .orderBy(desc(star.createdAt))
-      .all()
-      .flatMap((s) => readableById.get(s.repoId) ?? []);
+    const starredRepos = starredBy(target.id).flatMap((id) => readableById.get(id) ?? []);
     const pinnedRepos = pins.flatMap((p) => readableById.get(p.repoId) ?? []);
     const cards = await repoCards([...new Set([...own, ...pinnedRepos, ...starredRepos])], new Set([...own, ...pinnedRepos].map((r) => r.id)));
     const card = (r: ReadableRepo) => cards.get(r.id)!;

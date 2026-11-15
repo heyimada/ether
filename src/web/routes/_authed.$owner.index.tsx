@@ -6,7 +6,7 @@ import { ActivityCalendar, type Activity as Day } from "react-activity-calendar"
 import { Markdown } from "../components/content";
 import { toast } from "sonner";
 import { EventItem, type FeedEvent } from "../components/feed";
-import { Avatar, ErrorNote, LANG_DOT, ROW, TabBar, useAction } from "../components/ui";
+import { Avatar, ErrorNote, LANG_DOT, ROW, SIDE_HEADING, TabBar, useAction } from "../components/ui";
 import { api, del, put, type Person as ApiPerson } from "../lib/api";
 import { noun, plural, timeAgo } from "../lib/format";
 import { rise, staggered } from "../lib/motion";
@@ -79,7 +79,6 @@ export const Route = createFileRoute("/_authed/$owner/")({
 const linkText = (url: string) => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 
 const SECTION_TITLE = "m-0 text-lg";
-const SIDE_HEADING = "m-0 mb-2 text-base";
 const SUMMARY_ITEM = "px-4 py-3 text-sm text-muted";
 const PROFILE_NAME = "m-0 text-4xl tracking-tighter wrap-anywhere";
 const REPO_LINK = "inline-flex items-center gap-2 font-semibold wrap-anywhere";
@@ -229,7 +228,6 @@ function ProfileCard({ data }: { data: ProfileData }) {
   );
 }
 
-// Language, stars and last activity: what tells repositories apart at a glance.
 function RepoMeta({ r, updated = false }: { r: RepoCard; updated?: boolean }) {
   return (
     <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">

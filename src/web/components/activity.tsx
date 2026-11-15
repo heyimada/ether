@@ -135,7 +135,6 @@ const fmtPercent = (p: number) => `${p.toFixed(1)}%`;
 const fallbackColor = "var(--control-border)";
 const LANG_SEGMENT = "block min-w-[2px] origin-left animate-[bar-grow-x_420ms_var(--ease-out)_calc(var(--i,0)*50ms)_backwards]";
 
-// GitHub-style: one bar split by bytes, with a legend of name and share.
 export function LanguageBar({ languages }: { languages: LanguageShare[] }) {
   if (languages.length === 0) return null;
   const shown = languages.slice(0, 6);
@@ -171,7 +170,6 @@ export function LanguageBar({ languages }: { languages: LanguageShare[] }) {
 
 const COMMIT_AUTHOR = "font-semibold text-fg";
 
-// The newest commits on the default branch, with whoever wrote them.
 export function RecentCommits({ info, commits }: { info: RepoInfo; commits: AuthoredCommit[] }) {
   if (commits.length === 0) return null;
   const params = { owner: info.repo.owner, repo: info.repo.name };

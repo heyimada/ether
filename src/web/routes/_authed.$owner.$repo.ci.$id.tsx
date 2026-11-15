@@ -141,7 +141,6 @@ function waitingFor(job: Job, jobs: Job[]) {
   return `Waiting for ${wanted}…`;
 }
 
-// What a manual run was started with.
 function RunInputs({ inputs }: { inputs: Record<string, string> }) {
   const entries = Object.entries(inputs);
   if (!entries.length) return null;
@@ -157,7 +156,6 @@ function RunInputs({ inputs }: { inputs: Record<string, string> }) {
   );
 }
 
-// Where a deploy job goes and what it waits for; reviewers approve or reject it here.
 function DeploymentNote({ job, deployment: d, base }: { job: Job; deployment: JobDeployment; base: string }) {
   const router = useRouter();
   const review = useAction(async (approve: boolean) => {

@@ -2,7 +2,7 @@ import { admin, username } from "better-auth/plugins";
 import { NAME_MAX } from "../shared/accounts";
 
 // GitHub-style handles: letters, digits and single dashes, not starting with a dash.
-export const USERNAME_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+export const USERNAME_RE = new RegExp(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,${NAME_MAX - 1}})$`);
 
 // First path segments of the web app's own routes (src/web/routes); a name that matches one
 // would shadow that page.

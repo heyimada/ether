@@ -105,7 +105,6 @@ export async function languages(repoPath: string, sha: string): Promise<Language
   return out;
 }
 
-// The main language of each repository's default branch, for repository lists.
 export async function primaryLanguage(repoPath: string): Promise<{ name: string; color: string | null } | null> {
   const head = await git.headCommit(repoPath);
   if (!head) return null;

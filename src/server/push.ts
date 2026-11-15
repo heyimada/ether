@@ -1,6 +1,6 @@
 // What happens when a repository's refs move, whichever way they moved: a push over HTTP or SSH, a branch made in
 // the web app, or a merge. Transports only authenticate and run git; everything after that is decided here.
-import { and, eq, inArray } from "drizzle-orm";
+import { and, inArray } from "drizzle-orm";
 import { onPullRequest, onPush } from "./ci";
 import { recordPush } from "./contrib";
 import { db } from "./db/client";
@@ -8,6 +8,7 @@ import { issue } from "./db/schema";
 import { recordPushEvents } from "./events";
 import * as git from "./git";
 import { requestCodeOwners } from "./owners";
+import { openPulls } from "./pulls";
 import { receivePackGuard, type Guard } from "./protection";
 import { sideEffect } from "./side-effect";
 
@@ -35,15 +36,17 @@ export async function prepareReceive(repoId: number, dir: string, isWiki: boolea
 // is who the push counts as. Only the pusher's own commit emails are learned, and a wiki's history is not news about
 // the repository's code.
 export async function received(repo: Repo, dir: string, isWiki: boolean, before: git.Ref[], code: number, personId: string | null, actorId: string) {
-  await sideEffect("Fixing HEAD", () => git.fixHead(dir));
+  if (code !== 0 || isWiki) await sideEffect("Fixing HEAD", () => git.fixHead(dir));
   if (code !== 0) return;
   const after = await git.listRefs(dir);
   if (personId) await sideEffect("Learning commit emails", async () => recordPush(personId, await git.newAuthorEmails(dir, before.map((r) => r.sha), after.map((r) => r.sha))));
   if (!isWiki) await refsPushed(repo, before, after, actorId);
 }
 
-// Refs moved by someone's push, or by a branch made in the web app: the activity feed hears about it, then CI.
+// Refs moved by someone's push, or by a branch made in the web app: HEAD moves to a first branch, the activity feed
+// hears about it, then CI.
 export async function refsPushed(repo: Repo, before: git.Ref[], after: git.Ref[], actorId: string) {
+  await sideEffect("Fixing HEAD", () => git.fixHead(repo.path));
   await sideEffect("Recording push events", () => recordPushEvents(repo.id, actorId, repo.path, before, after));
   await refsMoved(repo, before, after, actorId);
 }
@@ -59,7 +62,7 @@ export async function refsMoved(repo: Repo, before: git.Ref[], after: git.Ref[],
       pulls = db
         .select({ number: issue.number })
         .from(issue)
-        .where(and(eq(issue.repoId, repo.id), eq(issue.isPull, true), eq(issue.state, "open"), inArray(issue.headRef, moved)))
+        .where(and(openPulls(repo.id), inArray(issue.headRef, moved)))
         .all();
   });
   for (const p of pulls) {

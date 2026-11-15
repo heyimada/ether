@@ -1,3 +1,6 @@
+import type { Isolation } from "../../runner/protocol";
+import type { Role } from "../../server/access";
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -40,9 +43,9 @@ export const repoApi = (owner: string, repo: string) => `/api/repos/${encodeURIC
 
 export type Me = { username: string; isAdmin: boolean; accent: string | null; theme: "light" | "dark" | null };
 
-export type Instance = { anonymousRead: boolean; ciEnabled: boolean; ciIsolation: "container" | "host"; sshBase: string | null; sshHostKey: { fingerprint: string; publicKey: string } | null };
+export type Instance = { anonymousRead: boolean; ciEnabled: boolean; ciIsolation: Isolation; sshBase: string | null; sshHostKey: { fingerprint: string; publicKey: string } | null };
 
-export type Person = { username: string; isAdmin: boolean; displayName: string; avatarVersion: number | null };
+export type Person = { username: string; isAdmin: boolean; isOrg: boolean; displayName: string; avatarVersion: number | null };
 
 // One row of GET /api/repos.
 export type RepoRow = {
@@ -57,7 +60,17 @@ export type RepoRow = {
   updatedAt: string;
 };
 
-export type Role = "owner" | "write" | "read";
+export type Release = {
+  tag: string;
+  title: string;
+  notes: string;
+  prerelease: boolean;
+  author: string | null;
+  createdAt: string;
+  assets: { name: string; size: number }[];
+};
+
+export type { Role };
 export const canWrite = (role: Role) => role !== "read";
 export const isOwner = (role: Role) => role === "owner";
 

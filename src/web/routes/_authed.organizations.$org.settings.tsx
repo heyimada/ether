@@ -15,14 +15,14 @@ export const Route = createFileRoute("/_authed/organizations/$org/settings")({
   beforeLoad: ({ context, location }) => requireAccount(context.me, location.href),
   loader: async ({ params }) => {
     const base = `/api/orgs/${encodeURIComponent(params.org)}`;
-    const [org, prof, teams, repos, runners] = await Promise.all([
-      api<Org>(base),
-      api<OrgProfile>(`/api/users/${encodeURIComponent(params.org)}/profile`),
-      api<{ teams: Team[] }>(`${base}/teams`).catch(() => ({ teams: [] as Team[] })),
-      api<{ repos: Pick<RepoRow, "owner" | "name">[] }>("/api/repos"),
-      api<{ runners: RunnerInfo[] }>(`${base}/runners`).catch(() => ({ runners: [] as RunnerInfo[] })),
-    ]);
+    const org = await api<Org>(base);
     if (org.viewerRole !== "owner") throw redirect({ to: "/$owner", params: { owner: params.org } });
+    const [prof, teams, repos, runners] = await Promise.all([
+      api<OrgProfile>(`/api/users/${encodeURIComponent(params.org)}/profile`),
+      api<{ teams: Team[] }>(`${base}/teams`),
+      api<{ repos: Pick<RepoRow, "owner" | "name">[] }>("/api/repos"),
+      api<{ runners: RunnerInfo[] }>(`${base}/runners`),
+    ]);
     return { org, profile: prof.profile, teams: teams.teams, repos: repos.repos.filter((r) => r.owner === org.name).map((r) => r.name), runners: runners.runners };
   },
   component: OrgSettings,

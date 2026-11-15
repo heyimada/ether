@@ -1,4 +1,5 @@
 import { useRouter } from "@tanstack/react-router";
+import type { Isolation } from "../../runner/protocol";
 import { LockKeyhole } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { del, put } from "../lib/api";
@@ -19,7 +20,7 @@ export function CiSecrets({
 }: {
   base: string;
   secrets: CiSecret[];
-  isolation: "container" | "host";
+  isolation: Isolation;
   endpoint?: string;
   title?: string;
   intro?: ReactNode;

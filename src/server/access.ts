@@ -41,7 +41,6 @@ export function anonymousRead(): boolean {
   return db.select().from(instanceSetting).where(eq(instanceSetting.key, "anonymousRead")).get()?.value === "true";
 }
 
-// For read-only endpoints: the signed-in user, or the visitor identity when allowed.
 export async function readerOrVisitor(req: Request): Promise<Viewer> {
   const viewer = await currentUser(req);
   if (viewer) return viewer;

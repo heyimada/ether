@@ -104,7 +104,6 @@ export const deploymentRoutes = new Elysia()
     const env = name ? environmentOf(a, name) : undefined;
     return { deployments: listDeployments(a.repo.id, env?.id) };
   })
-  // A reviewer approves or rejects a deploy job that waits for one.
   .post("/repos/:owner/:repo/ci/jobs/:id/review", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "write");

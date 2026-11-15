@@ -2,9 +2,7 @@ import { expect, test } from "@playwright/test";
 import { spawnSync } from "node:child_process";
 import { chmodSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createToken, createUser, git, gitOk, loginAdmin, sshIdentity, sshUrl, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { baseURL, cloneUrl, createRepo, createToken, createUser, git, gitOk, loginAdmin, originHeaders, sshIdentity, sshUrl, uiLogin, unique, workdir } from "./helpers";
 
 function commit(dir: string, file: string, body: string) {
   writeFileSync(join(dir, file), body);
@@ -19,7 +17,7 @@ test("protected branches refuse direct, force and deleting pushes, but pull requ
   const auth = { username: owner.username, token: await createToken(owner.ctx) };
   const repo = await createRepo(owner.ctx, unique("protect"));
   const url = cloneUrl(owner.username, repo);
-  await owner.ctx.put(`/api/repos/${owner.username}/${repo}/collaborators/${writer.username}`, { data: { role: "write" }, headers: headers() });
+  await owner.ctx.put(`/api/repos/${owner.username}/${repo}/collaborators/${writer.username}`, { data: { role: "write" }, headers: originHeaders() });
 
   const src = workdir();
   gitOk(src, ["init", "-q"]);
@@ -46,15 +44,15 @@ test("protected branches refuse direct, force and deleting pushes, but pull requ
 
   // Unprotected branches are untouched, and a pull request into main merges.
   gitOk(src, ["push", "-q", "--force", url, "main:feature"], auth);
-  const created = await owner.ctx.post(`/api/repos/${owner.username}/${repo}/pulls`, { data: { title: "b", body: "", base: "main", head: "feature" }, headers: headers() });
+  const created = await owner.ctx.post(`/api/repos/${owner.username}/${repo}/pulls`, { data: { title: "b", body: "", base: "main", head: "feature" }, headers: originHeaders() });
   const { number } = (await created.json()).pull;
-  const merged = await owner.ctx.post(`/api/repos/${owner.username}/${repo}/pulls/${number}/merge`, { data: {}, headers: headers() });
+  const merged = await owner.ctx.post(`/api/repos/${owner.username}/${repo}/pulls/${number}/merge`, { data: {}, headers: originHeaders() });
   expect(merged.ok(), await merged.text()).toBe(true);
   const tree = await (await owner.ctx.get(`/api/repos/${owner.username}/${repo}/tree?ref=main`)).json();
   expect(tree.entries.map((e: { name: string }) => e.name)).toContain("b.txt");
 
   // A pattern rule that allows direct pushes still blocks force pushes and deletion; creating a branch is fine.
-  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/branch-protection`, { data: { pattern: "release/*" }, headers: headers() })).ok()).toBe(true);
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/branch-protection`, { data: { pattern: "release/*" }, headers: originHeaders() })).ok()).toBe(true);
   gitOk(src, ["fetch", "-q", url, "main"], auth);
   gitOk(src, ["push", "-q", url, "FETCH_HEAD:refs/heads/release/1.0"], auth);
   gitOk(src, ["checkout", "-q", "-b", "rewrite", "FETCH_HEAD~1"]);
@@ -72,17 +70,17 @@ test("protected branches refuse direct, force and deleting pushes, but pull requ
 
   // The same rules hold over SSH.
   const key = sshIdentity();
-  await owner.ctx.post("/api/me/ssh-keys", { data: { title: "k", key: key.publicKey }, headers: headers() });
+  await owner.ctx.post("/api/me/ssh-keys", { data: { title: "k", key: key.publicKey }, headers: originHeaders() });
   const viaSsh = key.git(src, ["push", "-q", "--force", sshUrl(owner.username, repo), "rewrite:main"]);
   expect(viaSsh.code).not.toBe(0);
   expect(viaSsh.err).toContain("main is protected");
 
   // Only owners manage rules, and patterns are checked.
   expect((await writer.ctx.get(`/api/repos/${owner.username}/${repo}/branch-protection`)).status()).toBe(403);
-  expect((await writer.ctx.post(`/api/repos/${owner.username}/${repo}/branch-protection`, { data: { pattern: "dev" }, headers: headers() })).status()).toBe(403);
-  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/branch-protection`, { data: { pattern: "release/*" }, headers: headers() })).status()).toBe(409);
-  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/branch-protection`, { data: { pattern: "refs/heads/x" }, headers: headers() })).status()).toBe(400);
-  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/branch-protection`, { data: { pattern: "a b" }, headers: headers() })).status()).toBe(400);
+  expect((await writer.ctx.post(`/api/repos/${owner.username}/${repo}/branch-protection`, { data: { pattern: "dev" }, headers: originHeaders() })).status()).toBe(403);
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/branch-protection`, { data: { pattern: "release/*" }, headers: originHeaders() })).status()).toBe(409);
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/branch-protection`, { data: { pattern: "refs/heads/x" }, headers: originHeaders() })).status()).toBe(400);
+  expect((await owner.ctx.post(`/api/repos/${owner.username}/${repo}/branch-protection`, { data: { pattern: "a b" }, headers: originHeaders() })).status()).toBe(400);
 
   // Removing the rule lets direct pushes through again.
   await page.reload();
@@ -106,7 +104,7 @@ async function protectedRepo(prefix: string) {
   const auth = { username: owner.username, token: await createToken(owner.ctx) };
   const repo = await createRepo(owner.ctx, unique(prefix));
   const api = `/api/repos/${owner.username}/${repo}/branch-protection`;
-  const protect = async (data: Record<string, unknown>) => expect((await owner.ctx.post(api, { data, headers: headers() })).ok()).toBe(true);
+  const protect = async (data: Record<string, unknown>) => expect((await owner.ctx.post(api, { data, headers: originHeaders() })).ok()).toBe(true);
   return { owner, auth, repo, url: cloneUrl(owner.username, repo), api, protect };
 }
 
@@ -161,11 +159,11 @@ test("protection holds against case tricks and re-created branches, and checks e
   gitOk(src, ["push", "-q", "--force", url, "evil:keep"], auth);
 
   // Unknown and malformed rule ids, and empty edits, are errors.
-  expect((await owner.ctx.delete(`${api}/abc`, { headers: headers() })).status()).toBe(400);
-  expect((await owner.ctx.delete(`${api}/999999`, { headers: headers() })).status()).toBe(404);
-  expect((await owner.ctx.patch(`${api}/999999`, { data: { allowDeletion: true }, headers: headers() })).status()).toBe(404);
+  expect((await owner.ctx.delete(`${api}/abc`, { headers: originHeaders() })).status()).toBe(400);
+  expect((await owner.ctx.delete(`${api}/999999`, { headers: originHeaders() })).status()).toBe(404);
+  expect((await owner.ctx.patch(`${api}/999999`, { data: { allowDeletion: true }, headers: originHeaders() })).status()).toBe(404);
   const { rules } = await (await owner.ctx.get(api)).json();
-  expect((await owner.ctx.patch(`${api}/${rules[0].id}`, { data: {}, headers: headers() })).status()).toBe(400);
+  expect((await owner.ctx.patch(`${api}/${rules[0].id}`, { data: {}, headers: originHeaders() })).status()).toBe(400);
 });
 
 test("a tampered or unusable hook refuses protected pushes instead of skipping the check", async () => {

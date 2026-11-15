@@ -4,10 +4,11 @@ import { db } from "./db/client";
 import { event, user } from "./db/schema";
 import type { ReadableRepo } from "./access";
 import * as git from "./git";
+import { sideEffect } from "./side-effect";
 
 // The activity log behind the dashboard feed, profiles and organization pages. Writers call
-// record() where things happen; readers go through listEvents(), which only returns events from
-// repositories the reader can currently read.
+// record() where things happen; readers go through listEvents(), which keeps only events from
+// the repositories its caller lists as readable.
 
 type IssueRef = { number: number; title: string };
 type PullRef = IssueRef & { base: string | null; head: string | null };
@@ -47,17 +48,19 @@ export async function recordPushEvents(repoId: number, actorId: string, path: st
     if (ref.kind !== "branch") continue;
     const prev = before.find((b) => b.kind === "branch" && b.name === ref.name);
     if (prev?.sha === ref.sha) continue;
-    const exclude = old.length ? ["--not", ...old] : [];
-    const count = Number((await git.gitText(path, ["rev-list", "--count", ref.sha, ...exclude, "--"]).catch(() => "0")).trim()) || 0;
-    const log = count ? await git.gitText(path, ["log", "--format=%H%x1f%s", "-n", String(SHOWN), ref.sha, ...exclude, "--"]).catch(() => "") : "";
-    const shown = log
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => {
-        const [sha, subject] = line.split("\x1f");
-        return { sha, subject: subject.slice(0, 200) };
-      });
-    record(repoId, actorId, "push", { ref: ref.name, commits: count, created: !prev, head: ref.sha, shown });
+    await sideEffect(`Recording the push to ${ref.name}`, async () => {
+      const exclude = old.length ? ["--not", ...old] : [];
+      const count = Number((await git.gitText(path, ["rev-list", "--count", ref.sha, ...exclude, "--"])).trim()) || 0;
+      const log = count ? await git.gitText(path, ["log", "--format=%H%x1f%s", "-n", String(SHOWN), ref.sha, ...exclude, "--"]) : "";
+      const shown = log
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          const [sha, subject] = line.split("\x1f");
+          return { sha, subject: subject.slice(0, 200) };
+        });
+      record(repoId, actorId, "push", { ref: ref.name, commits: count, created: !prev, head: ref.sha, shown });
+    });
   }
 }
 

@@ -2,6 +2,7 @@
 import { parse as parseYaml } from "yaml";
 import { checkTemplate, hasTemplate, secretsIn, unwrap, checkExpression } from "../runner/expr";
 import { LABEL_RE, MAX_LABELS, SHELLS, type Shell } from "../runner/protocol";
+import { ENVIRONMENT_NAME_MAX, SECRET_NAME_MAX } from "../shared/ci";
 import { IMAGE_RE } from "../runner/container";
 import { checkGraph, comboName, parseCondition, parseNeeds, parseStrategy, type MatrixValues } from "./ci-graph";
 import { LEGACY_TRIGGERS, parseOn, type Triggers } from "./ci-triggers";
@@ -12,7 +13,6 @@ export const WORKFLOW = ".ether/ci.yml";
 export const WORKFLOW_DIR = ".ether/workflows";
 export const MAX_WORKFLOWS = 20;
 export const isWorkflowFile = (name: string) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.ya?ml$/.test(name);
-// The name a workflow goes by when it doesn't give one.
 export const defaultWorkflowName = (path: string) => (path === WORKFLOW ? "CI" : path.slice(path.lastIndexOf("/") + 1).replace(/\.ya?ml$/, ""));
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$/;
 // A secret is stored by name; its value is only looked up when the job starts.
@@ -36,11 +36,10 @@ function checked(text: string, where: string, contexts: string[]) {
 }
 
 // Upper case like environment variables, and nothing that would shadow what Ether sets itself (CI, CI_*).
-export const SECRET_NAME_RE = /^(?!CI$|CI_)[A-Z_][A-Z0-9_]{0,63}$/;
+export const SECRET_NAME_RE = new RegExp(`^(?!CI$|CI_)[A-Z_][A-Z0-9_]{0,${SECRET_NAME_MAX - 1}}$`);
 const ENV_NAME_RE = /^(?!CI$|CI_)[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const SECRET_REF_RE = /^\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}$/;
 
-// An env map from the workflow: literal values, or exactly `${{ secrets.NAME }}`.
 // A label or a list of them, all of which the job's runner has to have.
 function parseRunsOn(raw: unknown, job: string): string[] {
   if (raw === undefined || raw === null) return [];
@@ -64,9 +63,9 @@ function parseJobOutputs(raw: unknown, job: string): Record<string, string> {
   return out;
 }
 
-// The first line of a run, without whatever expressions it has.
 const defaultStepName = (run: string) => run.split("\n")[0].replace(/\$\{\{.*?\}\}/g, "…").replace(/\$\{\{.*$/, "…").slice(0, 100);
 
+// An env map from the workflow: literal values, or exactly `${{ secrets.NAME }}`.
 function parseEnv(raw: unknown, where: string): Record<string, EnvValue> {
   if (raw === undefined || raw === null) return {};
   if (typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${where}: env must be a map of NAME: value`);
@@ -84,7 +83,7 @@ function parseEnv(raw: unknown, where: string): Record<string, EnvValue> {
   return out;
 }
 
-export const ENVIRONMENT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+export const ENVIRONMENT_RE = new RegExp(`^[A-Za-z0-9][A-Za-z0-9._-]{0,${ENVIRONMENT_NAME_MAX - 1}}$`);
 
 // `environment: production` or `environment: { name: production, url: https://… }`, as on GitHub.
 function parseEnvironment(raw: unknown, job: string): { name: string; url: string | null } | null {
@@ -116,7 +115,10 @@ export type ParsedJob = {
 export const MAX_RUN_JOBS = 100;
 export type ParsedWorkflow = { name: string; on: Triggers; jobs: ParsedJob[] };
 
-// Validates the workflow and normalises it into its name, triggers and jobs of steps; throws a readable message.
+// Throws a readable message.
+// How long a step may run when its timeout-minutes doesn't say.
+const STEP_MINUTES = 10;
+
 export function parseWorkflow(text: string, path = WORKFLOW): ParsedWorkflow {
   let doc: unknown;
   try {
@@ -175,7 +177,7 @@ export function parseWorkflow(text: string, path = WORKFLOW): ParsedWorkflow {
           }
         if (typeof step?.run !== "string" || !step.run.trim()) throw new Error(`Step ${i + 1} of "${name}" needs a "run" command`);
         if (step.shell !== undefined && !SHELLS.includes(step.shell as Shell)) throw new Error(`Step ${i + 1} of "${name}": shell must be one of ${SHELLS.join(", ")}`);
-        const minutes = Number(step["timeout-minutes"] ?? 10);
+        const minutes = Number(step["timeout-minutes"] ?? STEP_MINUTES);
         checked(step.run, where, STEP_CONTEXTS);
         const stepName = typeof step.name === "string" && step.name.trim() ? step.name.trim().slice(0, 100) : null;
         return {
@@ -186,7 +188,7 @@ export function parseWorkflow(text: string, path = WORKFLOW): ParsedWorkflow {
           if: condition,
           continueOnError: step["continue-on-error"] === true,
           shell: (step.shell as Shell | undefined) ?? null,
-          timeoutMinutes: Math.min(60, Math.max(1, Number.isFinite(minutes) ? minutes : 10)),
+          timeoutMinutes: Math.min(60, Math.max(1, Number.isFinite(minutes) ? minutes : STEP_MINUTES)),
           env: { ...jobEnv, ...parseEnv(step.env, `Step ${i + 1} of "${name}"`) },
         };
       }),

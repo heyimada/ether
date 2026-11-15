@@ -136,7 +136,6 @@ function Dashboard() {
 
 const TOP = 6;
 
-// A compact list of repository names, most recently active first, with the rest a click away.
 function RepoSection({
   title,
   repos,

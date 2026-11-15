@@ -7,7 +7,6 @@ import { ErrorNote, Field, onSubmit, ROW, useAction } from "./ui";
 export type BranchRule = { id: number; pattern: string; requirePullRequest: boolean; allowForcePush: boolean; allowDeletion: boolean };
 type Settings = Pick<BranchRule, "requirePullRequest" | "allowForcePush" | "allowDeletion">;
 
-// What a rule does, in words, for the list.
 const summary = (r: Settings) =>
   [r.requirePullRequest ? "pull requests only" : "direct pushes allowed", r.allowForcePush ? "force pushes allowed" : "no force pushes", r.allowDeletion ? "can be deleted" : "can't be deleted"].join(" · ");
 
