@@ -2,7 +2,7 @@ import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { LABEL_RE, MAX_LABELS, PROTOCOL, RESULTS, type Isolation, type JobResult } from "../../runner/protocol";
 import { HttpError, requireAdmin, requireOrgOwner, requireRepo, requireUser, secret, sha256 } from "../access";
-import { abandonRemoteJobs, claimJob, finishRemoteJob, RUNNER_ONLINE_MS, remoteJob, reportJob, resumePump } from "../ci";
+import { claimJob, finishRemoteJob, remoteJob, reportJob, runnerOnline, runnerRemoved } from "../ci";
 import { db } from "../db/client";
 import { ciRunner, ciRunnerRegistration } from "../db/schema";
 
@@ -54,7 +54,7 @@ function manage(path: string, authorize: (request: Request, params: Params) => P
           labels: JSON.parse(r.labels) as string[],
           scope: r.repoId !== null ? "repository" : r.orgId !== null ? "organization" : "server",
           lastSeenAt: r.lastSeenAt,
-          online: !!r.lastSeenAt && Date.now() - r.lastSeenAt.getTime() < RUNNER_ONLINE_MS,
+          online: runnerOnline(r),
         })),
       };
     })
@@ -71,12 +71,7 @@ function manage(path: string, authorize: (request: Request, params: Params) => P
       const row = db.select().from(ciRunner).where(eq(ciRunner.id, id)).get();
       if (!row || !inScope(row, scope)) throw new HttpError(404, "No such runner");
       db.delete(ciRunner).where(eq(ciRunner.id, id)).run();
-      await abandonRemoteJobs(
-        (j) => j.runnerId === id,
-        () => `Runner ${row.name} was removed`,
-      );
-      // Without runners the built-in one takes over again.
-      resumePump();
+      await runnerRemoved(id, row.name);
       return { ok: true };
     });
 }

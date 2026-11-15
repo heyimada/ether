@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
-import { cancel, dispatch, DispatchError, isWorkflowPath, rerun, runnerLabels, runnerProblem, workflowFiles } from "../ci";
+import { cancel, dispatch, isWorkflowPath, rerun, runnerLabels, runnerProblem, workflowFiles } from "../ci";
 import { deleteSecret, listSecrets, MAX_SECRET, SECRET_NAME_RE, setSecret } from "../ci-secrets";
 import { db } from "../db/client";
 import { ciJob, ciRun, user } from "../db/schema";
@@ -87,12 +87,7 @@ export const ciRoutes = new Elysia()
     if (typeof b.workflow !== "string" || !isWorkflowPath(b.workflow)) throw new HttpError(400, "Name a workflow file, e.g. .ether/workflows/deploy.yml");
     if (typeof b.ref !== "string" || !b.ref || b.ref.length > 255) throw new HttpError(400, "Name the branch to run on");
     if (b.inputs !== undefined && (typeof b.inputs !== "object" || b.inputs === null || Array.isArray(b.inputs))) throw new HttpError(400, "inputs must be a map of names to values");
-    try {
-      return { run: { id: await dispatch(a.repo.id, a.path, b.workflow, b.ref, (b.inputs ?? {}) as Record<string, unknown>, viewer.id) } };
-    } catch (e) {
-      if (e instanceof DispatchError) throw new HttpError(e.message.startsWith("CI is turned off") ? 409 : 400, e.message);
-      throw e;
-    }
+    return { run: { id: await dispatch(a.repo.id, a.path, b.workflow, b.ref, (b.inputs ?? {}) as Record<string, unknown>, viewer.id) } };
   })
   .get("/repos/:owner/:repo/ci/runs/:id", async ({ request, params }) => {
     const viewer = await readerOrVisitor(request);
