@@ -48,7 +48,21 @@ const removeContainer = (runtime: string, name: string) => Bun.spawn([runtime, "
 // test runner's workers), which would otherwise keep running and hold its output open.
 function killTree(proc: ReturnType<typeof Bun.spawn>) {
   try {
-    if (process.platform !== "win32") return void process.kill(-proc.pid, "SIGKILL");
+    if (process.platform !== "win32") {
+      process.kill(-proc.pid, "SIGKILL");
+      // A process forking just then can leave a child the signal missed, still holding the step's output open; so
+      // the group is killed again until nothing is left in it, for a few seconds at most.
+      const again = (tries: number) => {
+        try {
+          process.kill(-proc.pid, "SIGKILL");
+          if (tries > 0) setTimeout(() => again(tries - 1), 50).unref();
+        } catch {
+          // The group is empty.
+        }
+      };
+      setTimeout(() => again(100), 50).unref();
+      return;
+    }
   } catch {
     // Already gone, or not a group leader (a container CLI): fall through.
   }

@@ -116,7 +116,6 @@ test("step outputs", () => {
   expect(parseOutputs("value=a<<b")).toEqual({ value: "a<<b" });
 });
 
-// Exponential blow-up takes minutes to hours, so the bound only has to be far above a loaded machine's noise.
 test("an expression can't produce more than a few megabytes, however it nests", () => {
   const level = (inner: string) => `format('${"{0}".repeat(300)}', ${inner})`;
   const bomb = `contains(${level(level(level("'xxxxxxxx'")))}, 'y')`;
@@ -128,14 +127,14 @@ test("an expression can't produce more than a few megabytes, however it nests", 
   const part = `\${{ ${level(level(`'${"x".repeat(64)}'`))} }}`;
   expect(fillTemplate(part, ctx).length).toBe(300 * 300 * 64);
   expect(() => evalTemplate(part + part, ctx)).toThrow("at most");
-  expect(Date.now() - started).toBeLessThan(10_000);
+  expect(Date.now() - started).toBeLessThan(2000);
   // join and toJSON count too, and toJSON can't be made to indent without end.
   expect(() => run(`join(fromJSON('[${'"x",'.repeat(500)}"x"]'), ${level(level("' '"))})`)).toThrow("at most");
   expect(() => run(`toJSON(fromJSON('${"[".repeat(100)}${"]".repeat(100)}'))`)).toThrow("nest");
   // What workflows actually do still works.
   expect(run(`format('{0}-{1}', 'a', 'b')`)).toBe("a-b");
   expect(run(`join(matrix.list, ', ')`)).toBe("a, b");
-}, 20_000);
+});
 
 test("toJSON writes what JSON.stringify would, and pays for its indentation as it goes", () => {
   for (const v of [null, 1, "a\"b", [], {}, [1, [2, { a: [] }]], { b: { c: "x", d: [null, true] } }])

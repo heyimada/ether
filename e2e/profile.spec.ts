@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { deflateSync } from "node:zlib";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ADMIN, baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
+import { ADMIN, baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
 
 // A tiny valid PNG (solid colour) so the upload path sees real image bytes.
 function png(size = 8): Buffer {
@@ -32,6 +32,8 @@ function png(size = 8): Buffer {
   const rows = Buffer.concat(Array.from({ length: size }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(size * 3, 0x55)])));
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
 }
+
+const origin = () => ({ Origin: baseURL() });
 
 async function openMenu(page: Page) {
   await page.getByRole("button", { name: "Account menu" }).click();
@@ -101,12 +103,12 @@ test("profile details, avatar and links are editable and only safe links are acc
 
   // Links render as anchors, so only http(s) is stored.
   for (const website of ["javascript:alert(1)", "data:text/html,hi", "ftp://x.example"])
-    expect((await me.ctx.patch("/api/me/profile", { data: { website }, headers: originHeaders() })).status(), website).toBe(400);
+    expect((await me.ctx.patch("/api/me/profile", { data: { website }, headers: origin() })).status(), website).toBe(400);
   // Avatars must be real raster images of bounded size; SVG can carry script.
   const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
-  expect((await me.ctx.put("/api/me/avatar", { data: svg, headers: { ...originHeaders(), "Content-Type": "image/svg+xml" } })).status()).toBe(400);
+  expect((await me.ctx.put("/api/me/avatar", { data: svg, headers: { ...origin(), "Content-Type": "image/svg+xml" } })).status()).toBe(400);
   const huge = Buffer.concat([png(8), Buffer.alloc(3 * 1024 * 1024)]);
-  expect((await me.ctx.put("/api/me/avatar", { data: huge, headers: { ...originHeaders(), "Content-Type": "image/png" } })).status()).toBe(413);
+  expect((await me.ctx.put("/api/me/avatar", { data: huge, headers: { ...origin(), "Content-Type": "image/png" } })).status()).toBe(413);
   const served = await me.ctx.get(`/api/users/${me.username}/avatar`);
   expect(served.headers()["content-type"]).toBe("image/png");
   expect(served.headers()["x-content-type-options"]).toBe("nosniff");
@@ -130,9 +132,9 @@ test("GIF avatars are kept as GIFs so animation survives", async ({ page }) => {
 
   // GIFs may be up to 2 MB (stills stay at 1 MB, checked above); bigger ones are refused.
   const big = Buffer.concat([gif, Buffer.alloc(1.5 * 1024 * 1024)]);
-  expect((await me.ctx.put("/api/me/avatar", { data: big, headers: { ...originHeaders(), "Content-Type": "image/gif" } })).ok()).toBe(true);
+  expect((await me.ctx.put("/api/me/avatar", { data: big, headers: { Origin: baseURL(), "Content-Type": "image/gif" } })).ok()).toBe(true);
   const tooBig = Buffer.concat([gif, Buffer.alloc(2.5 * 1024 * 1024)]);
-  expect((await me.ctx.put("/api/me/avatar", { data: tooBig, headers: { ...originHeaders(), "Content-Type": "image/gif" } })).status()).toBe(413);
+  expect((await me.ctx.put("/api/me/avatar", { data: tooBig, headers: { Origin: baseURL(), "Content-Type": "image/gif" } })).status()).toBe(413);
 });
 
 test("following shows on both profiles and can be undone", async ({ page }) => {
@@ -153,7 +155,7 @@ test("following shows on both profiles and can be undone", async ({ page }) => {
   await page.getByRole("button", { name: "Unfollow" }).click();
   await expect(page.getByRole("link", { name: "0 followers" })).toBeVisible();
   // You cannot follow yourself.
-  expect((await a.ctx.put(`/api/users/${a.username}/follow`, { headers: originHeaders() })).status()).toBe(400);
+  expect((await a.ctx.put(`/api/users/${a.username}/follow`, { headers: origin() })).status()).toBe(400);
 });
 
 test("pins, profile README, contributions and activity only reveal repositories the viewer can read", async ({ page, browser }, info) => {
@@ -163,12 +165,12 @@ test("pins, profile README, contributions and activity only reveal repositories 
   const shared = await createRepo(owner.ctx, unique("shared"));
   const secret = await createRepo(owner.ctx, unique("secret"));
   const special = await createRepo(owner.ctx, owner.username);
-  await owner.ctx.put(`/api/repos/${owner.username}/${shared}/collaborators/${viewer.username}`, { data: { role: "read" }, headers: originHeaders() });
+  await owner.ctx.put(`/api/repos/${owner.username}/${shared}/collaborators/${viewer.username}`, { data: { role: "read" }, headers: origin() });
 
   const email = `${owner.username}@work.test`;
-  expect((await owner.ctx.put("/api/me/emails", { data: { emails: [email] }, headers: originHeaders() })).ok()).toBe(true);
+  expect((await owner.ctx.put("/api/me/emails", { data: { emails: [email] }, headers: origin() })).ok()).toBe(true);
   // Nobody else can claim those commits.
-  expect((await viewer.ctx.put("/api/me/emails", { data: { emails: [email.toUpperCase()] }, headers: originHeaders() })).status()).toBe(409);
+  expect((await viewer.ctx.put("/api/me/emails", { data: { emails: [email.toUpperCase()] }, headers: origin() })).status()).toBe(409);
 
   const auth = { username: owner.username, token: owner.token };
   const as = { GIT_AUTHOR_NAME: "Owner", GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: "Owner", GIT_COMMITTER_EMAIL: email };
@@ -185,9 +187,9 @@ test("pins, profile README, contributions and activity only reveal repositories 
   push(shared, ["a", "b", "c"]);
   push(secret, ["x", "y"]);
   push(special, ["README.md"]);
-  await owner.ctx.post(`/api/repos/${owner.username}/${shared}/issues`, { data: { title: "Visible issue", body: "" }, headers: originHeaders() });
-  await owner.ctx.post(`/api/repos/${owner.username}/${secret}/issues`, { data: { title: "Hidden issue", body: "" }, headers: originHeaders() });
-  expect((await owner.ctx.put("/api/me/pins", { data: { repos: [`${owner.username}/${secret}`, `${owner.username}/${shared}`] }, headers: originHeaders() })).ok()).toBe(true);
+  await owner.ctx.post(`/api/repos/${owner.username}/${shared}/issues`, { data: { title: "Visible issue", body: "" }, headers: origin() });
+  await owner.ctx.post(`/api/repos/${owner.username}/${secret}/issues`, { data: { title: "Hidden issue", body: "" }, headers: origin() });
+  expect((await owner.ctx.put("/api/me/pins", { data: { repos: [`${owner.username}/${secret}`, `${owner.username}/${shared}`] }, headers: origin() })).ok()).toBe(true);
 
   // The owner sees everything.
   await uiLogin(page, owner.username, owner.password);

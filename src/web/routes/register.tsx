@@ -3,7 +3,6 @@ import { useState } from "react";
 import { AuthShell, ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { post } from "../lib/api";
 import { authClient } from "../lib/auth-client";
-import { MIN_PASSWORD } from "../../shared/accounts";
 
 export const Route = createFileRoute("/register")({
   validateSearch: (s: Record<string, unknown>): { code?: string } => ({ code: typeof s.code === "string" ? s.code : undefined }),
@@ -41,8 +40,8 @@ function Register() {
         <Field id="username" label="Username" hint="Letters, digits and dashes.">
           <input id="username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required pattern="[A-Za-z0-9][A-Za-z0-9\-]{0,38}" />
         </Field>
-        <Field id="password" label="Password" hint={`At least ${MIN_PASSWORD} characters.`}>
-          <input id="password" type="password" autoComplete="new-password" minLength={MIN_PASSWORD} value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <Field id="password" label="Password" hint="At least 10 characters.">
+          <input id="password" type="password" autoComplete="new-password" minLength={10} value={password} onChange={(e) => setPassword(e.target.value)} required />
         </Field>
         <button className="primary wide min-h-10" disabled={register.pending}>
           {register.pending ? "Creating account…" : "Create account"}

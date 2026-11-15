@@ -1,10 +1,8 @@
 import { useRouter } from "@tanstack/react-router";
 import { KeyRound } from "lucide-react";
 import { useState } from "react";
-import { del, post } from "../lib/api";
-import { timeAgo } from "../lib/format";
+import { del, post, timeAgo } from "../lib/api";
 import { ErrorNote, Field, onSubmit, useAction } from "./ui";
-import { KEY_TITLE_MAX } from "../../shared/accounts";
 
 export type DeployKey = { id: number; title: string; keyType: string; fingerprint: string; readOnly: boolean; createdAt: string; lastUsedAt: string | null };
 
@@ -60,7 +58,7 @@ export function DeployKeys({ base, keys, sshBase }: { base: string; keys: Deploy
         <form className="stack-sm" onSubmit={onSubmit(add.run)}>
           <ErrorNote error={add.error} />
           <Field id="deploy-title" label="Deploy key title" hint="For example the server that uses it.">
-            <input id="deploy-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={KEY_TITLE_MAX} />
+            <input id="deploy-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} />
           </Field>
           <Field id="deploy-key" label="Deploy public key" hint="The contents of a .pub file. Use a key made for this repository, not your personal one.">
             <textarea id="deploy-key" className="font-mono min-h-[80px]" value={key} onChange={(e) => setKey(e.target.value)} required placeholder="ssh-ed25519 AAAA… deploy@server" />

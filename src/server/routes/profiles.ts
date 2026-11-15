@@ -1,32 +1,53 @@
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { HttpError, findUser, orgRole, readableRepos, readerOrVisitor, requireUser, type ReadableRepo } from "../access";
+import { HttpError, findUser, readableRepos, readerOrVisitor, requireUser, type ReadableRepo } from "../access";
+import { config } from "../config";
 import { db } from "../db/client";
-import { comment, commitEmail, follow, issue, orgMember, organization, pin, profile, review, team, user } from "../db/schema";
+import { comment, commitEmail, follow, issue, orgMember, organization, pin, profile, review, star, team, user } from "../db/schema";
 import { pushSuggestions } from "../contrib";
 import { lastActivity, listEvents } from "../events";
 import { primaryLanguage } from "../languages";
+import { starCounts } from "./repos";
 import * as git from "../git";
-import { applyProfilePatch, avatarDir, profileRow, saveAvatar, upsertProfile } from "../profile";
-import { starCounts, starredBy } from "../stars";
-import { MAX_PINS } from "../../shared/profiles";
 
+const MAX_AVATAR = 1024 * 1024;
+const MAX_GIF_AVATAR = 2 * 1024 * 1024;
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+$/;
+const avatarDir = () => join(config.dataDir, "avatars");
 
-const profileOut = (row: typeof profile.$inferSelect | undefined) => ({
-  displayName: row?.displayName ?? "",
-  bio: row?.bio ?? "",
-  pronouns: row?.pronouns ?? "",
-  company: row?.company ?? "",
-  location: row?.location ?? "",
-  website: row?.website ?? "",
-  socials: JSON.parse(row?.socials ?? "[]") as string[],
-  status: row?.status ?? "",
-  avatarVersion: row?.avatarVersion ?? null,
-});
+const FIELDS = { displayName: 64, bio: 200, pronouns: 32, company: 64, location: 64, status: 80 } as const;
+
+// Links are rendered as anchors, so only absolute http(s) URLs are stored.
+function safeUrl(value: string): string {
+  if (!value) return "";
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new HttpError(400, `Not a valid link: ${value}`);
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new HttpError(400, "Links must start with http:// or https://");
+  if (value.length > 300) throw new HttpError(400, "Links can be at most 300 characters");
+  return value;
+}
+
+// Raster formats only, recognised by their bytes; SVG could carry script.
+function sniffImage(b: Uint8Array): string | null {
+  if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length > 6 && String.fromCharCode(...b.subarray(0, 4)) === "GIF8") return "image/gif";
+  if (b.length > 12 && String.fromCharCode(...b.subarray(0, 4)) === "RIFF" && String.fromCharCode(...b.subarray(8, 12)) === "WEBP") return "image/webp";
+  return null;
+}
+
+const profileRow = (userId: string) => db.select().from(profile).where(eq(profile.userId, userId)).get();
+
+function upsertProfile(userId: string, set: Partial<typeof profile.$inferInsert>) {
+  db.insert(profile).values({ userId, ...set }).onConflictDoUpdate({ target: profile.userId, set }).run();
+}
 
 function requireTarget(name: string) {
   const target = findUser(name);
@@ -74,7 +95,7 @@ async function repoCards(repos: ReadableRepo[], withLanguage: Set<number>): Prom
 async function profileReadme(target: { username: string }, readable: ReadableRepo[]) {
   const special = readable.find((r) => r.owner === target.username && r.name === target.username.toLowerCase());
   if (!special) return null;
-  const head = await git.headCommit(special.path);
+  const head = await git.resolveCommit(special.path, await git.headBranch(special.path));
   if (!head) return null;
   const entries = (await git.readTree(special.path, head, "")) ?? [];
   const entry = entries.find((e) => e.type === "blob" && /^readme(\.(md|markdown|txt))?$/i.test(e.name));
@@ -96,7 +117,7 @@ async function contributions(targetId: string, readable: ReadableRepo[]) {
   if (emails.size) {
     await Promise.all(
       readable.map(async (r) => {
-        const head = await git.headCommit(r.path);
+        const head = await git.resolveCommit(r.path, await git.headBranch(r.path));
         if (!head) return;
         for (const c of await git.authorTimes(r.path, head, since))
           if (emails.has(c.email)) {
@@ -135,6 +156,47 @@ async function contributions(targetId: string, readable: ReadableRepo[]) {
   return { days, total: [...counts.values()].reduce((a, b) => a + b, 0), summary };
 }
 
+// Shared by people and organizations: validated partial update of profile fields.
+export function applyProfilePatch(userId: string, body: unknown) {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const set: Partial<typeof profile.$inferInsert> = {};
+  for (const [key, max] of Object.entries(FIELDS) as [keyof typeof FIELDS, number][]) {
+    if (key in b) {
+      if (typeof b[key] !== "string") throw new HttpError(400, `${key} must be text`);
+      set[key] = (b[key] as string).trim().slice(0, max);
+    }
+  }
+  if ("website" in b) {
+    if (typeof b.website !== "string") throw new HttpError(400, "website must be text");
+    set.website = safeUrl(b.website.trim());
+  }
+  if ("socials" in b) {
+    if (!Array.isArray(b.socials) || b.socials.some((s) => typeof s !== "string")) throw new HttpError(400, "socials must be a list of links");
+    const links = (b.socials as string[]).map((s) => s.trim()).filter(Boolean);
+    if (links.length > 4) throw new HttpError(400, "Up to four social links");
+    set.socials = JSON.stringify(links.map(safeUrl));
+  }
+  if (Object.keys(set).length === 0) throw new HttpError(400, "Nothing to change");
+  upsertProfile(userId, set);
+}
+
+export async function saveAvatar(userId: string, request: Request) {
+  if (Number(request.headers.get("content-length") ?? 0) > MAX_GIF_AVATAR) throw new HttpError(413, "Avatars can be at most 2 MB");
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  const type = sniffImage(bytes);
+  // Animated GIFs are uploaded untouched, so they get more room than re-encoded stills.
+  const limit = type === "image/gif" ? MAX_GIF_AVATAR : MAX_AVATAR;
+  if (bytes.length > limit) throw new HttpError(413, type === "image/gif" ? "GIF avatars can be at most 2 MB" : "Avatars can be at most 1 MB");
+  if (!type) throw new HttpError(400, "Upload a PNG, JPEG, GIF or WebP image");
+  mkdirSync(avatarDir(), { recursive: true });
+  writeFileSync(join(avatarDir(), userId), bytes);
+  const version = Date.now();
+  upsertProfile(userId, { avatarVersion: version, avatarType: type });
+  return { avatarVersion: version };
+}
+
+export { upsertProfile };
+
 // Emails from the user's pushes; for history pushed before Ether recorded pushes, fall back
 // to the author emails in repositories they own. Addresses other people own are left out.
 async function emailSuggestions(userId: string) {
@@ -142,7 +204,7 @@ async function emailSuggestions(userId: string) {
   if (fromPushes.length) return fromPushes;
   const counts = new Map<string, number>();
   for (const r of readableRepos(userId).filter((x) => x.relation === "owner")) {
-    const head = await git.headCommit(r.path);
+    const head = await git.resolveCommit(r.path, await git.headBranch(r.path));
     if (!head) continue;
     // Recent history is enough to find someone's address.
     for (const c of await git.authorTimes(r.path, head, new Date(0), 2000)) counts.set(c.email, (counts.get(c.email) ?? 0) + 1);
@@ -172,8 +234,14 @@ export const profileRoutes = new Elysia()
     const orgMembers = org
       ? people(db.select({ id: orgMember.userId }).from(orgMember).where(eq(orgMember.orgId, target.id)).all().map((m) => m.id))
       : [];
-    const myOrgRole = org ? orgRole(target.id, viewer.id) : null;
-    const starredRepos = starredBy(target.id).flatMap((id) => readableById.get(id) ?? []);
+    const myOrgRole = org ? (db.select({ role: orgMember.role }).from(orgMember).where(and(eq(orgMember.orgId, target.id), eq(orgMember.userId, viewer.id))).get()?.role ?? null) : null;
+    const starredRepos = db
+      .select({ repoId: star.repoId })
+      .from(star)
+      .where(eq(star.userId, target.id))
+      .orderBy(desc(star.createdAt))
+      .all()
+      .flatMap((s) => readableById.get(s.repoId) ?? []);
     const pinnedRepos = pins.flatMap((p) => readableById.get(p.repoId) ?? []);
     const cards = await repoCards([...new Set([...own, ...pinnedRepos, ...starredRepos])], new Set([...own, ...pinnedRepos].map((r) => r.id)));
     const card = (r: ReadableRepo) => cards.get(r.id)!;
@@ -206,7 +274,17 @@ export const profileRoutes = new Elysia()
       isSelf: viewer.id === target.id,
       // Lets the owner see why commits aren't counted yet.
       hasCommitEmails: !!db.select().from(commitEmail).where(eq(commitEmail.userId, target.id)).get(),
-      profile: profileOut(row),
+      profile: {
+        displayName: row?.displayName ?? "",
+        bio: row?.bio ?? "",
+        pronouns: row?.pronouns ?? "",
+        company: row?.company ?? "",
+        location: row?.location ?? "",
+        website: row?.website ?? "",
+        socials: JSON.parse(row?.socials ?? "[]") as string[],
+        status: row?.status ?? "",
+        avatarVersion: row?.avatarVersion ?? null,
+      },
       followers: followers.length,
       following: following.length,
       isFollowing: followers.some((f) => f.id === viewer.id),
@@ -266,7 +344,17 @@ export const profileRoutes = new Elysia()
     const viewer = await requireUser(request);
     const row = profileRow(viewer.id);
     return {
-      profile: profileOut(row),
+      profile: {
+        displayName: row?.displayName ?? "",
+        bio: row?.bio ?? "",
+        pronouns: row?.pronouns ?? "",
+        company: row?.company ?? "",
+        location: row?.location ?? "",
+        website: row?.website ?? "",
+        socials: JSON.parse(row?.socials ?? "[]") as string[],
+        status: row?.status ?? "",
+        avatarVersion: row?.avatarVersion ?? null,
+      },
       emails: db.select({ email: commitEmail.email }).from(commitEmail).where(eq(commitEmail.userId, viewer.id)).all().map((e) => e.email),
       pushEmails: await emailSuggestions(viewer.id),
       pins: db
@@ -320,7 +408,7 @@ export const profileRoutes = new Elysia()
   .put("/me/pins", async ({ request, body }) => {
     const viewer = await requireUser(request);
     const list = (body as { repos?: unknown } | null)?.repos;
-    if (!Array.isArray(list) || list.length > MAX_PINS || list.some((r) => typeof r !== "string")) throw new HttpError(400, "Pin up to six repositories");
+    if (!Array.isArray(list) || list.length > 6 || list.some((r) => typeof r !== "string")) throw new HttpError(400, "Pin up to six repositories");
     const readable = readableRepos(viewer.id);
     const ids = (list as string[]).map((full) => {
       const r = readable.find((x) => `${x.owner}/${x.name}` === full.toLowerCase());

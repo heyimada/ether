@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chownWorkspaceArgs, collect, createArgs, envScript, execArgs, IMAGE_RE, instanceLabel, shellCommand } from "./container";
+import { chownWorkspaceArgs, collect, createArgs, envScript, execArgs, IMAGE_RE, instanceLabel, shellCommand } from "./ci-container";
 
 test("containers are created locked down and idle, without mounting anything from the host", () => {
   const args = createArgs("ether-ci-1-2", "oven/bun:1", "abc123");

@@ -1,14 +1,29 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
-import { NAME_MAX } from "../../shared/accounts";
 import { randomUUID } from "node:crypto";
-import { HttpError, findUser, isOrg, orgRole, requireOrg, requireOrgOwner, requireUser } from "../access";
-import { RESERVED, USERNAME_RE } from "../auth-plugins";
+import { HttpError, findUser, isOrg, requireUser, type Viewer } from "../access";
+import { USERNAME_RE } from "../auth-plugins";
 import { db } from "../db/client";
 import { orgMember, organization, profile, repo, team, teamMember, teamRepo, user } from "../db/schema";
-import { applyProfilePatch, saveAvatar, upsertProfile } from "../profile";
+import { RESERVED } from "./account";
+import { applyProfilePatch, saveAvatar, upsertProfile } from "./profiles";
 
-const TEAM_RE = new RegExp(`^[A-Za-z0-9][A-Za-z0-9-]{0,${NAME_MAX - 1}}$`);
+function requireOrg(name: string) {
+  const row = findUser(name);
+  if (!row || !isOrg(row.id)) throw new HttpError(404, "No such organization");
+  return { id: row.id, name: row.username! };
+}
+
+const roleIn = (orgId: string, userId: string) =>
+  db.select({ role: orgMember.role }).from(orgMember).where(and(eq(orgMember.orgId, orgId), eq(orgMember.userId, userId))).get()?.role ?? null;
+
+export function requireOrgOwner(viewer: Viewer, name: string) {
+  const org = requireOrg(name);
+  if (roleIn(org.id, viewer.id) !== "owner") throw new HttpError(403, "Only organization owners can do that");
+  return org;
+}
+
+const TEAM_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
 
 function requireTeam(orgId: string, name: string) {
   const t = db.select().from(team).where(and(eq(team.orgId, orgId), eq(team.name, name.toLowerCase()))).get();
@@ -55,7 +70,7 @@ export const orgRoutes = new Elysia()
     const viewer = await requireUser(request);
     const org = requireOrg(params.org);
     const base = db.select({ base: organization.basePermission }).from(organization).where(eq(organization.userId, org.id)).get()!.base;
-    return { name: org.name, basePermission: base, viewerRole: orgRole(org.id, viewer.id), members: members(org.id) };
+    return { name: org.name, basePermission: base, viewerRole: roleIn(org.id, viewer.id), members: members(org.id) };
   })
   .patch("/orgs/:org", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
@@ -73,7 +88,7 @@ export const orgRoutes = new Elysia()
     const target = findUser(params.username);
     if (!target) throw new HttpError(404, "No such user");
     if (isOrg(target.id)) throw new HttpError(400, "Organizations can't be members of organizations");
-    if (role === "member" && orgRole(org.id, target.id) === "owner" && ownerCount(org.id) === 1)
+    if (role === "member" && roleIn(org.id, target.id) === "owner" && ownerCount(org.id) === 1)
       throw new HttpError(400, "An organization needs at least one owner");
     db.insert(orgMember).values({ orgId: org.id, userId: target.id, role }).onConflictDoUpdate({ target: [orgMember.orgId, orgMember.userId], set: { role } }).run();
     return { ok: true };
@@ -84,8 +99,8 @@ export const orgRoutes = new Elysia()
     const target = findUser(params.username);
     if (!target) throw new HttpError(404, "No such user");
     // Owners manage everyone; anyone may leave.
-    if (target.id !== viewer.id && orgRole(org.id, viewer.id) !== "owner") throw new HttpError(403, "Only organization owners can do that");
-    if (orgRole(org.id, target.id) === "owner" && ownerCount(org.id) === 1) throw new HttpError(400, "An organization needs at least one owner");
+    if (target.id !== viewer.id && roleIn(org.id, viewer.id) !== "owner") throw new HttpError(403, "Only organization owners can do that");
+    if (roleIn(org.id, target.id) === "owner" && ownerCount(org.id) === 1) throw new HttpError(400, "An organization needs at least one owner");
     db.transaction((tx) => {
       tx.delete(orgMember).where(and(eq(orgMember.orgId, org.id), eq(orgMember.userId, target.id))).run();
       // Leaving the org also leaves its teams.
@@ -98,7 +113,7 @@ export const orgRoutes = new Elysia()
   .get("/orgs/:org/teams", async ({ request, params }) => {
     const viewer = await requireUser(request);
     const org = requireOrg(params.org);
-    if (!orgRole(org.id, viewer.id)) throw new HttpError(404, "No such organization");
+    if (!roleIn(org.id, viewer.id)) throw new HttpError(404, "No such organization");
     return {
       teams: db
         .select()
@@ -149,7 +164,7 @@ export const orgRoutes = new Elysia()
     const t = requireTeam(org.id, params.team);
     const target = findUser(params.username);
     if (!target) throw new HttpError(404, "No such user");
-    if (!orgRole(org.id, target.id)) throw new HttpError(400, "Add them to the organization first");
+    if (!roleIn(org.id, target.id)) throw new HttpError(400, "Add them to the organization first");
     db.insert(teamMember).values({ teamId: t.id, userId: target.id }).onConflictDoNothing().run();
     return { ok: true };
   })

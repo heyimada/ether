@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { toast } from "sonner";
 import { TabBar, useAction } from "../components/ui";
 import { snappy } from "../lib/motion";
-import { api, ApiError, del, isOwner, put, repoApi, type Issue, type RepoInfo } from "../lib/api";
+import { ApiError, api, del, put, repoApi, type Issue, type RepoInfo } from "../lib/api";
 
 type Counts = { open: number; items: Issue[] };
 
@@ -63,7 +63,7 @@ function RepoLayout() {
         <Link to="/$owner/$repo/ci" params={params}>
           CI
         </Link>
-        {isOwner(info.role) && (
+        {info.role === "owner" && (
           <Link to="/$owner/$repo/settings" params={params}>
             Settings
           </Link>

@@ -1,8 +1,8 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { ReleaseCard } from "../components/releases";
+import { ReleaseCard, type Release } from "../components/releases";
 import { ErrorNote, useAction } from "../components/ui";
-import { api, canWrite, del, repoApi, type Release } from "../lib/api";
+import { api, del, repoApi } from "../lib/api";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/releases/tag/$tag")({
   loader: ({ context: { info }, params }) => api<{ release: Release }>(`${repoApi(info.repo.owner, info.repo.name)}/releases/${encodeURIComponent(params.tag)}`),
@@ -26,7 +26,7 @@ function ReleasePage() {
           ← All releases
         </Link>
         <span className="flex-1" />
-        {canWrite(info.role) &&
+        {info.role !== "read" &&
           (confirm ? (
             <>
               <span className="text-muted">Delete this release? The tag stays.</span>

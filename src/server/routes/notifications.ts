@@ -1,7 +1,6 @@
-import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, readableRepos, requireUser } from "../access";
-import { cursorOf, olderThan } from "../cursor";
 import { db } from "../db/client";
 import { issue, notification, user } from "../db/schema";
 
@@ -17,8 +16,12 @@ export const notificationRoutes = new Elysia()
     if (!ids.length) return { notifications: [], unread: 0, next: null };
     const filters = [eq(notification.userId, viewer.id), inArray(notification.repoId, ids)];
     if (!all) filters.push(isNull(notification.readAt));
-    const older = olderThan(notification.createdAt, notification.id, (query as Record<string, string | undefined>).before);
-    if (older) filters.push(older);
+    // Cursor: "<ms>-<id>" of the last entry on the previous page.
+    const cursor = /^(\d+)-(\d+)$/.exec((query as Record<string, string | undefined>).before ?? "");
+    if (cursor) {
+      const at = new Date(Number(cursor[1]));
+      filters.push(or(lt(notification.createdAt, at), and(eq(notification.createdAt, at), lt(notification.id, Number(cursor[2]))))!);
+    }
     const rows = db
       .select({ n: notification, actor: user.username, isPull: issue.isPull, state: issue.state })
       .from(notification)
@@ -47,7 +50,7 @@ export const notificationRoutes = new Elysia()
         read: n.readAt !== null,
       })),
       unread: unreadCount(viewer.id, ids),
-      next: rows.length > PAGE && last ? cursorOf(last.n.createdAt, last.n.id) : null,
+      next: rows.length > PAGE && last ? `${last.n.createdAt.getTime()}-${last.n.id}` : null,
     };
   })
   .get("/me/notifications/count", async ({ request }) => {

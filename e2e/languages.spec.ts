@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
+import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
+
+const headers = () => ({ Origin: baseURL() });
 
 function write(root: string, path: string, bytes: number) {
   mkdirSync(join(root, path, ".."), { recursive: true });
@@ -15,7 +17,7 @@ test("repo home shows languages by bytes on the default branch, and the latest c
   const repo = await createRepo(owner.ctx, unique("langs"));
   const auth = { username: owner.username, token: owner.token };
   // The author's commits are tied to their account through their commit email.
-  await author.ctx.put("/api/me/emails", { data: { emails: [`${author.username}@desk.test`] }, headers: originHeaders() });
+  await author.ctx.put("/api/me/emails", { data: { emails: [`${author.username}@desk.test`] }, headers: headers() });
 
   const src = workdir();
   gitOk(src, ["init", "-q"]);

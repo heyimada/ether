@@ -3,12 +3,19 @@ import { Elysia } from "elysia";
 import { HttpError, allows, findUser, readerOrVisitor, repoAccess, requireRepo, requireUser, type RepoAccess } from "../access";
 import { db } from "../db/client";
 import { issue, issueAssignee, issueLabel, label, team, user } from "../db/schema";
-import { notify } from "../notify";
-import { sideEffect } from "../side-effect";
-import { LABEL_DESCRIPTION_MAX, LABEL_NAME_MAX, MAX_ASSIGNEES } from "../../shared/issues";
+import { notify, quietly } from "../notify";
 
-const LABEL_RE = new RegExp(`^[^\\s,][^,]{0,${LABEL_NAME_MAX - 1}}$`);
+const LABEL_RE = /^[^\s,][^,]{0,49}$/;
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
+
+export const DEFAULT_LABELS = [
+  { name: "bug", color: "#d73a4a", description: "Something isn't working" },
+  { name: "enhancement", color: "#a2eeef", description: "New feature or request" },
+  { name: "documentation", color: "#0075ca", description: "Improvements or additions to documentation" },
+  { name: "question", color: "#d876e3", description: "Further information is requested" },
+];
+
+export const addDefaultLabels = (repoId: number) => db.insert(label).values(DEFAULT_LABELS.map((l) => ({ ...l, repoId }))).onConflictDoNothing().run();
 
 const labelsOf = (repoId: number) =>
   db.select({ name: label.name, color: label.color, description: label.description }).from(label).where(eq(label.repoId, repoId)).orderBy(label.name).all();
@@ -36,7 +43,7 @@ export const labelRoutes = new Elysia()
     const n = (name as string).trim().toLowerCase();
     if (db.select().from(label).where(and(eq(label.repoId, a.repo.id), eq(label.name, n))).get()) throw new HttpError(409, "That label already exists");
     db.insert(label)
-      .values({ repoId: a.repo.id, name: n, color: (color as string | undefined)?.toLowerCase() ?? "#8c959f", description: typeof description === "string" ? description.slice(0, LABEL_DESCRIPTION_MAX) : "" })
+      .values({ repoId: a.repo.id, name: n, color: (color as string | undefined)?.toLowerCase() ?? "#8c959f", description: typeof description === "string" ? description.slice(0, 100) : "" })
       .run();
     return { ok: true };
   })
@@ -49,7 +56,7 @@ export const labelRoutes = new Elysia()
     const set: Partial<typeof label.$inferInsert> = {};
     if (typeof b.name === "string") set.name = b.name.trim().toLowerCase();
     if (typeof b.color === "string") set.color = b.color.toLowerCase();
-    if (typeof b.description === "string") set.description = b.description.slice(0, LABEL_DESCRIPTION_MAX);
+    if (typeof b.description === "string") set.description = b.description.slice(0, 100);
     db.update(label).set(set).where(eq(label.id, row.id)).run();
     return { ok: true };
   })
@@ -103,7 +110,7 @@ export const labelRoutes = new Elysia()
     const a = requireRepo(viewer, params.owner, params.repo, "write");
     const issueId = findIssueId(a, params.number);
     const names = (body as { assignees?: unknown } | null)?.assignees;
-    if (!Array.isArray(names) || names.length > MAX_ASSIGNEES || names.some((n) => typeof n !== "string")) throw new HttpError(400, "assignees must be a list of up to ten usernames");
+    if (!Array.isArray(names) || names.length > 10 || names.some((n) => typeof n !== "string")) throw new HttpError(400, "assignees must be a list of up to ten usernames");
     const people = [...new Set(names as string[])].map((n) => {
       const u = findUser(n);
       // Only people who can see the repository can be assigned.
@@ -116,6 +123,6 @@ export const labelRoutes = new Elysia()
       if (people.length) tx.insert(issueAssignee).values(people.map((userId) => ({ issueId, userId }))).run();
     });
     const title = db.select({ title: issue.title }).from(issue).where(eq(issue.id, issueId)).get()?.title ?? "";
-    void sideEffect("Notifying", () => notify(people.filter((id) => !before.has(id)), "assigned", viewer.id, { repoId: a.repo.id, issueNumber: Number(params.number), title }));
+    quietly(() => notify(people.filter((id) => !before.has(id)), "assigned", viewer.id, { repoId: a.repo.id, issueNumber: Number(params.number), title }));
     return { ok: true };
   });

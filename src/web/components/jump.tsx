@@ -2,19 +2,22 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { Command } from "cmdk";
 import { BookLock, CircleDot, Plus, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { api, repoApi, type Issue, type RepoRow } from "../lib/api";
+import { api, repoApi, type Issue } from "../lib/api";
 
+type RepoRow = { owner: string; name: string; description: string };
+
+// Header search: jumps to any repository you can see, or to #number in the current one.
 export function JumpBox() {
   const navigate = useNavigate();
   const params = useParams({ strict: false }) as { owner?: string; repo?: string };
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [repos, setRepos] = useState<Pick<RepoRow, "owner" | "name" | "description">[] | null>(null);
+  const [repos, setRepos] = useState<RepoRow[] | null>(null);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open || repos) return;
-    api<{ repos: Pick<RepoRow, "owner" | "name" | "description">[] }>("/api/repos").then((r) => setRepos(r.repos), () => setRepos([]));
+    api<{ repos: RepoRow[] }>("/api/repos").then((r) => setRepos(r.repos), () => setRepos([]));
   }, [open, repos]);
 
   useEffect(() => {

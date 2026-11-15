@@ -1,8 +1,9 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
+import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
 
+const headers = () => ({ Origin: baseURL() });
 const feedJson = async (ctx: APIRequestContext) => JSON.stringify(await (await ctx.get("/api/feed")).json());
 
 // Commits each subject as its own commit and pushes; pass a directory to continue its history.
@@ -26,7 +27,7 @@ test("the dashboard feed shows what happened in repositories you can read, and n
   const shared = await createRepo(ada.ctx, unique("shared"));
   const secret = await createRepo(ada.ctx, unique("secret"));
   const api = `/api/repos/${ada.username}/${shared}`;
-  await ada.ctx.put(`${api}/collaborators/${bob.username}`, { data: { role: "write" }, headers: originHeaders() });
+  await ada.ctx.put(`${api}/collaborators/${bob.username}`, { data: { role: "write" }, headers: headers() });
   const auth = { username: ada.username, token: ada.token };
 
   // A push of four commits: the feed says how many and shows the newest subjects.
@@ -35,20 +36,20 @@ test("the dashboard feed shows what happened in repositories you can read, and n
   const classified = unique("classified-subject");
   const hiddenIssue = unique("hidden-issue");
   pushCommits(ada.username, secret, auth, [classified]);
-  await ada.ctx.post(`/api/repos/${ada.username}/${secret}/issues`, { data: { title: hiddenIssue, body: "" }, headers: originHeaders() });
+  await ada.ctx.post(`/api/repos/${ada.username}/${secret}/issues`, { data: { title: hiddenIssue, body: "" }, headers: headers() });
 
   // Issues, comments, a reviewed and merged pull request, a release, a star and a wiki page.
-  const { issue } = await (await bob.ctx.post(`${api}/issues`, { data: { title: "Printer jams on long numbers", body: "" }, headers: originHeaders() })).json();
-  await ada.ctx.post(`${api}/issues/${issue.number}/comments`, { data: { body: "Reproduced with 31 digits." }, headers: originHeaders() });
-  await ada.ctx.patch(`${api}/issues/${issue.number}`, { data: { state: "closed" }, headers: originHeaders() });
+  const { issue } = await (await bob.ctx.post(`${api}/issues`, { data: { title: "Printer jams on long numbers", body: "" }, headers: headers() })).json();
+  await ada.ctx.post(`${api}/issues/${issue.number}/comments`, { data: { body: "Reproduced with 31 digits." }, headers: headers() });
+  await ada.ctx.patch(`${api}/issues/${issue.number}`, { data: { state: "closed" }, headers: headers() });
   gitOk(src, ["checkout", "-q", "-b", "faster"]);
   pushCommits(ada.username, shared, auth, ["Cache store lookups"], "faster", src);
-  const { pull } = await (await ada.ctx.post(`${api}/pulls`, { data: { title: "Faster store", body: "", base: "main", head: "faster" }, headers: originHeaders() })).json();
-  expect((await bob.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "approved", body: "Ship it" }, headers: originHeaders() })).ok()).toBe(true);
-  expect((await ada.ctx.post(`${api}/pulls/${pull.number}/merge`, { data: {}, headers: originHeaders() })).ok()).toBe(true);
-  await ada.ctx.post(`${api}/releases`, { data: { tag: "v1.0.0", target: "main", title: "First light" }, headers: originHeaders() });
-  await bob.ctx.put(`${api}/star`, { headers: originHeaders() });
-  await ada.ctx.put(`${api}/wiki/Setup-guide`, { data: { title: "Setup guide", content: "# Setup\n" }, headers: originHeaders() });
+  const { pull } = await (await ada.ctx.post(`${api}/pulls`, { data: { title: "Faster store", body: "", base: "main", head: "faster" }, headers: headers() })).json();
+  expect((await bob.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "approved", body: "Ship it" }, headers: headers() })).ok()).toBe(true);
+  expect((await ada.ctx.post(`${api}/pulls/${pull.number}/merge`, { data: {}, headers: headers() })).ok()).toBe(true);
+  await ada.ctx.post(`${api}/releases`, { data: { tag: "v1.0.0", target: "main", title: "First light" }, headers: headers() });
+  await bob.ctx.put(`${api}/star`, { headers: headers() });
+  await ada.ctx.put(`${api}/wiki/Setup-guide`, { data: { title: "Setup guide", content: "# Setup\n" }, headers: headers() });
 
   await uiLogin(page, bob.username, bob.password);
   const feed = page.getByRole("region", { name: "Feed" });
@@ -82,13 +83,13 @@ test("the dashboard feed shows what happened in repositories you can read, and n
 
   // Visibility is checked when the feed is read: a repository going private takes its history with it.
   const open = unique("open");
-  await ada.ctx.post("/api/repos", { data: { name: open, visibility: "public" }, headers: originHeaders() });
+  await ada.ctx.post("/api/repos", { data: { name: open, visibility: "public" }, headers: headers() });
   pushCommits(ada.username, open, auth, ["Public work"]);
   expect(await feedJson(outsider.ctx)).toContain(open);
-  await ada.ctx.patch(`/api/repos/${ada.username}/${open}`, { data: { visibility: "private" }, headers: originHeaders() });
+  await ada.ctx.patch(`/api/repos/${ada.username}/${open}`, { data: { visibility: "private" }, headers: headers() });
   expect(await feedJson(outsider.ctx)).not.toContain(open);
   // Losing access does the same.
-  await ada.ctx.delete(`${api}/collaborators/${bob.username}`, { headers: originHeaders() });
+  await ada.ctx.delete(`${api}/collaborators/${bob.username}`, { headers: headers() });
   expect(await feedJson(bob.ctx)).not.toContain(shared);
 });
 
@@ -98,7 +99,7 @@ test("your work: assigned issues, your pull requests with their review state, st
   const bob = await createUser(admin);
   const repo = await createRepo(ada.ctx, unique("work"));
   const api = `/api/repos/${ada.username}/${repo}`;
-  await ada.ctx.put(`${api}/collaborators/${bob.username}`, { data: { role: "write" }, headers: originHeaders() });
+  await ada.ctx.put(`${api}/collaborators/${bob.username}`, { data: { role: "write" }, headers: headers() });
 
   // Someone with nothing going on gets no empty boxes.
   await uiLogin(page, bob.username, bob.password);
@@ -106,15 +107,15 @@ test("your work: assigned issues, your pull requests with their review state, st
     await expect(page.getByRole("region", { name: panel })).toHaveCount(0);
 
   const title = unique("Carry overflows");
-  const { issue } = await (await ada.ctx.post(`${api}/issues`, { data: { title, body: "" }, headers: originHeaders() })).json();
-  await ada.ctx.put(`${api}/issues/${issue.number}/assignees`, { data: { assignees: [bob.username] }, headers: originHeaders() });
+  const { issue } = await (await ada.ctx.post(`${api}/issues`, { data: { title, body: "" }, headers: headers() })).json();
+  await ada.ctx.put(`${api}/issues/${issue.number}/assignees`, { data: { assignees: [bob.username] }, headers: headers() });
   const dir = pushCommits(ada.username, repo, { username: ada.username, token: ada.token }, ["base"]);
   gitOk(dir, ["checkout", "-q", "-b", "fix"]);
   pushCommits(ada.username, repo, { username: bob.username, token: bob.token }, ["fix carry"], "fix", dir);
   const prTitle = unique("Fix the carry");
-  const { pull } = await (await bob.ctx.post(`${api}/pulls`, { data: { title: prTitle, body: "", base: "main", head: "fix" }, headers: originHeaders() })).json();
-  await ada.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "changes_requested", body: "Needs a test" }, headers: originHeaders() });
-  await bob.ctx.put(`${api}/star`, { headers: originHeaders() });
+  const { pull } = await (await bob.ctx.post(`${api}/pulls`, { data: { title: prTitle, body: "", base: "main", head: "fix" }, headers: headers() })).json();
+  await ada.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "changes_requested", body: "Needs a test" }, headers: headers() });
+  await bob.ctx.put(`${api}/star`, { headers: headers() });
 
   await page.reload();
   await expect(page.getByRole("region", { name: "Assigned to you" })).toContainText(title);
@@ -123,18 +124,18 @@ test("your work: assigned issues, your pull requests with their review state, st
   await info.attach("your-work", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 
   // Closing the issue takes it off the list; an approval updates the pull request.
-  await ada.ctx.patch(`${api}/issues/${issue.number}`, { data: { state: "closed" }, headers: originHeaders() });
-  await ada.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "approved", body: "" }, headers: originHeaders() });
+  await ada.ctx.patch(`${api}/issues/${issue.number}`, { data: { state: "closed" }, headers: headers() });
+  await ada.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "approved", body: "" }, headers: headers() });
   await page.reload();
   await expect(page.getByRole("region", { name: "Your pull requests" }).getByRole("listitem").filter({ hasText: prTitle })).toContainText("Approved");
   await expect(page.getByRole("region", { name: "Assigned to you" })).toHaveCount(0);
 
   // Everything in "your work" goes away with access to the repository.
   const reopened = unique("Reopened");
-  const second = await (await ada.ctx.post(`${api}/issues`, { data: { title: reopened, body: "" }, headers: originHeaders() })).json();
-  await ada.ctx.put(`${api}/issues/${second.issue.number}/assignees`, { data: { assignees: [bob.username] }, headers: originHeaders() });
+  const second = await (await ada.ctx.post(`${api}/issues`, { data: { title: reopened, body: "" }, headers: headers() })).json();
+  await ada.ctx.put(`${api}/issues/${second.issue.number}/assignees`, { data: { assignees: [bob.username] }, headers: headers() });
   expect(JSON.stringify(await (await bob.ctx.get("/api/me/work")).json())).toContain(reopened);
-  await ada.ctx.delete(`${api}/collaborators/${bob.username}`, { headers: originHeaders() });
+  await ada.ctx.delete(`${api}/collaborators/${bob.username}`, { headers: headers() });
   const after = JSON.stringify(await (await bob.ctx.get("/api/me/work")).json());
   for (const leak of [repo, reopened, prTitle]) expect(after).not.toContain(leak);
 });

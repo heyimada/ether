@@ -22,6 +22,7 @@ const THEMES = {
 
 const minContrast = (c: Colord, surfaces: string[]) => Math.min(...surfaces.map((s) => c.contrast(s)));
 
+// Moves a colour away from the theme's background, keeping its hue, until it reaches the ratio.
 function untilReadable(c: Colord, surfaces: string[], ratio: number, nudge: (c: Colord, by: number) => Colord) {
   let out = c;
   for (let i = 0; i < 40 && minContrast(out, surfaces) < ratio; i++) out = nudge(out, 0.025);

@@ -2,12 +2,10 @@ import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { AtSign, CircleX, Eye, GitMerge, MessageSquare, UserPlus, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorNote, StateIcon, useAction } from "../components/ui";
-import { api, patch, post } from "../lib/api";
-import { timeAgo } from "../lib/format";
-import { notificationsChanged } from "../lib/notifications";
+import { api, patch, post, timeAgo } from "../lib/api";
 import { requireAccount } from "../lib/require-account";
 
-type InboxItem = {
+export type Notification = {
   id: number;
   owner: string;
   repo: string;
@@ -22,9 +20,9 @@ type InboxItem = {
   at: string;
   read: boolean;
 };
-type Inbox = { notifications: InboxItem[]; unread: number; next: string | null };
+type Inbox = { notifications: Notification[]; unread: number; next: string | null };
 
-const REASON: Record<InboxItem["reason"], { text: string; icon: LucideIcon }> = {
+const REASON: Record<Notification["reason"], { text: string; icon: LucideIcon }> = {
   review_requested: { text: "asked for your review", icon: Eye },
   mention: { text: "mentioned you", icon: AtSign },
   review: { text: "reviewed", icon: Eye },
@@ -34,6 +32,9 @@ const REASON: Record<InboxItem["reason"], { text: string; icon: LucideIcon }> = 
   closed: { text: "closed", icon: CircleX },
   ci_failed: { text: "Your run failed", icon: CircleX },
 };
+
+// Tells the bell in the header to count again.
+export const notificationsChanged = () => window.dispatchEvent(new Event("notifications-changed"));
 
 export const Route = createFileRoute("/_authed/notifications")({
   validateSearch: (s: Record<string, unknown>): { filter?: "all" } => ({ filter: s.filter === "all" ? "all" : undefined }),
@@ -47,7 +48,7 @@ function Notifications() {
   const router = useRouter();
   const data = Route.useLoaderData();
   const { filter } = Route.useSearch();
-  const [more, setMore] = useState<InboxItem[]>([]);
+  const [more, setMore] = useState<Notification[]>([]);
   const [next, setNext] = useState(data.next);
   // Read or unread since the page loaded; the list stays put rather than reloading under the reader.
   const [changed, setChanged] = useState<Record<number, boolean>>({});
@@ -66,7 +67,7 @@ function Notifications() {
     notificationsChanged();
     await router.invalidate();
   });
-  const setRead = useAction(async (n: InboxItem, read: boolean) => {
+  const setRead = useAction(async (n: Notification, read: boolean) => {
     await patch(`/api/me/notifications/${n.id}`, { read });
     setChanged((c) => ({ ...c, [n.id]: read }));
     notificationsChanged();
@@ -115,7 +116,7 @@ function Notifications() {
   );
 }
 
-function Row({ n, onRead }: { n: InboxItem; onRead: (read: boolean) => void }) {
+function Row({ n, onRead }: { n: Notification; onRead: (read: boolean) => void }) {
   const Icon = REASON[n.reason].icon;
   const params = { owner: n.owner, repo: n.repo };
   const what = n.reason === "ci_failed" ? REASON.ci_failed.text : `${n.actor ?? "Someone"} ${REASON[n.reason].text}`;

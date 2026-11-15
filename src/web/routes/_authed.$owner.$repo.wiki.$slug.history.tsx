@@ -1,6 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { api, repoApi, type Commit } from "../lib/api";
-import { shortSha, timeAgo } from "../lib/format";
+import { api, repoApi, shortSha, timeAgo, type Commit } from "../lib/api";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/wiki/$slug/history")({
   loader: ({ context: { info }, params }) =>

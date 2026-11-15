@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
+import type { EventEmitter } from "node:events";
 import type { AddressInfo } from "node:net";
 import { Client, Server, utils, type Connection, type ServerChannel } from "ssh2";
 import { channelPump, hangUps, type HangUp } from "./ssh-relay";

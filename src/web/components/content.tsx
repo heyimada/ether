@@ -4,7 +4,6 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useMemo, useState } from "react";
 import { ROW } from "./ui";
-import { plural } from "../lib/format";
 
 const THEMES = { light: "github-light", dark: "github-dark" } as const;
 
@@ -32,7 +31,7 @@ export function DiffView({ diff, truncated }: { diff: string; truncated?: boolea
     <section aria-label="Diff">
       <div className={ROW}>
         <span className="text-muted">
-          {plural(files.length, "file")} changed
+          {files.length} file{files.length === 1 ? "" : "s"} changed
         </span>
         <span className="flex-1" />
         <div role="group" aria-label="Diff layout" className={ROW}>

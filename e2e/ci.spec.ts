@@ -1,7 +1,9 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ADMIN, baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
+import { ADMIN, baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
+
+const headers = () => ({ Origin: baseURL() });
 
 const WORKFLOW = `jobs:
   build:
@@ -48,7 +50,7 @@ test("CI runs workflows on push when enabled, shows logs, and gates merges on ch
   gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], auth);
   await new Promise((r) => setTimeout(r, 1000));
   expect((await (await owner.ctx.get(`${api}/ci/runs`)).json()).runs).toEqual([]);
-  expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() })).status()).toBe(400);
+  expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() })).status()).toBe(400);
 
   await uiLogin(page, ADMIN.username, ADMIN.password);
   await page.goto(`${baseURL()}/site-admin`);
@@ -58,7 +60,7 @@ test("CI runs workflows on push when enabled, shows logs, and gates merges on ch
   await page.getByRole("radio", { name: /On this machine, as the user Ether runs as/ }).check();
   await expect(page.getByRole("radio", { name: /On this machine/ })).toBeChecked();
   try {
-    expect((await owner.ctx.patch(api, { data: { ciEnabled: true, requireChecks: true }, headers: originHeaders() })).ok()).toBe(true);
+    expect((await owner.ctx.patch(api, { data: { ciEnabled: true, requireChecks: true }, headers: headers() })).ok()).toBe(true);
 
     // A push now starts a run: one job passes, one fails.
     writeFileSync(join(src, "README.md"), "# CI\n\nsecond\n");
@@ -92,7 +94,7 @@ test("CI runs workflows on push when enabled, shows logs, and gates merges on ch
     gitOk(src, ["commit", "-qam", "fix lint"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "fix"], auth);
     const fixSha = gitOk(src, ["rev-parse", "HEAD"]).trim();
-    const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "Fix lint", body: "", base: "main", head: "fix" }, headers: originHeaders() })).json();
+    const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "Fix lint", body: "", base: "main", head: "fix" }, headers: headers() })).json();
     expect((await waitForRun(owner.ctx, api, fixSha)).status).toBe("success");
     await page.goto(`${baseURL()}/${owner.username}/${repo}/pull/${pull.number}`);
     await expect(page.getByText("All checks have passed")).toBeVisible();
@@ -103,21 +105,21 @@ test("CI runs workflows on push when enabled, shows logs, and gates merges on ch
     gitOk(src, ["commit", "-qam", "break it"]);
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "broken"], auth);
     const badSha = gitOk(src, ["rev-parse", "HEAD"]).trim();
-    const bad = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "Break", body: "", base: "main", head: "broken" }, headers: originHeaders() })).json();
+    const bad = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "Break", body: "", base: "main", head: "broken" }, headers: headers() })).json();
     await waitForRun(owner.ctx, api, badSha);
     await page.goto(`${baseURL()}/${owner.username}/${repo}/pull/${bad.pull.number}`);
     await expect(page.getByText("Some checks failed")).toBeVisible();
     await expect(page.getByRole("button", { name: "Merge pull request" })).toBeDisabled();
-    expect((await owner.ctx.post(`${api}/pulls/${bad.pull.number}/merge`, { data: {}, headers: originHeaders() })).status()).toBe(409);
+    expect((await owner.ctx.post(`${api}/pulls/${bad.pull.number}/merge`, { data: {}, headers: headers() })).status()).toBe(409);
   } finally {
     const adminCtx = await loginAdmin();
-    await adminCtx.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
+    await adminCtx.put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
   }
   // Readers can't re-run anything.
   const reader = await createUser(admin);
-  await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: originHeaders() });
+  await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: headers() });
   const { runs } = await (await owner.ctx.get(`${api}/ci/runs`)).json();
-  expect((await reader.ctx.post(`${api}/ci/runs/${runs[0].id}/rerun`, { headers: originHeaders() })).status()).toBe(403);
+  expect((await reader.ctx.post(`${api}/ci/runs/${runs[0].id}/rerun`, { headers: headers() })).status()).toBe(403);
   // Failed checks are news for whoever pushed, not for everyone who can read the repository.
   const theirs = (await (await reader.ctx.get("/api/feed")).json()).events as { kind: string; repo: string }[];
   expect(theirs.filter((e) => e.repo === repo).map((e) => e.kind)).not.toContain("ci_failed");

@@ -1,9 +1,7 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { useRef, useState } from "react";
-import { api, del, patch, put, upload } from "../lib/api";
-import { plural } from "../lib/format";
-import { Avatar, ErrorNote, Field, onSubmit, ROW, Status, useAction } from "./ui";
-import { GIF_AVATAR_MAX_MB, MAX_GIF_AVATAR, MAX_PINS, MAX_SOCIALS, PROFILE_FIELDS } from "../../shared/profiles";
+import { api, del, patch, put } from "../lib/api";
+import { Avatar, ErrorNote, Field, onSubmit, ROW, useAction } from "./ui";
 
 export type MyProfile = {
   profile: {
@@ -26,11 +24,20 @@ export const loadMyProfile = () => api<MyProfile>("/api/me/profile");
 
 const FORM_GRID = "grid grid-cols-2 gap-x-4 max-sm:grid-cols-1";
 
+const Status = ({ text }: { text: string }) =>
+  text ? (
+    <span role="status" className="text-muted">
+      {text}
+    </span>
+  ) : null;
+
+const MAX_GIF_AVATAR = 2 * 1024 * 1024;
+
 // Stills are resized to a 256px square and re-encoded, which also drops EXIF data such as GPS
 // position. GIFs go up untouched (they carry no EXIF) so animation survives; CSS crops them.
 async function avatarBody(file: File): Promise<Blob> {
   if (file.type === "image/gif") {
-    if (file.size > MAX_GIF_AVATAR) throw new Error(`GIF avatars can be at most ${GIF_AVATAR_MAX_MB} MB`);
+    if (file.size > MAX_GIF_AVATAR) throw new Error("GIF avatars can be at most 2 MB");
     return file;
   }
   return toAvatarPng(file);
@@ -48,7 +55,7 @@ async function toAvatarPng(file: File): Promise<Blob> {
 export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfile; repos: string[] }) {
   const router = useRouter();
   const p = data.profile;
-  const [form, setForm] = useState({ ...p, socials: Array.from({ length: MAX_SOCIALS }, (_, i) => p.socials[i] ?? "") });
+  const [form, setForm] = useState({ ...p, socials: [0, 1, 2, 3].map((i) => p.socials[i] ?? "") });
   const [status, setStatus] = useState("");
   const [avatarStatus, setAvatarStatus] = useState("");
   const [emails, setEmails] = useState(data.emails.join("\n"));
@@ -67,10 +74,11 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
     setStatus("Profile saved");
     await router.invalidate();
   });
-  const uploadAvatar = useAction(async (file: File) => {
+  const upload = useAction(async (file: File) => {
     setAvatarStatus("");
     const body = await avatarBody(file);
-    await upload("/api/me/avatar", body);
+    const res = await fetch("/api/me/avatar", { method: "PUT", body, headers: { "Content-Type": body.type || "application/octet-stream" }, credentials: "same-origin" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Upload failed");
     setAvatarStatus("Avatar updated");
     await router.invalidate();
   });
@@ -106,7 +114,7 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
           <div className="flex flex-wrap items-start gap-4">
             <Avatar name={me} size={96} />
             <div className="stack-sm">
-              <ErrorNote error={uploadAvatar.error ?? removeAvatar.error} />
+              <ErrorNote error={upload.error ?? removeAvatar.error} />
               <label htmlFor="avatar-file" className="button m-0 self-start">
                 Upload avatar
               </label>
@@ -118,12 +126,12 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
                 accept="image/png,image/jpeg,image/gif,image/webp"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) uploadAvatar.run(file);
+                  if (file) upload.run(file);
                   e.target.value = "";
                 }}
               />
               <span className="hint m-0">
-                PNG, JPEG, GIF or WebP. Animated GIFs stay animated (up to {GIF_AVATAR_MAX_MB} MB). Images are cropped to a square.
+                PNG, JPEG, GIF or WebP. Animated GIFs stay animated (up to 2 MB). Images are cropped to a square.
               </span>
               <div className={ROW}>
                 {p.avatarVersion && (
@@ -139,24 +147,24 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
             <ErrorNote error={saveProfile.error} />
             <div className={FORM_GRID}>
               <Field id="p-name" label="Display name">
-                <input id="p-name" value={form.displayName} onChange={set("displayName")} maxLength={PROFILE_FIELDS.displayName} autoComplete="name" />
+                <input id="p-name" value={form.displayName} onChange={set("displayName")} maxLength={64} autoComplete="name" />
               </Field>
               <Field id="p-pronouns" label="Pronouns">
-                <input id="p-pronouns" value={form.pronouns} onChange={set("pronouns")} maxLength={PROFILE_FIELDS.pronouns} />
+                <input id="p-pronouns" value={form.pronouns} onChange={set("pronouns")} maxLength={32} />
               </Field>
             </div>
-            <Field id="p-bio" label="Bio" hint={`Plain text, up to ${PROFILE_FIELDS.bio} characters.`}>
-              <textarea className="min-h-[72px]" id="p-bio" value={form.bio} onChange={set("bio")} maxLength={PROFILE_FIELDS.bio} />
+            <Field id="p-bio" label="Bio" hint="Plain text, up to 200 characters.">
+              <textarea className="min-h-[72px]" id="p-bio" value={form.bio} onChange={set("bio")} maxLength={200} />
             </Field>
             <Field id="p-status" label="Status" hint="A short note shown on your profile, like what you are working on.">
-              <input id="p-status" value={form.status} onChange={set("status")} maxLength={PROFILE_FIELDS.status} />
+              <input id="p-status" value={form.status} onChange={set("status")} maxLength={80} />
             </Field>
             <div className={FORM_GRID}>
               <Field id="p-company" label="Company">
-                <input id="p-company" value={form.company} onChange={set("company")} maxLength={PROFILE_FIELDS.company} autoComplete="organization" />
+                <input id="p-company" value={form.company} onChange={set("company")} maxLength={64} autoComplete="organization" />
               </Field>
               <Field id="p-location" label="Location">
-                <input id="p-location" value={form.location} onChange={set("location")} maxLength={PROFILE_FIELDS.location} />
+                <input id="p-location" value={form.location} onChange={set("location")} maxLength={64} />
               </Field>
             </div>
             <Field id="p-website" label="Website">
@@ -215,7 +223,7 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
                           {p.email}
                         </span>
                         <span className="text-muted tabular-nums">
-                          {plural(p.commits, "commit")}
+                          {p.commits} {p.commits === 1 ? "commit" : "commits"}
                         </span>
                         <span className="flex-1" />
                         <button
@@ -245,7 +253,7 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
       <section className="card">
         <header>
           <h2 className="m-0">Pinned repositories</h2>
-          <span className="text-muted tabular-nums">{pins.length} / {MAX_PINS}</span>
+          <span className="text-muted tabular-nums">{pins.length} / 6</span>
         </header>
         <form className="body stack-sm" onSubmit={onSubmit(savePins.run)}>
           <ErrorNote error={savePins.error} />
@@ -263,7 +271,7 @@ export function ProfileSettings({ me, data, repos }: { me: string; data: MyProfi
                     <input
                       type="checkbox"
                       checked={checked}
-                      disabled={!checked && pins.length >= MAX_PINS}
+                      disabled={!checked && pins.length >= 6}
                       onChange={() => {
                         setPins(checked ? pins.filter((x) => x !== full) : [...pins, full]);
                         setPinStatus("");

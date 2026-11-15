@@ -150,6 +150,7 @@ export function commentableLines(patch: string | undefined): Set<number> {
 
 const TOKEN_PATTERNS = [/\bgh[pousr]_[A-Za-z0-9]{30,}/, /\bgithub_pat_[A-Za-z0-9_]{40,}/, /\bsk-ant-[A-Za-z0-9_-]{20,}/];
 
+// True if the text contains any of the secrets or anything shaped like a GitHub or Anthropic token.
 export function containsSecret(text: string, secrets: (string | undefined)[]): boolean {
   return secrets.some((s) => s && s.length >= 8 && text.includes(s)) || TOKEN_PATTERNS.some((p) => p.test(text));
 }
@@ -213,6 +214,7 @@ export interface Posted {
   file: string;
 }
 
+// The finding an earlier bot review comment on file carries, if any.
 export function postedFinding(body: string, file: string): Posted | null {
   const marker = parseFindingMarker(body);
   if (!marker) return null;

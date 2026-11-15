@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, createRepo, createUser, git, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
+import { baseURL, createRepo, createUser, git, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
+
+const headers = () => ({ Origin: baseURL() });
 
 test("repositories have a wiki that writers edit in the browser or with git, with history", async ({ page, browser }, info) => {
   const admin = await loginAdmin();
@@ -9,7 +11,7 @@ test("repositories have a wiki that writers edit in the browser or with git, wit
   const reader = await createUser(admin);
   const repo = await createRepo(owner.ctx, unique("docs"));
   const api = `/api/repos/${owner.username}/${repo}`;
-  await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: originHeaders() });
+  await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: headers() });
 
   await uiLogin(page, owner.username, owner.password);
   await page.goto(`${baseURL()}/${owner.username}/${repo}`);
@@ -48,8 +50,8 @@ test("repositories have a wiki that writers edit in the browser or with git, wit
   await expect(r.getByRole("article", { name: "Home" })).toContainText("Welcome back");
   await expect(r.getByRole("link", { name: "Edit page" })).toHaveCount(0);
   await ctx.close();
-  expect((await reader.ctx.put(`${api}/wiki/Home`, { data: { content: "vandalism" }, headers: originHeaders() })).status()).toBe(403);
-  expect((await owner.ctx.put(`${api}/wiki/..%2Fescape`, { data: { content: "x" }, headers: originHeaders() })).status()).toBe(400);
+  expect((await reader.ctx.put(`${api}/wiki/Home`, { data: { content: "vandalism" }, headers: headers() })).status()).toBe(403);
+  expect((await owner.ctx.put(`${api}/wiki/..%2Fescape`, { data: { content: "x" }, headers: headers() })).status()).toBe(400);
 
   // The wiki is a git repository: clone it, push a page, see it on the site.
   const dir = workdir();

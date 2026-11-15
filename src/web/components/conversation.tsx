@@ -3,8 +3,7 @@ import { MessageSquare } from "lucide-react";
 import { motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import { rise, staggered } from "../lib/motion";
-import { canWrite, patch, post, repoApi, type Comment, type Issue, type RepoInfo } from "../lib/api";
-import { timeAgo } from "../lib/format";
+import { patch, post, repoApi, timeAgo, type Comment, type Issue, type RepoInfo } from "../lib/api";
 import { Markdown } from "./content";
 import { LabelPill } from "./labels";
 import { Avatar, ErrorNote, onSubmit, ROW, StateBadge, StateIcon, useAction } from "./ui";
@@ -25,7 +24,7 @@ export function IssueList({
   const params = { owner: info.repo.owner, repo: info.repo.name };
   const listTo = kind === "issues" ? "/$owner/$repo/issues" : "/$owner/$repo/pulls";
   const { me } = useRouteContext({ from: "/_authed" });
-  const canCreate = !!me && (kind === "issues" || canWrite(info.role));
+  const canCreate = !!me && (kind === "issues" || info.role !== "read");
   return (
     <section className="card">
       <header>
@@ -136,6 +135,7 @@ function CommentCard({ author, at, body, i = 0 }: { author: string; at: string; 
   );
 }
 
+// The opening post, its comments, the reply box, and close/reopen.
 export function Conversation({ info, issue, comments, me }: { info: RepoInfo; issue: Issue; comments: Comment[]; me: string | null }) {
   const router = useRouter();
   const [body, setBody] = useState("");
@@ -149,7 +149,7 @@ export function Conversation({ info, issue, comments, me }: { info: RepoInfo; is
     await patch(base, { state });
     await router.invalidate();
   });
-  const canToggle = !!me && issue.state !== "merged" && (issue.author === me || canWrite(info.role));
+  const canToggle = !!me && issue.state !== "merged" && (issue.author === me || info.role !== "read");
   const noun = issue.isPull ? "pull request" : "issue";
 
   return (

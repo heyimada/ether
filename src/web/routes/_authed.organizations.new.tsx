@@ -3,8 +3,6 @@ import { useState } from "react";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { post } from "../lib/api";
 import { requireAccount } from "../lib/require-account";
-import { NAME_MAX } from "../../shared/accounts";
-import { PROFILE_FIELDS } from "../../shared/profiles";
 
 export const Route = createFileRoute("/_authed/organizations/new")({
   beforeLoad: ({ context, location }) => requireAccount(context.me, location.href),
@@ -31,10 +29,10 @@ function NewOrg() {
       <form className="card body stack-md" onSubmit={onSubmit(create.run)}>
         <ErrorNote error={create.error} />
         <Field id="org-name" label="Organization name" hint={`Your organization's URL will be /${name || "name"}. Letters, digits and dashes.`}>
-          <input id="org-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={NAME_MAX} pattern="[A-Za-z0-9][A-Za-z0-9\-]{0,38}" autoFocus />
+          <input id="org-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={39} pattern="[A-Za-z0-9][A-Za-z0-9\-]{0,38}" autoFocus />
         </Field>
         <Field id="org-display" label="Display name" hint="Optional, for example the full company name.">
-          <input id="org-display" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={PROFILE_FIELDS.displayName} />
+          <input id="org-display" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={64} />
         </Field>
         <div>
           <button className="primary" disabled={create.pending}>

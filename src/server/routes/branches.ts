@@ -1,19 +1,21 @@
 import { Elysia } from "elysia";
 import { HttpError, requireRepo, requireUser } from "../access";
 import { refusal } from "../branch-rules";
+import { onPush } from "../ci";
+import { recordPushEvents } from "../events";
 import * as git from "../git";
 import { branchRules, freshRepo } from "../protection";
-import { refsPushed } from "../push";
 
 // Git's own rules for branch names, plus what `git branch` refuses on top: a leading - and HEAD.
-function validBranch(name: string) {
-  return name.length > 0 && name.length <= 100 && !name.startsWith("-") && name !== "HEAD" && git.validRefName("heads", name);
+export function validBranch(name: string) {
+  return name.length > 0 && name.length <= 100 && !name.startsWith("-") && name !== "HEAD" && Bun.spawnSync(["git", "check-ref-format", `refs/heads/${name}`]).exitCode === 0;
 }
 
 // A branch, tag or full commit id the new branch starts at; never anything rev-parse would read as more.
 async function startPoint(path: string, from: string): Promise<string | null> {
   if (/^[0-9a-f]{40}$/.test(from)) return git.resolveCommit(path, from);
-  if (!git.validRefName("heads", from)) return null;
+  // Only plain ref names: check-ref-format refuses ~ ^ : @{ and the rest of rev-parse's syntax.
+  if (Bun.spawnSync(["git", "check-ref-format", `refs/heads/${from}`]).exitCode !== 0) return null;
   for (const ref of [`refs/heads/${from}`, `refs/tags/${from}`]) {
     const sha = await git.resolveCommit(path, ref);
     if (sha) return sha;
@@ -46,10 +48,13 @@ export const branchRoutes = new Elysia().post("/repos/:owner/:repo/branches", as
   } catch {
     throw new HttpError(409, `${name} clashes with an existing branch`);
   }
+  // The first branch of a repository with only tags becomes its default, as after a push.
+  await git.fixHead(a.path).catch(() => {});
   // Creating a branch here is a push as far as the activity feed and CI are concerned. Only this branch is
   // news: anything someone pushed meanwhile is reported by their own push. The branch exists by now, so a
   // failure here mustn't turn into an error for it.
   const after = [...before, { name, kind: "branch" as const, sha }];
-  await refsPushed({ id: a.repo.id, path: a.path }, before, after, viewer.id);
+  await recordPushEvents(a.repo.id, viewer.id, a.path, before, after).catch(() => {});
+  await onPush(a.repo.id, a.path, before, after, viewer.id).catch(() => {});
   return { branch: { name, sha } };
 });

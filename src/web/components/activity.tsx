@@ -2,14 +2,12 @@ import { Link } from "@tanstack/react-router";
 import { addDays, format } from "date-fns";
 import { motion } from "motion/react";
 import type { CSSProperties } from "react";
-import { api, repoApi, type Commit, type Issue, type RepoInfo } from "../lib/api";
-import { noun, plural, shortSha, timeAgo } from "../lib/format";
+import { api, repoApi, shortSha, timeAgo, type Commit, type Issue, type RepoInfo } from "../lib/api";
 import { rise, staggered } from "../lib/motion";
-import type { LanguageShare } from "../../server/languages";
-import { Avatar, LANG_DOT } from "./ui";
-import { ACTIVITY_WEEKS } from "../../shared/repos";
+import { Avatar } from "./ui";
 
 export type Activity = { since: number | null; weeks: number[]; total: number; authors: { name: string; email: string; commits: number; username: string | null }[] };
+export type LanguageShare = { name: string; color: string | null; bytes: number; percent: number };
 export type AuthoredCommit = Commit & { username: string | null };
 
 export const loadLanguages = (info: RepoInfo) => api<{ languages: LanguageShare[] }>(`${repoApi(info.repo.owner, info.repo.name)}/languages`).then((r) => r.languages);
@@ -18,6 +16,7 @@ export const loadRecentCommits = (info: RepoInfo) =>
 
 export const loadActivity = (info: RepoInfo) => api<Activity>(`${repoApi(info.repo.owner, info.repo.name)}/activity`);
 
+export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 type Open = { issues: number; pulls: number };
 type Latest = { issue: Issue | null; pull: Issue | null };
@@ -36,7 +35,7 @@ export function ActivityStrip({ info, open, latest, activity }: { info: RepoInfo
     <section className="grid grid-cols-3 max-md:grid-cols-[1fr] rounded-md border border-border bg-surface shadow-card" aria-label="Activity">
       <div className={CELL}>
         <Link to="/$owner/$repo/pulls" params={params} className={`${HEAD} group/head hover:no-underline`}>
-          <span className={NUM}>{open.pulls}</span> open {noun(open.pulls, "pull request")}
+          <span className={NUM}>{open.pulls}</span> open {open.pulls === 1 ? "pull request" : "pull requests"}
         </Link>
         <p className={DETAIL}>
           {latest.pull ? (
@@ -50,7 +49,7 @@ export function ActivityStrip({ info, open, latest, activity }: { info: RepoInfo
       </div>
       <div className={CELL}>
         <span className={HEAD}>
-          <span className={NUM}>{activity.total}</span> {noun(activity.total, "commit")} in the last {ACTIVITY_WEEKS} weeks
+          <span className={NUM}>{activity.total}</span> {activity.total === 1 ? "commit" : "commits"} in the last 12 weeks
         </span>
         <p className={DETAIL}>
           {top.length ? (
@@ -67,7 +66,7 @@ export function ActivityStrip({ info, open, latest, activity }: { info: RepoInfo
       </div>
       <div className={CELL}>
         <Link to="/$owner/$repo/issues" params={params} className={`${HEAD} group/head hover:no-underline`}>
-          <span className={NUM}>{open.issues}</span> open {noun(open.issues, "issue")}
+          <span className={NUM}>{open.issues}</span> open {open.issues === 1 ? "issue" : "issues"}
         </Link>
         <p className={DETAIL}>
           {latest.issue ? (
@@ -91,7 +90,7 @@ export function CommitSparkline({ activity }: { activity: Activity }) {
   const since = activity.since;
   return (
     <section>
-      <h3 className="m-0 mb-2 text-base">Commits, last {ACTIVITY_WEEKS} weeks</h3>
+      <h3 className="m-0 mb-2 text-base">Commits, last 12 weeks</h3>
       <ol className="spark" aria-label="Commits per week">
         {activity.weeks.map((n, i) => {
           const label = `Week of ${format(addDays(since, i * 7), "MMM d")}: ${plural(n, "commit")}`;
@@ -134,7 +133,9 @@ const fmtPercent = (p: number) => `${p.toFixed(1)}%`;
 // Languages too small to see in the bar still get a legend entry; the colour is decoration.
 const fallbackColor = "var(--control-border)";
 const LANG_SEGMENT = "block min-w-[2px] origin-left animate-[bar-grow-x_420ms_var(--ease-out)_calc(var(--i,0)*50ms)_backwards]";
+const LANG_DOT = "inline-block size-2.5 flex-none rounded-full shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--text)_15%,transparent)]";
 
+// GitHub-style: one bar split by bytes, with a legend of name and share.
 export function LanguageBar({ languages }: { languages: LanguageShare[] }) {
   if (languages.length === 0) return null;
   const shown = languages.slice(0, 6);
@@ -170,6 +171,7 @@ export function LanguageBar({ languages }: { languages: LanguageShare[] }) {
 
 const COMMIT_AUTHOR = "font-semibold text-fg";
 
+// The newest commits on the default branch, with whoever wrote them.
 export function RecentCommits({ info, commits }: { info: RepoInfo; commits: AuthoredCommit[] }) {
   if (commits.length === 0) return null;
   const params = { owner: info.repo.owner, repo: info.repo.name };

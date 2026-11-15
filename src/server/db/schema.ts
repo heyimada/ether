@@ -472,7 +472,7 @@ export const deployKey = sqliteTable(
   (t) => [index("deploy_key_repo_idx").on(t.repoId)],
 );
 
-// Rules for branches matching a pattern, enforced on every push (HTTPS and SSH) by the `update` hook (see protection.ts).
+// Rules for branches matching a pattern, enforced on every push (HTTPS and SSH) by a pre-receive hook.
 // Merges of pull requests happen on the server and are the way into a branch that requires them.
 export const branchProtection = sqliteTable(
   "branch_protection",

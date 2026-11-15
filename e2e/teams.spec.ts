@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createUser, git, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
+import { baseURL, cloneUrl, createUser, git, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
+
+const headers = () => ({ Origin: baseURL() });
 
 function canPush(owner: string, repo: string, who: { username: string; token: string }) {
   const dir = workdir();
@@ -19,10 +21,10 @@ test("teams grant their members a role on chosen org repositories", async ({ pag
   const viewer = await createUser(admin);
   const outsider = await createUser(admin);
   const org = unique("crew").slice(0, 30);
-  await founder.ctx.post("/api/orgs", { data: { name: org }, headers: originHeaders() });
-  for (const m of [dev, viewer]) await founder.ctx.put(`/api/orgs/${org}/members/${m.username}`, { data: { role: "member" }, headers: originHeaders() });
+  await founder.ctx.post("/api/orgs", { data: { name: org }, headers: headers() });
+  for (const m of [dev, viewer]) await founder.ctx.put(`/api/orgs/${org}/members/${m.username}`, { data: { role: "member" }, headers: headers() });
   const repo = unique("engine");
-  await founder.ctx.post("/api/repos", { data: { name: repo, owner: org }, headers: originHeaders() });
+  await founder.ctx.post("/api/repos", { data: { name: repo, owner: org }, headers: headers() });
   const src = workdir();
   gitOk(src, ["init", "-q"]);
   writeFileSync(join(src, "a.txt"), "a\n");
@@ -30,6 +32,7 @@ test("teams grant their members a role on chosen org repositories", async ({ pag
   gitOk(src, ["commit", "-q", "-m", "seed"]);
   gitOk(src, ["push", "-q", cloneUrl(org, repo), "main"], { username: founder.username, token: founder.token });
 
+  // Build the team in the org settings page.
   await uiLogin(page, founder.username, founder.password);
   await page.goto(`${baseURL()}/organizations/${org}/settings`);
   await page.getByLabel("Team name").fill("core");
@@ -49,20 +52,20 @@ test("teams grant their members a role on chosen org repositories", async ({ pag
   expect(canPush(org, repo, { username: viewer.username, token: viewer.token })).toBe("read-only");
 
   // Only org members can join a team.
-  expect((await founder.ctx.put(`/api/orgs/${org}/teams/core/members/${outsider.username}`, { headers: originHeaders() })).status()).toBe(400);
+  expect((await founder.ctx.put(`/api/orgs/${org}/teams/core/members/${outsider.username}`, { headers: headers() })).status()).toBe(400);
 
   // Leaving the team, or the team going away, takes the extra access with it.
-  expect((await founder.ctx.delete(`/api/orgs/${org}/teams/core/members/${dev.username}`, { headers: originHeaders() })).ok()).toBe(true);
+  expect((await founder.ctx.delete(`/api/orgs/${org}/teams/core/members/${dev.username}`, { headers: headers() })).ok()).toBe(true);
   expect(canPush(org, repo, { username: dev.username, token: dev.token })).toBe("read-only");
-  await founder.ctx.put(`/api/orgs/${org}/teams/core/members/${dev.username}`, { headers: originHeaders() });
+  await founder.ctx.put(`/api/orgs/${org}/teams/core/members/${dev.username}`, { headers: headers() });
   expect(canPush(org, repo, { username: dev.username, token: dev.token })).toBe("pushed");
-  expect((await founder.ctx.delete(`/api/orgs/${org}/teams/core`, { headers: originHeaders() })).ok()).toBe(true);
+  expect((await founder.ctx.delete(`/api/orgs/${org}/teams/core`, { headers: headers() })).ok()).toBe(true);
   expect(canPush(org, repo, { username: dev.username, token: dev.token })).toBe("read-only");
 
   // Removing someone from the org removes them from its teams as well.
-  await founder.ctx.post(`/api/orgs/${org}/teams`, { data: { name: "ops" }, headers: originHeaders() });
-  await founder.ctx.put(`/api/orgs/${org}/teams/ops/members/${viewer.username}`, { headers: originHeaders() });
-  await founder.ctx.delete(`/api/orgs/${org}/members/${viewer.username}`, { headers: originHeaders() });
+  await founder.ctx.post(`/api/orgs/${org}/teams`, { data: { name: "ops" }, headers: headers() });
+  await founder.ctx.put(`/api/orgs/${org}/teams/ops/members/${viewer.username}`, { headers: headers() });
+  await founder.ctx.delete(`/api/orgs/${org}/members/${viewer.username}`, { headers: headers() });
   const teams = await (await founder.ctx.get(`/api/orgs/${org}/teams`)).json();
   expect(teams.teams.find((t: { name: string }) => t.name === "ops").members).toEqual([]);
 });

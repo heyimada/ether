@@ -90,6 +90,22 @@ test("stopping a job ends what its step started", async () => {
   expect(log).not.toContain("▶ echo never");
 }, 45_000);
 
+// Stopping a step whose shell is forking at that moment must still end the child: the group is killed until it's
+// empty. Without that, some of these stops leave the sleep holding the step's output open for a minute.
+test("stopping a job ends its step's children every time, also mid-fork", async () => {
+  for (let i = 0; i < 25; i++) {
+    let log = "";
+    const job = startJob(assignment([step("echo started; sleep 60 & wait")]), { log: (t) => void (log += t) }, "test");
+    const started = Date.now();
+    while (!/^started$/m.test(log)) {
+      if (Date.now() - started > 20_000) throw new Error(`step never started:\n${log}`);
+      await Bun.sleep(5);
+    }
+    job.stop();
+    expect(await Promise.race([job.done, Bun.sleep(5_000).then(() => `still running after stop (try ${i + 1})`)])).toBe("cancelled");
+  }
+}, 120_000);
+
 test("a job stopped during its checkout ends there", async () => {
   let log = "";
   const job = startJob(assignment([step("echo never")], { isolation: "container", image: "example/never" }), { log: (t) => void (log += t) }, "test");

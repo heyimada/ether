@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
-import { cancel, dispatch, isWorkflowPath, rerun, runnerLabels, runnerProblem, workflowFiles } from "../ci";
-import { deleteSecret, listSecrets, secretValue, setSecret } from "../ci-secrets";
+import { cancel, dispatch, DispatchError, isWorkflowPath, rerun, runnerLabels, runnerProblem, workflowFiles } from "../ci";
+import { deleteSecret, listSecrets, MAX_SECRET, SECRET_NAME_RE, setSecret } from "../ci-secrets";
 import { db } from "../db/client";
 import { ciJob, ciRun, user } from "../db/schema";
 import { parseWorkflow } from "../ci-workflow";
@@ -16,6 +16,7 @@ function findRun(a: RepoAccess, id: string) {
   return run;
 }
 
+// What the run page shows about a deploy job: where it goes, who may approve it, and whether the viewer can.
 function deploymentView(job: typeof ciJob.$inferSelect, repoId: number, viewerId: string) {
   const env = environmentOfJob(job, repoId);
   const d = deploymentOfJob(job.id);
@@ -38,6 +39,7 @@ async function subject(path: string, sha: string) {
 }
 
 export const ciRoutes = new Elysia()
+  // Newest first; ?workflow=<path> keeps one workflow's runs.
   .get("/repos/:owner/:repo/ci/runs", async ({ request, params, query }) => {
     const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
     const workflow = typeof query.workflow === "string" && query.workflow ? query.workflow : null;
@@ -59,10 +61,11 @@ export const ciRoutes = new Elysia()
       ),
     };
   })
+  // The default branch's workflows: when they run, what a manual run asks for, or why the file doesn't parse.
   .get("/repos/:owner/:repo/ci/workflows", async ({ request, params }) => {
     const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
-    const branch = await git.headBranch(a.path);
-    const sha = await git.resolveCommit(a.path, `refs/heads/${branch}`);
+    const branch = await git.headBranch(a.path).catch(() => null);
+    const sha = branch ? await git.resolveCommit(a.path, `refs/heads/${branch}`) : null;
     const files = sha ? await workflowFiles(a.path, sha) : [];
     return {
       branch,
@@ -76,6 +79,7 @@ export const ciRoutes = new Elysia()
       }),
     };
   })
+  // Runs a workflow that has workflow_dispatch, on a branch, with its inputs.
   .post("/repos/:owner/:repo/ci/workflows/dispatch", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "write");
@@ -83,7 +87,12 @@ export const ciRoutes = new Elysia()
     if (typeof b.workflow !== "string" || !isWorkflowPath(b.workflow)) throw new HttpError(400, "Name a workflow file, e.g. .ether/workflows/deploy.yml");
     if (typeof b.ref !== "string" || !b.ref || b.ref.length > 255) throw new HttpError(400, "Name the branch to run on");
     if (b.inputs !== undefined && (typeof b.inputs !== "object" || b.inputs === null || Array.isArray(b.inputs))) throw new HttpError(400, "inputs must be a map of names to values");
-    return { run: { id: await dispatch(a.repo.id, a.path, b.workflow, b.ref, (b.inputs ?? {}) as Record<string, unknown>, viewer.id) } };
+    try {
+      return { run: { id: await dispatch(a.repo.id, a.path, b.workflow, b.ref, (b.inputs ?? {}) as Record<string, unknown>, viewer.id) } };
+    } catch (e) {
+      if (e instanceof DispatchError) throw new HttpError(e.message.startsWith("CI is turned off") ? 409 : 400, e.message);
+      throw e;
+    }
   })
   .get("/repos/:owner/:repo/ci/runs/:id", async ({ request, params }) => {
     const viewer = await readerOrVisitor(request);
@@ -132,7 +141,11 @@ export const ciRoutes = new Elysia()
   .put("/repos/:owner/:repo/ci/secrets/:name", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "owner");
-    setSecret(a.repo.id, params.name, secretValue(params.name, body), viewer.id);
+    if (!SECRET_NAME_RE.test(params.name)) throw new HttpError(400, "Secret names are upper-case letters, digits and _, not starting with a digit, and not CI or CI_…");
+    const value = (body as { value?: unknown } | undefined)?.value;
+    if (typeof value !== "string" || value.length === 0) throw new HttpError(400, "Enter a value");
+    if (value.length > MAX_SECRET) throw new HttpError(413, "Secrets can be at most 64 KB");
+    setSecret(a.repo.id, params.name, value, viewer.id);
     return { ok: true };
   })
   .delete("/repos/:owner/:repo/ci/secrets/:name", async ({ request, params }) => {

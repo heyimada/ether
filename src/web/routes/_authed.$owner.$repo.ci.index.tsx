@@ -1,15 +1,27 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
-import type { InputType } from "../../server/ci-triggers";
-import { CiBadge, ciDone, EVENT_LABEL, type CiEvent, type CiRun, type CiStatus } from "../components/ci";
+import { CiBadge, ciDone, EVENT_LABEL, type CiEvent, type CiStatus } from "../components/ci";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
-import { api, canWrite, isOwner, post, repoApi } from "../lib/api";
-import { shortSha, timeAgo } from "../lib/format";
+import { api, post, repoApi, shortSha, timeAgo } from "../lib/api";
 import { rise, staggered } from "../lib/motion";
 
-type Run = CiRun & { jobs: { name: string; status: CiStatus }[] };
-type Input = { name: string; description: string; type: InputType; required: boolean; default: string | null; options: string[] };
+type Run = {
+  id: number;
+  sha: string;
+  ref: string;
+  refType: "branch" | "tag";
+  workflowName: string;
+  workflowPath: string;
+  event: CiEvent;
+  pullNumber: number | null;
+  status: CiStatus;
+  message: string;
+  subject: string;
+  createdAt: string;
+  jobs: { name: string; status: CiStatus }[];
+};
+type Input = { name: string; description: string; type: "string" | "boolean" | "choice" | "number"; required: boolean; default: string | null; options: string[] };
 type Workflow = { path: string; name: string; events: CiEvent[]; inputs: Input[] | null; schedule: string[] | null; error: string | null };
 
 export const Route = createFileRoute("/_authed/$owner/$repo/ci/")({
@@ -32,6 +44,7 @@ function Runs() {
   const { workflow: selected } = Route.useSearch();
   const { enabled, runs, workflows } = Route.useLoaderData();
   const params = { owner: info.repo.owner, repo: info.repo.name };
+  // Keep the list live while anything is still running.
   const active = runs.some((r) => !ciDone(r.status));
   // Runs that only wait for a deployment review can stay that way for hours, so check those less often.
   const busy = runs.some((r) => r.status === "queued" || r.status === "running");
@@ -74,7 +87,7 @@ function Runs() {
         {!enabled && (
           <p className="notice m-0">
             CI is off for this repository.{" "}
-            {isOwner(info.role) ? (
+            {info.role === "owner" ? (
               <>
                 Turn it on in <Link to="/$owner/$repo/settings" params={params}>Settings</Link>, then push a workflow to <code>.ether/workflows/</code>.
               </>
@@ -90,7 +103,7 @@ function Runs() {
           </p>
         )}
         {current?.error && <p className="error m-0">{current.error}</p>}
-        {current?.inputs && enabled && canWrite(info.role) && <RunWorkflow key={current.path} workflow={current} />}
+        {current?.inputs && enabled && info.role !== "read" && <RunWorkflow key={current.path} workflow={current} />}
         {runs.length === 0 ? (
           <p className="empty card">No runs yet.</p>
         ) : (
@@ -121,6 +134,7 @@ function Runs() {
   );
 }
 
+// Starts a workflow that has workflow_dispatch, on a branch, with its inputs.
 function RunWorkflow({ workflow }: { workflow: Workflow }) {
   const router = useRouter();
   const { info } = Route.useRouteContext();

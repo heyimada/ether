@@ -1,7 +1,9 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, runsOf, uiLogin, unique, workdir, type Run } from "./helpers";
+import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
+
+const headers = () => ({ Origin: baseURL() });
 
 const FILES: Record<string, string> = {
   "test.yml": `name: Tests
@@ -56,6 +58,10 @@ jobs:
 `,
 };
 
+type Run = { id: number; sha: string; workflowName: string; event: string; status: string; pullNumber: number | null; ref: string; message: string };
+
+const runsOf = async (ctx: APIRequestContext, api: string): Promise<Run[]> => (await (await ctx.get(`${api}/ci/runs`)).json()).runs;
+
 // Every run for a commit, once none of them is still going.
 async function finished(ctx: APIRequestContext, api: string, sha: string, count: number) {
   for (let i = 0; i < 300; i++) {
@@ -71,13 +77,13 @@ const log = async (ctx: APIRequestContext, api: string, id: number) => ((await (
 test("workflows in .ether/workflows run on the events their on: names", async ({ page }, info) => {
   test.setTimeout(3 * 60_000);
   const admin = await loginAdmin();
-  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: originHeaders() });
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: headers() });
   try {
     const owner = await createUser(admin);
     const repo = await createRepo(owner.ctx, unique("wf"));
     const api = `/api/repos/${owner.username}/${repo}`;
     const auth = { username: owner.username, token: owner.token };
-    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() })).ok()).toBe(true);
+    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() })).ok()).toBe(true);
     const remote = cloneUrl(owner.username, repo);
 
     const src = workdir();
@@ -123,7 +129,7 @@ test("workflows in .ether/workflows run on the events their on: names", async ({
     gitOk(src, ["commit", "-qam", "v2"]);
     gitOk(src, ["push", "-q", remote, "feature"], auth);
     const v2 = gitOk(src, ["rev-parse", "HEAD"]).trim();
-    const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "v2", body: "", base: "main", head: "feature" }, headers: originHeaders() })).json();
+    const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "v2", body: "", base: "main", head: "feature" }, headers: headers() })).json();
     const [opened] = await finished(owner.ctx, api, v2, 1);
     expect([opened.workflowName, opened.event, opened.pullNumber, opened.status]).toEqual(["PR checks", "pull_request", pull.number, "success"]);
     expect(await log(owner.ctx, api, opened.id)).toContain(`pull=${pull.number} base=main head=feature`);
@@ -138,7 +144,7 @@ test("workflows in .ether/workflows run on the events their on: names", async ({
     // Another pull request from the same branch, into develop, which PR checks doesn't take: it has no checks,
     // rather than borrowing the first pull request's.
     gitOk(src, ["push", "-q", remote, "main:develop"], auth);
-    const other = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "into develop", body: "", base: "develop", head: "feature" }, headers: originHeaders() })).json();
+    const other = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "into develop", body: "", base: "develop", head: "feature" }, headers: headers() })).json();
     expect((await (await owner.ctx.get(`${api}/pulls/${other.pull.number}`)).json()).checks).toBeNull();
     expect((await (await owner.ctx.get(`${api}/pulls/${pull.number}`)).json()).checks.runs).toHaveLength(1);
 
@@ -148,7 +154,7 @@ test("workflows in .ether/workflows run on the events their on: names", async ({
     await expect(page.getByRole("list", { name: "Checks" }).getByRole("listitem")).toHaveText([/PR checks\s*\(pull request\)/]);
 
     // Merging moves main like a push, so Tests runs on the merge commit.
-    const merged = await (await owner.ctx.post(`${api}/pulls/${pull.number}/merge`, { data: {}, headers: originHeaders() })).json();
+    const merged = await (await owner.ctx.post(`${api}/pulls/${pull.number}/merge`, { data: {}, headers: headers() })).json();
     expect((await finished(owner.ctx, api, merged.sha, 1)).map((r) => [r.workflowName, r.event, r.ref])).toEqual([["Tests", "push", "main"]]);
 
     // Manual runs: the CI tab lists the workflows, and Manual can be started with its inputs.
@@ -172,7 +178,7 @@ test("workflows in .ether/workflows run on the events their on: names", async ({
     await info.attach("manual-run", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 
     // Inputs are checked, and only workflows with workflow_dispatch can be started by hand.
-    const dispatch = (data: object) => owner.ctx.post(`${api}/ci/workflows/dispatch`, { data, headers: originHeaders() });
+    const dispatch = (data: object) => owner.ctx.post(`${api}/ci/workflows/dispatch`, { data, headers: headers() });
     expect((await dispatch({ workflow: ".ether/workflows/manual.yml", ref: "main", inputs: {} })).status()).toBe(400);
     expect(await (await dispatch({ workflow: ".ether/workflows/manual.yml", ref: "main", inputs: { note: "x", target: "prod" } })).text()).toContain("one of staging, production");
     expect(await (await dispatch({ workflow: ".ether/workflows/test.yml", ref: "main" })).text()).toContain("doesn't include workflow_dispatch");
@@ -180,8 +186,8 @@ test("workflows in .ether/workflows run on the events their on: names", async ({
     // Only a branch name, not a revision of one.
     expect(await (await dispatch({ workflow: ".ether/workflows/manual.yml", ref: "main~1", inputs: { note: "x" } })).text()).toContain("No branch named main~1");
     const reader = await createUser(admin);
-    await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: originHeaders() });
-    expect((await reader.ctx.post(`${api}/ci/workflows/dispatch`, { data: { workflow: ".ether/workflows/manual.yml", ref: "main", inputs: { note: "x" } }, headers: originHeaders() })).status()).toBe(403);
+    await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: headers() });
+    expect((await reader.ctx.post(`${api}/ci/workflows/dispatch`, { data: { workflow: ".ether/workflows/manual.yml", ref: "main", inputs: { note: "x" } }, headers: headers() })).status()).toBe(403);
 
     // Manual runs aren't checks, and the run list filters by workflow.
     const manual = (await (await owner.ctx.get(`${api}/ci/runs?workflow=${encodeURIComponent(".ether/workflows/manual.yml")}`)).json()).runs as Run[];
@@ -201,20 +207,20 @@ test("workflows in .ether/workflows run on the events their on: names", async ({
     expect(bad.message).toContain('.ether/workflows/broken.yml needs "on"');
     expect(runs.find((r) => r.workflowName === "Tests")?.status).toBe("success");
   } finally {
-    await (await loginAdmin()).put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
+    await (await loginAdmin()).put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
   }
 });
 
 test("a run sees whether its pull request was a draft when it started, and ready_for_review runs when asked for", async () => {
   test.setTimeout(2 * 60_000);
   const admin = await loginAdmin();
-  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: originHeaders() });
+  await admin.put("/api/admin/settings", { data: { ciEnabled: true, ciIsolation: "host" }, headers: headers() });
   try {
     const owner = await createUser(admin);
     const repo = await createRepo(owner.ctx, unique("wfdraft"));
     const api = `/api/repos/${owner.username}/${repo}`;
     const auth = { username: owner.username, token: owner.token };
-    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: originHeaders() })).ok()).toBe(true);
+    expect((await owner.ctx.patch(api, { data: { ciEnabled: true }, headers: headers() })).ok()).toBe(true);
     const src = workdir();
     gitOk(src, ["init", "-q", "-b", "main"]);
     mkdirSync(join(src, ".ether", "workflows"), { recursive: true });
@@ -236,9 +242,9 @@ test("a run sees whether its pull request was a draft when it started, and ready
     gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main", "wip"], auth);
     const head = gitOk(src, ["rev-parse", "HEAD"]).trim();
 
-    const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "WIP", body: "", base: "main", head: "wip", draft: true }, headers: originHeaders() })).json();
+    const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "WIP", body: "", base: "main", head: "wip", draft: true }, headers: headers() })).json();
     await expect.poll(async () => (await runsOf(owner.ctx, api)).some((r) => r.workflowName === "PR" && r.status === "running")).toBe(true);
-    expect((await owner.ctx.patch(`${api}/issues/${pull.number}`, { data: { draft: false }, headers: originHeaders() })).ok()).toBe(true);
+    expect((await owner.ctx.patch(`${api}/issues/${pull.number}`, { data: { draft: false }, headers: headers() })).ok()).toBe(true);
 
     const runs = await finished(owner.ctx, api, head, 2);
     const byName = Object.fromEntries(runs.map((r) => [r.workflowName, r]));
@@ -246,6 +252,6 @@ test("a run sees whether its pull request was a draft when it started, and ready
     expect(await log(owner.ctx, api, byName.PR.id)).toContain("draft=true");
     expect(await log(owner.ctx, api, byName.Ready.id)).toContain("ready draft=false");
   } finally {
-    await (await loginAdmin()).put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: originHeaders() });
+    await (await loginAdmin()).put("/api/admin/settings", { data: { ciEnabled: false, ciIsolation: "container" }, headers: headers() });
   }
 });

@@ -1,8 +1,8 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { DiffView } from "../components/content";
-import { SETUP } from "../components/ui";
-import { api, repoApi, type Commit } from "../lib/api";
-import { shortSha, timeAgo } from "../lib/format";
+import { api, repoApi, shortSha, timeAgo, type Commit } from "../lib/api";
+
+const SETUP = "overflow-x-auto rounded-sm border border-border bg-surface-2 p-3";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/commit/$sha")({
   loader: ({ context: { info }, params }) =>

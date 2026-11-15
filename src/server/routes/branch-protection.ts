@@ -8,6 +8,7 @@ import { branchProtection } from "../db/schema";
 const FLAGS = ["requirePullRequest", "allowForcePush", "allowDeletion"] as const;
 type Flags = Partial<Record<(typeof FLAGS)[number], boolean>>;
 
+// The settings present in a request body, each true or false.
 function flags(b: Record<string, unknown>): Flags {
   const out: Flags = {};
   for (const key of FLAGS) {
@@ -30,7 +31,7 @@ function findRule(repoId: number, id: number) {
   return row;
 }
 
-// Owners manage the rules; the `update` hook enforces them for everyone, owners included.
+// Owners manage the rules; the pre-receive hook enforces them for everyone, owners included.
 export const branchProtectionRoutes = new Elysia()
   .get("/repos/:owner/:repo/branch-protection", async ({ request, params }) => {
     const viewer = await requireUser(request);

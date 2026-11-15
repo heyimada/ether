@@ -3,10 +3,16 @@ import { Elysia } from "elysia";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
 import { record } from "../events";
 import * as git from "../git";
-import { titleToSlug, WIKI_MESSAGE_MAX, WIKI_TITLE_MAX } from "../../shared/repos";
 
 // Page slugs are file names without ".md"; titles show hyphens as spaces, like GitHub wikis.
-const SLUG_RE = new RegExp(`^[A-Za-z0-9][A-Za-z0-9._-]{0,${WIKI_TITLE_MAX - 1}}$`);
+const SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+export const titleToSlug = (title: string) =>
+  title
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^A-Za-z0-9._-]/g, "")
+    .replace(/^[._-]+/, "")
+    .slice(0, 100);
 const slugToTitle = (slug: string) => slug.replace(/-/g, " ");
 
 function checkSlug(slug: string) {
@@ -60,13 +66,13 @@ export const wikiRoutes = new Elysia()
     const existing = (await pages(wiki)).map((p) => p.slug);
     if (target !== params.slug && existing.includes(target)) throw new HttpError(409, "A page with that title already exists");
     const isNew = !existing.includes(params.slug);
-    const message = typeof b.message === "string" && b.message.trim() ? b.message.trim().slice(0, WIKI_MESSAGE_MAX) : `${isNew ? "Create" : "Update"} ${slugToTitle(target)}`;
+    const message = typeof b.message === "string" && b.message.trim() ? b.message.trim().slice(0, 200) : `${isNew ? "Create" : "Update"} ${slugToTitle(target)}`;
     try {
       await git.wikiCommit(
         wiki,
         { file: `${target}.md`, content: b.content.slice(0, 1_000_000), renameFrom: isNew ? undefined : `${params.slug}.md` },
         message,
-        git.userIdentity(viewer.username),
+        { name: viewer.username, email: `${viewer.username}@users.ether.invalid` },
       );
     } catch (e) {
       if (e instanceof git.WikiConflict) throw new HttpError(409, e.message);
@@ -81,6 +87,9 @@ export const wikiRoutes = new Elysia()
     checkSlug(params.slug);
     const wiki = wikiOf(a);
     if (!(await pages(wiki)).some((p) => p.slug === params.slug)) throw new HttpError(404, "No such page");
-    await git.wikiCommit(wiki, { file: `${params.slug}.md`, content: null }, `Delete ${slugToTitle(params.slug)}`, git.userIdentity(viewer.username));
+    await git.wikiCommit(wiki, { file: `${params.slug}.md`, content: null }, `Delete ${slugToTitle(params.slug)}`, {
+      name: viewer.username,
+      email: `${viewer.username}@users.ether.invalid`,
+    });
     return { ok: true };
   });

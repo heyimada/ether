@@ -1,10 +1,9 @@
 import { useRouter } from "@tanstack/react-router";
 import { KeyRound } from "lucide-react";
 import { useState } from "react";
-import { api, del, post, type Instance } from "../lib/api";
-import { timeAgo } from "../lib/format";
+import { api, del, post, timeAgo } from "../lib/api";
+import type { Instance } from "../routes/_authed";
 import { ErrorNote, Field, onSubmit, useAction } from "./ui";
-import { KEY_TITLE_MAX } from "../../shared/accounts";
 
 export type SshKey = { id: number; title: string; keyType: string; fingerprint: string; createdAt: string; lastUsedAt: string | null };
 
@@ -73,7 +72,7 @@ export function SshKeys({ keys, sshBase, hostKey }: { keys: SshKey[]; sshBase: s
         <form className="stack-sm" onSubmit={onSubmit(add.run)}>
           <ErrorNote error={add.error} />
           <Field id="ssh-title" label="Key title" hint="For example the machine it's on.">
-            <input id="ssh-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={KEY_TITLE_MAX} />
+            <input id="ssh-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} />
           </Field>
           <Field id="ssh-key" label="Public key" hint="The contents of a .pub file, such as ~/.ssh/id_ed25519.pub. Never paste a private key.">
             <textarea id="ssh-key" className="font-mono min-h-[80px]" value={key} onChange={(e) => setKey(e.target.value)} required placeholder="ssh-ed25519 AAAA… you@laptop" />

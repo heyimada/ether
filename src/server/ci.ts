@@ -3,13 +3,14 @@ import { resolve } from "node:path";
 import { removeLeftoverContainers, startJob } from "../runner/execute";
 import { evalTemplate, secretsIn, toText, type Context, type Value } from "../runner/expr";
 import { LABEL_RE, type Claim, type Isolation, type JobAssignment, type JobResult, type RunningJob } from "../runner/protocol";
-import { HttpError, secret, sha256 } from "./access";
-import { IMAGE_RE, instanceLabel } from "../runner/container";
+import { secret, sha256 } from "./access";
+import { IMAGE_RE, instanceLabel } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
 import { conditionHolds, matrixEnvName, type MatrixValues, type NeedStatus } from "./ci-graph";
-import { notify } from "./notify";
+import { notify, quietly } from "./notify";
+import { requestCodeOwners } from "./owners";
 import { dueCron, inputEnvName, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
-import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type ParsedWorkflow, type Step } from "./ci-workflow";
+import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type EnvValue, type ParsedWorkflow, type Step } from "./ci-workflow";
 import { config } from "./config";
 import { MIN_INTERVAL_MINUTES } from "./cron";
 import { db } from "./db/client";
@@ -18,8 +19,7 @@ import { cancelDeployments, deploymentOfJob, ensureEnvironment, environmentOfJob
 import { gate } from "./deploy-rules";
 import { record } from "./events";
 import * as git from "./git";
-import { LogMasker } from "../runner/log-mask";
-import { sideEffect } from "./side-effect";
+import { LogMasker } from "./log-mask";
 
 // CI runs workflows from .ether/workflows/*.yml (and the older .ether/ci.yml) when what their `on:`
 // names happens: a push, a pull request or someone starting one by hand. It is opt-in twice: an admin allows it for the server,
@@ -51,7 +51,7 @@ function ciVars(run: Run, owner: string, name: string): Record<string, string> {
     CI_REF_TYPE: run.refType,
     CI_EVENT: run.event,
     CI_WORKFLOW: run.workflowName,
-    ...(run.pullNumber !== null ? { CI_PULL_REQUEST: String(run.pullNumber), CI_BASE_REF: pullBase(run.repoId, run.pullNumber) } : {}),
+    ...(run.pullNumber !== null ? { CI_PULL_REQUEST: String(run.pullNumber), CI_BASE_REF: pullBase(run) ?? "" } : {}),
     ...Object.fromEntries(inputs),
   };
 }
@@ -59,7 +59,7 @@ function ciVars(run: Run, owner: string, name: string): Record<string, string> {
 // What `github` and `inputs` say in expressions. A run isn't there yet when its runs-on is decided.
 function runContext(run: Pick<Run, "sha" | "ref" | "refType" | "event" | "workflowName" | "pullNumber" | "inputs" | "actorId" | "repoId"> & { id?: number; schedule?: string | null; pullDraft?: boolean | null }, owner: string, name: string): Context {
   const actor = run.actorId ? (db.select({ u: user.username }).from(user).where(eq(user.id, run.actorId)).get()?.u ?? "") : "";
-  const base = run.pullNumber === null ? null : pullBase(run.repoId, run.pullNumber);
+  const base = run.pullNumber === null ? null : (db.select({ base: issue.baseRef }).from(issue).where(and(eq(issue.repoId, run.repoId), eq(issue.number, run.pullNumber))).get()?.base ?? "");
   const inputs = Object.fromEntries(Object.entries(JSON.parse(run.inputs) as Record<string, string>).map(([k, v]): [string, Value] => [k, v === "true" ? true : v === "false" ? false : v]));
   return {
     github: {
@@ -100,7 +100,8 @@ function jobContext(job: Job, run: Run, owner: string, name: string, all: Job[])
 
 const repoNames = (repoId: number) => db.select({ owner: user.username, name: repo.name }).from(repo).innerJoin(user, eq(user.id, repo.ownerId)).where(eq(repo.id, repoId)).get();
 
-const pullBase = (repoId: number, number: number) => db.select({ base: issue.baseRef }).from(issue).where(and(eq(issue.repoId, repoId), eq(issue.number, number))).get()?.base ?? "";
+const pullBase = (run: Run) =>
+  run.pullNumber === null ? null : (db.select({ base: issue.baseRef }).from(issue).where(and(eq(issue.repoId, run.repoId), eq(issue.number, run.pullNumber))).get()?.base ?? null);
 
 // The secrets a job's steps and outputs refer to; it gets those and no others. A text that doesn't parse names
 // none: a job queued before run: and names were read as expressions can hold one, and must not stop the
@@ -130,6 +131,7 @@ type Job = typeof ciJob.$inferSelect;
 // Jobs run side by side up to this many at a time, across all runs; each container job gets its own
 // ETHER_CI_MEMORY and ETHER_CI_CPUS.
 const MAX_ACTIVE = Math.max(1, Math.floor(Number(process.env.ETHER_CI_JOBS) || 2));
+// A running job: its runner's handle, so it can be stopped, and whether it was told to stop.
 type Active = { runId: number; job: RunningJob | null; stopped: boolean };
 const active = new Map<number, Active>();
 // A job on an external runner, which is told to stop the next time it reports. Its token lives only here, so
@@ -143,6 +145,7 @@ const FINISHED_RUN = new Set<Run["status"]>(["success", "failure", "cancelled", 
 let sweep: Promise<void> = Promise.resolve();
 let swept = true;
 
+// Starts every job that may start, oldest first, while there's room. Called whenever a job is queued or finishes.
 function pump() {
   // The sweep selects by label, which a job started now would share, so it has to finish first.
   if (!swept) return void sweep.then(() => ((swept = true), pump()));
@@ -205,7 +208,14 @@ function supersede(run: RunRef, environment: string) {
     .where(and(eq(ciRun.repoId, run.repoId), eq(ciJob.environment, environment), eq(ciJob.status, "waiting"), lt(ciJob.runId, run.id), eq(ciRun.ref, run.ref), eq(ciRun.refType, run.refType)))
     .all()
     .map((r) => r.job);
-  for (const job of older) settleJob(job, "skipped", `Skipped: a newer run of ${run.ref} deploys to ${environment}.`, "cancelled");
+  for (const job of older) {
+    clearTimeout(timers.get(job.id));
+    timers.delete(job.id);
+    // Its deployment stays, cancelled, so the environment's history shows it was waiting and why it ended.
+    db.update(ciJob).set({ status: "skipped", log: `${job.log}Skipped: a newer run of ${run.ref} deploys to ${environment}.\n`, finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
+    setDeployment(job.id, { status: "cancelled", finishedAt: new Date() });
+    void refreshRun(job.runId);
+  }
 }
 
 // The oldest queued job whose needs have all finished and whose if: holds. Jobs whose if: doesn't hold are
@@ -236,7 +246,9 @@ function nextJob(accepts?: (job: Job) => boolean): Job | null {
           runs = conditionHolds(job.condition, deps.map((d) => d.status as NeedStatus), ancestors.map((d) => d.status as NeedStatus), context);
         } catch (e) {
           // It can't say whether it should run, so it fails rather than guess; a deploy shouldn't go ahead on an error.
-          settleJob(job, "failure", `✖ if: ${(e as Error).message}`, "cancelled");
+          db.update(ciJob).set({ status: "failure", log: `${job.log}✖ if: ${(e as Error).message}\n`, finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
+          if (job.environment) setDeployment(job.id, { status: "cancelled", finishedAt: new Date() });
+          void refreshRun(job.runId);
           skipped = true;
           break;
         }
@@ -261,49 +273,39 @@ function nextJob(accepts?: (job: Job) => boolean): Job | null {
   }
 }
 
-// What a deploy job's deployment becomes when the job ends without running: kept as cancelled or rejected, so the
-// environment's history shows it was waiting and why it ended, or dropped when there was never anything to deploy.
-type DeploymentEnd = "cancelled" | "rejected" | "dropped";
-
-// `begun` is for a job the scheduler had already picked, which counts as started.
-function settleJob(job: Job, status: "skipped" | "failure" | "cancelled", line: string, deploymentEnd: DeploymentEnd, begun = false) {
-  clearTimeout(timers.get(job.id));
-  timers.delete(job.id);
-  const now = new Date();
-  db.update(ciJob)
-    .set({ status, log: `${job.log}${line}\n`, finishedAt: now, ...(begun ? { startedAt: job.startedAt ?? now } : {}) })
-    .where(eq(ciJob.id, job.id))
-    .run();
-  if (job.environment) {
-    if (deploymentEnd === "dropped") db.delete(deployment).where(eq(deployment.jobId, job.id)).run();
-    else setDeployment(job.id, { status: deploymentEnd, finishedAt: now });
-  }
+function skipJob(job: Job, why: string) {
+  db.update(ciJob).set({ status: "skipped", log: `${job.log}Skipped: ${why}.\n`, finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
+  // Nothing was deployed, so there is no deployment to keep either.
+  if (job.environment) db.delete(deployment).where(eq(deployment.jobId, job.id)).run();
   void refreshRun(job.runId);
 }
 
-const skipJob = (job: Job, why: string) => settleJob(job, "skipped", `Skipped: ${why}.`, "dropped");
-
 type Begun = { run: Run; owner: string; name: string; env: Environment | null };
 
-// All synchronous, so pump() and claimJob() see the job as taken before they look again.
+// Takes a job the scheduler picked and marks it running, or settles it if it can't start (a deploy job that has
+// to wait or is turned down). All synchronous, so pump() and claimJob() see it as taken before they look again.
 function beginJob(job: Job): Begun | null {
   const run = db.select().from(ciRun).where(eq(ciRun.id, job.runId)).get();
-  const r = run && repoNames(run.repoId);
+  const r = run && db.select({ repo, owner: user.username }).from(repo).innerJoin(user, eq(user.id, repo.ownerId)).where(eq(repo.id, run.repoId)).get();
   if (!run || !r) return null;
-  const env = environmentOfJob(job, run.repoId);
+  const env = environmentOfJob(job, r.repo.id);
   // Its environment was deleted since the push: don't run it as a plain job with none of the rules.
   if (job.environment && !env) {
-    settleJob(job, "failure", `✖ Not deployed: the environment ${job.environment} no longer exists.`, "cancelled", true);
+    endWaitingJob(job, `✖ Not deployed: the environment ${job.environment} no longer exists.`);
+    void refreshRun(run.id);
     return null;
   }
-  if (env && !admit(job, env, run)) return null;
+  if (env && !admit(job, env, run)) {
+    void refreshRun(run.id);
+    return null;
+  }
   db.update(ciRun).set({ status: "running", startedAt: run.startedAt ?? new Date() }).where(and(eq(ciRun.id, run.id), inArray(ciRun.status, ["queued", "waiting", "running"]))).run();
   if (env) {
     setDeployment(job.id, { status: "in_progress" });
     supersede(run, env.name);
   }
   db.update(ciJob).set({ status: "running", startedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
-  return { run, owner: r.owner!, name: r.name, env };
+  return { run, owner: r.owner!, name: r.repo.name, env };
 }
 
 const OUTPUT_NAME_RE = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
@@ -326,7 +328,7 @@ function cleanOutputs(raw: unknown, mask: string[]): Record<string, string> {
 
 type JobLog = { text: () => string; append: (text: string) => void };
 
-// Continues the job's existing log: a deploy job already says whether it waited and who approved it.
+// A deploy job already says whether it waited and who approved it.
 function jobLog(job: Job): JobLog {
   let log = job.log ?? "";
   return {
@@ -346,43 +348,39 @@ async function runJob(job: Job) {
   active.set(job.id, a);
   const log = jobLog(job);
   let result: JobResult = "error";
-  const assignment = assign(job, begun, log, ciIsolation(), git.repoPath(begun.owner, begun.name), " An admin can switch CI to containers under Admin → Access.");
-  if (assignment)
-    try {
+  let mask: string[] = [];
+  try {
+    const assignment = assignmentFor(job, begun, ciIsolation(), git.repoPath(begun.owner, begun.name), " An admin can switch CI to containers under Admin → Access.");
+    if (typeof assignment === "string") log.append(`${assignment}\n`);
+    else {
+      mask = assignment.mask;
+      if (begun.env) log.append(`▶ Deploying to ${begun.env.name}${job.url ? ` (${job.url})` : ""}\n`);
       a.job = startJob(assignment, { log: log.append }, instance());
       result = await a.job.done;
-    } catch (e) {
-      log.append(`\nRunner error: ${(e as Error).message}\n`);
     }
-  await finishJob(job, begun, a, result, log.text(), cleanOutputs(a.job?.outputs(), assignment?.mask ?? []));
-}
-
-function assign(job: Job, begun: Begun, log: JobLog, isolation: Isolation, checkoutUrl: string, hostHint: string): JobAssignment | null {
-  try {
-    const assignment = assignmentFor(job, begun, isolation, checkoutUrl, hostHint);
-    if (typeof assignment === "string") {
-      log.append(`${assignment}\n`);
-      return null;
-    }
-    if (begun.env) log.append(`▶ Deploying to ${begun.env.name}${job.url ? ` (${job.url})` : ""}\n`);
-    return assignment;
   } catch (e) {
     log.append(`\nRunner error: ${(e as Error).message}\n`);
-    return null;
   }
+  await finishJob(job, begun, a, result, log.text(), () => active.delete(job.id), cleanOutputs(a.job?.outputs(), mask));
 }
 
-async function finishJob(job: Job, { run, env }: Begun, a: Active, result: JobResult, log: string, outputValues: Record<string, string> = {}) {
+// What's left once a runner is done with a job: its status, its deployment, fail-fast and its run.
+async function finishJob(job: Job, { run, env }: Begun, a: Active, result: JobResult, log: string, release: () => void, outputValues: Record<string, string> = {}) {
   const cancelled = a.stopped || currentStatus(run.id) === "cancelled";
   db.update(ciJob).set({ log, outputValues: JSON.stringify(outputValues), status: cancelled ? "cancelled" : result === "success" ? "success" : "failure", finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
-  active.delete(job.id);
-  remote.delete(job.id);
+  release();
   const stopped = cancelled;
   if (env && !stopped) setDeployment(job.id, { status: result === "success" ? "success" : "failure", finishedAt: new Date() });
   if (env && stopped) setDeployment(job.id, { status: "cancelled", finishedAt: new Date() });
+  // fail-fast: one combination of a matrix failing stops the others.
   if (result !== "success" && !stopped && job.failFast && job.key) {
     for (const sib of runJobs(run.id).filter((j) => j.key === job.key && j.id !== job.id && j.matrix !== "{}")) {
-      if (sib.status === "queued" || sib.status === "waiting") settleJob(sib, "cancelled", `Cancelled: ${job.name} failed (fail-fast).`, "cancelled");
+      if (sib.status === "queued" || sib.status === "waiting") {
+        clearTimeout(timers.get(sib.id));
+        timers.delete(sib.id);
+        db.update(ciJob).set({ status: "cancelled", log: `${sib.log}Cancelled: ${job.name} failed (fail-fast).\n`, finishedAt: new Date() }).where(eq(ciJob.id, sib.id)).run();
+        if (sib.environment) setDeployment(sib.id, { status: "cancelled", finishedAt: new Date() });
+      }
       const other = active.get(sib.id) ?? remote.get(sib.id);
       if (other) stop(other);
     }
@@ -447,21 +445,26 @@ async function refreshRun(runId: number) {
   // "Checks failed" is news when something broke, not when a reviewer turned a deployment down on purpose.
   const rejected = new Set(db.select({ jobId: deployment.jobId }).from(deployment).where(and(eq(deployment.runId, runId), eq(deployment.status, "rejected"))).all().map((d) => d.jobId));
   if (!jobs.some((j) => (j.status === "failure" || j.status === "error") && !rejected.has(j.id))) return;
-  const r = repoNames(run.repoId);
+  const r = db.select({ owner: user.username, name: repo.name }).from(repo).innerJoin(user, eq(user.id, repo.ownerId)).where(eq(repo.id, run.repoId)).get();
   if (r) await reportFailure(run, git.repoPath(r.owner!, r.name), "failure");
 }
 
+// Whether a deploy job may start now. If not, it waits (for a reviewer or until its timer runs out) or is turned down.
 function admit(job: typeof ciJob.$inferSelect, env: Environment, run: typeof ciRun.$inferSelect): boolean {
   const d = deploymentOfJob(job.id);
   const review = d?.reviewedAt ? { approved: d.status !== "rejected", at: d.reviewedAt } : null;
   const g = gate(rulesOf(env), run.ref, review, run.createdAt, new Date(), run.refType);
   if (g.action === "run") return true;
   if (g.action === "skip") {
-    settleJob(job, "skipped", `Skipped: ${g.reason} (${env.name}).`, "dropped", true);
+    // Nothing was deployed, so there is no deployment to keep either.
+    db.update(ciJob).set({ status: "skipped", log: `${job.log}Skipped: ${g.reason} (${env.name}).\n`, startedAt: job.startedAt ?? new Date(), finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
+    db.delete(deployment).where(eq(deployment.jobId, job.id)).run();
     return false;
   }
   if (g.action === "reject") {
-    settleJob(job, "failure", `✖ Not deployed to ${env.name}: ${g.reason}.`, "rejected", true);
+    const log = `${job.log}✖ Not deployed to ${env.name}: ${g.reason}.\n`;
+    db.update(ciJob).set({ status: "failure", log, startedAt: job.startedAt ?? new Date(), finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
+    setDeployment(job.id, { status: "rejected", finishedAt: new Date() });
     return false;
   }
   const notBefore = g.action === "wait-until" ? g.at : null;
@@ -469,11 +472,18 @@ function admit(job: typeof ciJob.$inferSelect, env: Environment, run: typeof ciR
   db.update(ciJob).set({ status: "waiting", notBefore, log: `${job.log}${why}\n` }).where(eq(ciJob.id, job.id)).run();
   setDeployment(job.id, { status: "waiting" });
   if (notBefore) wakeAt(job.id, notBefore);
-  void refreshRun(run.id);
   return false;
 }
 
 // ---------- waiting deploy jobs ----------
+
+// Fails a deploy job that can't go ahead any more.
+function endWaitingJob(job: typeof ciJob.$inferSelect, why: string) {
+  clearTimeout(timers.get(job.id));
+  timers.delete(job.id);
+  db.update(ciJob).set({ status: "failure", log: `${job.log}${why}\n`, startedAt: job.startedAt ?? new Date(), finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
+  setDeployment(job.id, { status: "cancelled", finishedAt: new Date() });
+}
 
 const waitingFor = (repoId: number, environmentName: string) =>
   db
@@ -494,14 +504,20 @@ export function reconsiderEnvironment(repoId: number, environmentName: string) {
 }
 
 // Before an environment is deleted: its waiting deploy jobs fail instead of waiting for good.
-export function abandonEnvironment(repoId: number, environmentName: string) {
-  for (const job of waitingFor(repoId, environmentName)) settleJob(job, "failure", `✖ Not deployed: the environment ${environmentName} was deleted.`, "cancelled", true);
-  // Jobs that needed them are skipped now.
+export async function abandonEnvironment(repoId: number, environmentName: string) {
+  const runs = new Set<number>();
+  for (const job of waitingFor(repoId, environmentName)) {
+    endWaitingJob(job, `✖ Not deployed: the environment ${environmentName} was deleted.`);
+    runs.add(job.runId);
+  }
+  // Jobs that needed them are skipped now, and their runs may be done.
   pump();
+  for (const runId of runs) await refreshRun(runId);
 }
 
 const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
+// Puts a waiting job (and its run) back in the queue.
 function requeue(jobId: number) {
   clearTimeout(timers.get(jobId));
   timers.delete(jobId);
@@ -521,24 +537,32 @@ function wakeAt(jobId: number, at: Date) {
   timers.set(jobId, setTimeout(() => (Date.now() >= at.getTime() ? requeue(jobId) : wakeAt(jobId, at)), ms));
 }
 
-export function reviewDeployment(jobId: number, repoId: number, reviewerId: string, approve: boolean) {
+export class ReviewError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+// A reviewer's answer to a deploy job that waits for one. Approving sends it on (to its timer, if any);
+// rejecting fails it, and the run once nothing else of it is left.
+export async function reviewDeployment(jobId: number, repoId: number, reviewerId: string, approve: boolean) {
   const job = db.select().from(ciJob).where(eq(ciJob.id, jobId)).get();
   const run = job && db.select().from(ciRun).where(and(eq(ciRun.id, job.runId), eq(ciRun.repoId, repoId))).get();
   const env = job && run ? environmentOfJob(job, repoId) : null;
   const d = job ? deploymentOfJob(job.id) : null;
-  if (!job || !run || !env || !d) throw new HttpError(404, "No such deployment");
-  if (job.status !== "waiting" || d.reviewedAt) throw new HttpError(409, "This deployment isn't waiting for a review");
-  if (!reviewerIds(env.id).includes(reviewerId)) throw new HttpError(403, `Only ${env.name}'s reviewers can review this deployment`);
+  if (!job || !run || !env || !d) throw new ReviewError(404, "No such deployment");
+  if (job.status !== "waiting" || d.reviewedAt) throw new ReviewError(409, "This deployment isn't waiting for a review");
+  if (!reviewerIds(env.id).includes(reviewerId)) throw new ReviewError(403, `Only ${env.name}'s reviewers can review this deployment`);
   const reviewer = db.select({ username: user.username }).from(user).where(eq(user.id, reviewerId)).get()?.username ?? "a reviewer";
-  setDeployment(job.id, { reviewedBy: reviewerId, reviewedAt: new Date() });
+  setDeployment(job.id, { reviewedBy: reviewerId, reviewedAt: new Date(), ...(approve ? {} : { status: "rejected", finishedAt: new Date() }) });
   if (approve) {
     db.update(ciJob).set({ log: `${job.log}✔ Approved by ${reviewer}.\n` }).where(eq(ciJob.id, job.id)).run();
     requeue(job.id);
     return;
   }
-  settleJob(job, "failure", `✖ Rejected by ${reviewer}; not deployed to ${env.name}.`, "rejected");
-  // Jobs that needed it are skipped now.
+  db.update(ciJob).set({ status: "failure", log: `${job.log}✖ Rejected by ${reviewer}; not deployed to ${env.name}.\n`, finishedAt: new Date() }).where(eq(ciJob.id, job.id)).run();
   pump();
+  await refreshRun(run.id);
 }
 
 // Failed checks go into the feed of whoever started the run.
@@ -549,11 +573,12 @@ async function reportFailure(run: { id: number; repoId: number; sha: string; ref
   // And into their inbox. No one is the actor, so the person who started it hears about it too.
   const name = db.select({ w: ciRun.workflowName }).from(ciRun).where(eq(ciRun.id, run.id)).get()?.w ?? "A workflow";
   const actorId = run.actorId;
-  void sideEffect("Notifying", () => notify([actorId], "ci_failed", null, { repoId: run.repoId, runId: run.id, title: `${name} ${status === "error" ? "couldn't run" : "failed"} on ${run.ref}`, excerpt: commit?.subject ?? "" }));
+  quietly(() => notify([actorId], "ci_failed", null, { repoId: run.repoId, runId: run.id, title: `${name} ${status === "error" ? "couldn't run" : "failed"} on ${run.ref}`, excerpt: commit?.subject ?? "" }));
 }
 
 const currentStatus = (runId: number) => db.select({ s: ciRun.status }).from(ciRun).where(eq(ciRun.id, runId)).get()?.s;
 
+// All a runner needs for a job, secrets filled in, or why the job can't have one.
 function assignmentFor(job: Job, { run, owner, name, env }: Begun, isolation: Isolation, checkoutUrl: string, hostHint: string): JobAssignment | string {
   const steps = JSON.parse(job.steps) as Step[];
   const outputs = JSON.parse(job.outputs) as Record<string, string>;
@@ -586,6 +611,8 @@ function assignmentFor(job: Job, { run, owner, name, env }: Begun, isolation: Is
 
 // ---------- external runners ----------
 
+export const resumePump = () => pump();
+
 type Runner = typeof ciRunner.$inferSelect;
 type JobRepo = { id: number; ownerId: string };
 
@@ -616,6 +643,7 @@ function builtinTakes(job: Job) {
   return !!r && labelsOf(job, r).length === 0 && !allRunners().some((runner) => covers(runner, r));
 }
 
+// What a job's runner has to have, for showing on its run.
 export function runnerLabels(job: Job) {
   const r = repoOfJob(job);
   return r ? labelsOf(job, r) : [];
@@ -630,14 +658,15 @@ export function runnerProblem(job: Job): "none" | "offline" | null {
   if (labels.length === 0 && !runners.some((runner) => covers(runner, r))) return null;
   const fit = runners.filter((runner) => canRun(runner, labels, r));
   if (fit.length === 0) return "none";
-  return fit.some(runnerOnline) ? null : "offline";
+  return fit.some((runner) => runner.lastSeenAt && Date.now() - runner.lastSeenAt.getTime() < RUNNER_ONLINE_MS) ? null : "offline";
 }
 
 // A runner that hasn't reported for this long has lost the job it was running.
 const RUNNER_TIMEOUT = Math.max(5, Number(process.env.ETHER_CI_RUNNER_TIMEOUT) || 90) * 1000;
-export const runnerOnline = (runner: Pick<Runner, "lastSeenAt">) => !!runner.lastSeenAt && Date.now() - runner.lastSeenAt.getTime() < RUNNER_TIMEOUT;
+export const RUNNER_ONLINE_MS = RUNNER_TIMEOUT;
 export const JOB_GIT_USER = "ether-job";
 
+// Hands the oldest job that may start to a runner, or null when there's none.
 export function claimJob(runner: Runner): Claim | null {
   const { isolation } = runner;
   const accepts = (job: Job) => {
@@ -658,20 +687,28 @@ export function claimJob(runner: Runner): Claim | null {
     const log = jobLog(job);
     db.update(ciJob).set({ runner: runner.name }).where(eq(ciJob.id, job.id)).run();
     const a: Active = { runId: begun.run.id, job: null, stopped: false };
-    const assignment = assign(job, begun, log, isolation, `/${begun.owner}/${begun.name}.git`, ` Runner ${runner.name} runs jobs on its host.`);
-    if (!assignment) {
-      void finishJob(job, begun, a, "error", log.text()).finally(pump);
-      continue;
+    try {
+      const assignment = assignmentFor(job, begun, isolation, `/${begun.owner}/${begun.name}.git`, ` Runner ${runner.name} runs jobs on its host.`);
+      if (typeof assignment === "string") {
+        log.append(`${assignment}\n`);
+        void finishJob(job, begun, a, "error", log.text(), () => {}).finally(pump);
+        continue;
+      }
+      if (begun.env) log.append(`▶ Deploying to ${begun.env.name}${job.url ? ` (${job.url})` : ""}\n`);
+      const token = secret("ethj_");
+      remote.set(job.id, { ...a, job: null, row: job, begun, runnerId: runner.id, runnerName: runner.name, repoId: begun.run.repoId, tokenHash: sha256(token), seen: Date.now(), masker: new LogMasker(assignment.mask), mask: assignment.mask, log });
+      assignment.checkout.authorization = `Basic ${btoa(`${JOB_GIT_USER}:${token}`)}`;
+      // Often enough that one lost report doesn't end a job that is just being quiet, and that a cancel,
+      // which travels in the answer to a report, reaches it within seconds.
+      return { assignment, token, heartbeatMs: Math.min(5000, Math.round(RUNNER_TIMEOUT / 3)) };
+    } catch (e) {
+      log.append(`\nRunner error: ${(e as Error).message}\n`);
+      void finishJob(job, begun, a, "error", log.text(), () => {}).finally(pump);
     }
-    const token = secret("ethj_");
-    remote.set(job.id, { ...a, job: null, row: job, begun, runnerId: runner.id, runnerName: runner.name, repoId: begun.run.repoId, tokenHash: sha256(token), seen: Date.now(), masker: new LogMasker(assignment.mask), mask: assignment.mask, log });
-    assignment.checkout.authorization = `Basic ${btoa(`${JOB_GIT_USER}:${token}`)}`;
-    // Often enough that one lost report doesn't end a job that is just being quiet, and that a cancel,
-    // which travels in the answer to a report, reaches it within seconds.
-    return { assignment, token, heartbeatMs: Math.min(5000, Math.round(RUNNER_TIMEOUT / 3)) };
   }
 }
 
+// The job a job token is for, while the job runs.
 export function remoteJob(jobId: number, token: string): RemoteJob | null {
   const job = remote.get(jobId);
   return job && job.tokenHash === sha256(token) ? job : null;
@@ -694,27 +731,18 @@ export async function finishRemoteJob(job: RemoteJob, result: JobResult, outputs
   job.log.append(job.masker.flush());
   // Nobody here asked it to stop, so its run isn't cancelled: the job just didn't finish, which counts as failed.
   if (result === "cancelled" && !job.stopped) job.log.append(`\n✖ Runner ${job.runnerName} stopped before this job finished\n`);
-  await finishJob(job.row, job.begun, job, result, job.log.text(), cleanOutputs(outputs, job.mask));
+  await finishJob(job.row, job.begun, job, result, job.log.text(), () => remote.delete(job.row.id), cleanOutputs(outputs, job.mask));
   pump();
 }
 
 // Jobs of a runner that's gone: removed by an admin, or silent for too long.
-async function abandonRemoteJobs(match: (job: RemoteJob) => boolean, why: (job: RemoteJob) => string) {
+export async function abandonRemoteJobs(match: (job: RemoteJob) => boolean, why: (job: RemoteJob) => string) {
   for (const job of [...remote.values()].filter(match)) {
     // Finished meanwhile (its runner reported, or another sweep got to it): leave it as it ended.
     if (remote.get(job.row.id) !== job) continue;
     job.log.append(`${job.masker.flush()}\n✖ ${why(job)}\n`);
     await finishRemoteJob(job, "error");
   }
-}
-
-// Its jobs end, and without runners the built-in one may take over again.
-export async function runnerRemoved(runnerId: number, name: string) {
-  await abandonRemoteJobs(
-    (j) => j.runnerId === runnerId,
-    () => `Runner ${name} was removed`,
-  );
-  pump();
 }
 
 const expireRemoteJobs = () =>
@@ -840,12 +868,13 @@ async function changedFiles(repoPath: string, range: string[]): Promise<string[]
 
 // A new branch changed what it has beyond the default branch; the default branch's own first push changed everything.
 async function newBranchChanges(repoPath: string, branch: string, sha: string) {
-  const main = await git.headBranch(repoPath);
-  const mainSha = main !== branch ? await git.resolveCommit(repoPath, `refs/heads/${main}`) : null;
+  const main = await git.headBranch(repoPath).catch(() => null);
+  const mainSha = main && main !== branch ? await git.resolveCommit(repoPath, `refs/heads/${main}`) : null;
   return mainSha ? changedFiles(repoPath, [`${mainSha}...${sha}`]) : null;
 }
 
-// Push workflows for each branch and tag that moved to a new commit (see push.ts for everything else a move does).
+// After a push, or a merge (which moves the base branch): push workflows for each branch and tag that moved
+// to a new commit, and pull_request workflows for open pull requests whose head branch moved.
 export async function onPush(repoId: number, repoPath: string, before: git.Ref[], after: git.Ref[], actorId: string) {
   const moved = after.filter((ref) => before.find((b) => b.kind === ref.kind && b.name === ref.name)?.sha !== ref.sha);
   // As on GitHub, pushing more than three tags at once (git push --tags, a mirror) starts nothing for them,
@@ -862,9 +891,20 @@ export async function onPush(repoId: number, repoPath: string, before: git.Ref[]
     }
     const changed = old ? await changedFiles(repoPath, [old.sha, ref.sha]) : await newBranchChanges(repoPath, ref.name, ref.sha);
     await startWorkflows(repoId, repoPath, ref.sha, { event: "push", refType: "branch", ref: ref.name, changed }, { ref: ref.name, refType: "branch", event: "push", pullNumber: null, inputs: {} }, actorId);
+    const pulls = db
+      .select({ number: issue.number })
+      .from(issue)
+      .where(and(eq(issue.repoId, repoId), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.headRef, ref.name)))
+      .all();
+    for (const p of pulls) {
+      // New files may have new code owners to ask.
+      await requestCodeOwners(repoId, p.number).catch(() => {});
+      await onPullRequest(repoId, repoPath, p.number, "synchronize", actorId);
+    }
   }
 }
 
+// When a pull request is opened or reopened, or its head branch moves: its workflows run on the head commit.
 export async function onPullRequest(repoId: number, repoPath: string, number: number, action: PullAction, actorId: string) {
   const pr = db.select().from(issue).where(and(eq(issue.repoId, repoId), eq(issue.number, number))).get();
   if (!pr?.isPull || pr.state !== "open" || !pr.headRef || !pr.baseRef) return;
@@ -947,14 +987,17 @@ function scheduleTicks() {
   next();
 }
 
+export class DispatchError extends Error {}
+
+// Someone starts a workflow by hand on a branch, as the workflow is on that branch.
 export async function dispatch(repoId: number, repoPath: string, path: string, branch: string, given: Record<string, unknown>, actorId: string): Promise<number> {
-  if (!ciOn(repoId)) throw new HttpError(409, "CI is turned off for this repository");
-  if (!isWorkflowPath(path)) throw new HttpError(400, "No such workflow");
+  if (!ciOn(repoId)) throw new DispatchError("CI is turned off for this repository");
+  if (!isWorkflowPath(path)) throw new DispatchError("No such workflow");
   // A real branch, not a revision such as main~3 that rev-parse would also take.
   const sha = (await git.listRefs(repoPath)).find((r) => r.kind === "branch" && r.name === branch)?.sha;
-  if (!sha) throw new HttpError(400, `No branch named ${branch}`);
+  if (!sha) throw new DispatchError(`No branch named ${branch}`);
   const file = await git.readBlob(repoPath, sha, path).catch(() => null);
-  if (!file?.content) throw new HttpError(400, `${branch} has no ${path}`);
+  if (!file?.content) throw new DispatchError(`${branch} has no ${path}`);
   let id: number;
   try {
     const wf = parseWorkflow(file.content, path);
@@ -962,7 +1005,7 @@ export async function dispatch(repoId: number, repoPath: string, path: string, b
     const inputs = resolveInputs(wf.on.workflow_dispatch.inputs, given);
     id = await createRun(repoId, repoPath, sha, actorId, path, wf, { ref: branch, refType: "branch", event: "workflow_dispatch", pullNumber: null, inputs });
   } catch (e) {
-    throw new HttpError(400, (e as Error).message);
+    throw new DispatchError((e as Error).message);
   }
   pump();
   return id;
@@ -1043,9 +1086,9 @@ export function resumeQueue() {
   db.update(deployment).set({ status: "cancelled", finishedAt: new Date() }).where(eq(deployment.status, "in_progress")).run();
   // Deploy jobs waiting on a timer pick it up again; those waiting for a reviewer just keep waiting.
   for (const j of db.select({ id: ciJob.id, notBefore: ciJob.notBefore }).from(ciJob).where(eq(ciJob.status, "waiting")).all()) if (j.notBefore) wakeAt(j.id, j.notBefore);
-  setInterval(expireRemoteJobs, Math.min(15_000, RUNNER_TIMEOUT / 2)).unref();
   // In the background so a slow daemon doesn't hold up the server's start; pump() waits for it, also
   // when a push queues a run meanwhile, since the sweep would match that job's container too.
+  setInterval(expireRemoteJobs, Math.min(15_000, RUNNER_TIMEOUT / 2)).unref();
   swept = false;
   sweep = removeLeftoverContainers(instance()).catch((e) => console.error("Removing leftover CI containers failed:", e));
   scheduleTicks();

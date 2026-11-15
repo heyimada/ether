@@ -3,12 +3,13 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { colord } from "colord";
 import { Check, Settings2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { api, canWrite, put, repoApi, type Issue, type Label, type RepoInfo } from "../lib/api";
-import { Avatar, ErrorNote, MENU_LABEL, MENU_SEP, PEOPLE, PERSON, SIDE_HEAD, SIDE_TEXT, useAction } from "./ui";
-import { MAX_ASSIGNEES } from "../../shared/issues";
+import { api, put, repoApi, type Issue, type Label, type RepoInfo } from "../lib/api";
+import { Avatar, ErrorNote, MENU_LABEL, MENU_SEP, PEOPLE, PERSON, SIDE_HEAD, useAction } from "./ui";
 
 const PILL = "inline-flex items-center rounded-full px-2 text-xs font-semibold leading-5 whitespace-nowrap transition-transform duration-150 ease-out";
+const SIDE_TEXT = "m-0 text-base text-muted wrap-anywhere";
 
+// A label in its own colour, with whichever text colour reads on it.
 export function LabelPill({ label, info }: { label: Label; info?: RepoInfo }) {
   const bg = colord(label.color);
   const style = { background: label.color, color: bg.contrast("#ffffff") >= bg.contrast("#1f2328") ? "#ffffff" : "#1f2328" };
@@ -32,10 +33,11 @@ export function LabelPill({ label, info }: { label: Label; info?: RepoInfo }) {
   );
 }
 
+// Labels and assignees beside an issue or pull request; writers edit them from menus.
 export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue: Issue; children?: ReactNode }) {
   const router = useRouter();
   const base = `${repoApi(info.repo.owner, info.repo.name)}/issues/${issue.number}`;
-  const canEdit = canWrite(info.role);
+  const canEdit = info.role !== "read";
   const [labels, setLabels] = useState<Label[] | null>(null);
   const [people, setPeople] = useState<string[] | null>(null);
   useEffect(() => {
@@ -126,7 +128,7 @@ export function IssueSidebar({ info, issue, children }: { info: RepoInfo; issue:
               </Menu.Trigger>
               <Menu.Portal>
                 <Menu.Content className="menu" align="end" sideOffset={4}>
-                  <Menu.Label className={MENU_LABEL}>Assign up to {MAX_ASSIGNEES} people</Menu.Label>
+                  <Menu.Label className={MENU_LABEL}>Assign up to 10 people</Menu.Label>
                   {(people ?? []).map((p) => (
                     <Menu.CheckboxItem
                       key={p}

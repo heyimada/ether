@@ -20,6 +20,7 @@ export const rise: Variants = {
   }),
 };
 
+// Props for a list container whose motion children use `rise` with `custom={index}`.
 export const staggered = { variants: listIn, initial: "hidden", animate: "visible" } as const;
 
 // Quick, slightly springy settle for small state changes (star, counters, tab underline).

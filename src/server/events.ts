@@ -1,14 +1,12 @@
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
-import { cursorOf, olderThan } from "./cursor";
+import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "./db/client";
 import { event, user } from "./db/schema";
 import type { ReadableRepo } from "./access";
 import * as git from "./git";
-import { sideEffect } from "./side-effect";
 
 // The activity log behind the dashboard feed, profiles and organization pages. Writers call
-// record() where things happen; readers go through listEvents(), which keeps only events from
-// the repositories its caller lists as readable.
+// record() where things happen; readers go through listEvents(), which only returns events from
+// repositories the reader can currently read.
 
 type IssueRef = { number: number; title: string };
 type PullRef = IssueRef & { base: string | null; head: string | null };
@@ -48,19 +46,17 @@ export async function recordPushEvents(repoId: number, actorId: string, path: st
     if (ref.kind !== "branch") continue;
     const prev = before.find((b) => b.kind === "branch" && b.name === ref.name);
     if (prev?.sha === ref.sha) continue;
-    await sideEffect(`Recording the push to ${ref.name}`, async () => {
-      const exclude = old.length ? ["--not", ...old] : [];
-      const count = Number((await git.gitText(path, ["rev-list", "--count", ref.sha, ...exclude, "--"])).trim()) || 0;
-      const log = count ? await git.gitText(path, ["log", "--format=%H%x1f%s", "-n", String(SHOWN), ref.sha, ...exclude, "--"]) : "";
-      const shown = log
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          const [sha, subject] = line.split("\x1f");
-          return { sha, subject: subject.slice(0, 200) };
-        });
-      record(repoId, actorId, "push", { ref: ref.name, commits: count, created: !prev, head: ref.sha, shown });
-    });
+    const exclude = old.length ? ["--not", ...old] : [];
+    const count = Number((await git.gitText(path, ["rev-list", "--count", ref.sha, ...exclude, "--"]).catch(() => "0")).trim()) || 0;
+    const log = count ? await git.gitText(path, ["log", "--format=%H%x1f%s", "-n", String(SHOWN), ref.sha, ...exclude, "--"]).catch(() => "") : "";
+    const shown = log
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [sha, subject] = line.split("\x1f");
+        return { sha, subject: subject.slice(0, 200) };
+      });
+    record(repoId, actorId, "push", { ref: ref.name, commits: count, created: !prev, head: ref.sha, shown });
   }
 }
 
@@ -88,8 +84,11 @@ export function listEvents(
   const limit = Math.min(Math.max(opts.limit ?? 30, 1), 100);
   const filters = [inArray(event.repoId, ids), or(sql`${event.kind} <> 'ci_failed'`, eq(event.actorId, viewerId))];
   if (opts.actorId) filters.push(eq(event.actorId, opts.actorId));
-  const older = olderThan(event.createdAt, event.id, opts.before);
-  if (older) filters.push(older);
+  const cursor = /^(\d+)-(\d+)$/.exec(opts.before ?? "");
+  if (cursor) {
+    const at = new Date(Number(cursor[1]));
+    filters.push(or(lt(event.createdAt, at), and(eq(event.createdAt, at), lt(event.id, Number(cursor[2])))));
+  }
   const rows = db
     .select({ e: event, actor: user.username })
     .from(event)
@@ -105,7 +104,7 @@ export function listEvents(
       const r = byId.get(e.repoId)!;
       return { id: e.id, kind: e.kind as Kind, owner: r.owner, repo: r.name, visibility: r.visibility, actor: actor!, at: e.createdAt, payload: JSON.parse(e.payload) };
     }),
-    next: rows.length > limit && last ? cursorOf(last.e.createdAt, last.e.id) : null,
+    next: rows.length > limit && last ? `${last.e.createdAt.getTime()}-${last.e.id}` : null,
   };
 }
 

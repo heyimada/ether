@@ -53,7 +53,7 @@ test("concurrency falls back to 3 unless it's a positive integer", () => {
 });
 
 test("agent instructions and CI secrets are sensitive; tests alone are no longer low risk", () => {
-  for (const p of ["CLAUDE.md", "docs/CLAUDE.md", "AGENTS.md", ".claude/settings.json", "src/server/secret-box.ts", "src/runner/log-mask.ts"]) expect(isSensitive(p)).toBe(true);
+  for (const p of ["CLAUDE.md", "docs/CLAUDE.md", "AGENTS.md", ".claude/settings.json", "src/server/secret-box.ts", "src/server/log-mask.ts"]) expect(isSensitive(p)).toBe(true);
   for (const p of ["src/server/x.test.ts", "e2e/git.spec.ts"]) expect(isLowRisk(p)).toBe(false);
   expect(eligibility(["CLAUDE.md"], "low", []).eligible).toBe(false);
 });

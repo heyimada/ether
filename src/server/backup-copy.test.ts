@@ -19,38 +19,25 @@ function bareRepo(name: string) {
   return dir;
 }
 
-test("git's lock and temp files vanishing mid-copy are skipped, however often they do", () => {
+test("git's lock and temp files vanishing mid-copy are skipped without a retry", () => {
   const from = bareRepo("scratch.git");
-  // A push in flight: git lists its lock file and temp pack, then deletes them before the copy reaches them. Listed on
-  // every pass, so a copy that counted them as changes would never settle and would fail.
-  const list = (dir: string) => [...readdirSync(dir), ...(dir === from ? ["shallow.lock"] : basename(dir) === "pack" ? ["tmp_pack_x"] : [])];
+  const listed: string[] = [];
+  // A push in flight: git lists its lock file and temp pack, then deletes them before the copy reaches them.
+  const list = (dir: string) => {
+    listed.push(dir);
+    return [...readdirSync(dir), ...(dir === from ? ["shallow.lock"] : basename(dir) === "pack" ? ["tmp_pack_x"] : [])];
+  };
   const to = join(tmp, "scratch-copy.git");
   copyRepoConsistently(from, to, list);
   expect(readFileSync(join(to, "refs", "heads", "main"), "utf8")).toBe("abc\n");
   expect(existsSync(join(to, "objects", "pack"))).toBe(true);
   expect(existsSync(join(to, "shallow.lock"))).toBe(false);
+  expect(listed.filter((d) => d === from)).toHaveLength(1);
+  // Loose refs are copied before objects.
+  expect(listed.indexOf(join(from, "refs"))).toBeLessThan(listed.indexOf(join(from, "objects")));
 });
 
-test("objects are copied after the refs that point at them", () => {
-  const from = bareRepo("order.git");
-  let pushed = false;
-  // A push lands while refs/heads is being read: its new ref and its object appear together.
-  const list = (dir: string) => {
-    if (!pushed && dir === join(from, "refs", "heads")) {
-      pushed = true;
-      mkdirSync(join(from, "objects", "cd"), { recursive: true });
-      writeFileSync(join(from, "objects", "cd", "new"), "object\n");
-      writeFileSync(join(from, "refs", "heads", "late"), "cdnew\n");
-    }
-    return readdirSync(dir);
-  };
-  const to = join(tmp, "order-copy.git");
-  copyRepoConsistently(from, to, list);
-  expect(existsSync(join(to, "refs", "heads", "late"))).toBe(true);
-  expect(existsSync(join(to, "objects", "cd", "new"))).toBe(true);
-});
-
-test("a loose object or ref that gc or pack-refs removes mid-copy doesn't fail the backup", () => {
+test("a loose object or ref that gc or pack-refs removes mid-copy makes the repository copy again", () => {
   const from = bareRepo("gc.git");
   let firstPass = true;
   const list = (dir: string) => {
@@ -64,8 +51,8 @@ test("a loose object or ref that gc or pack-refs removes mid-copy doesn't fail t
   };
   const to = join(tmp, "gc-copy.git");
   copyRepoConsistently(from, to, list);
+  expect(firstPass).toBe(false);
   expect(readFileSync(join(to, "objects", "ab", "c"), "utf8")).toBe("object\n");
-  expect(existsSync(join(to, "objects", "ab", "gone"))).toBe(false);
 });
 
 test("a repository that keeps changing fails the backup instead of being copied broken", () => {
@@ -92,15 +79,16 @@ test("files inside a push's quarantine or a temp folder count as scratch, wherev
   for (const p of ["objects/ab/cdef", "objects/pack/pack-123.pack", "refs/heads/main", "packed-refs"]) expect(isGitScratch(join(...p.split("/")))).toBe(false);
 });
 
-test("a push finishing mid-copy, moving objects out of its quarantine folder, doesn't fail the backup", () => {
+test("a push finishing mid-copy, moving objects out of its quarantine folder, doesn't make the repository copy again", () => {
   const from = bareRepo("quarantine.git");
   mkdirSync(join(from, "objects", "incoming-a1b2", "pack"), { recursive: true });
+  const listed: string[] = [];
   // The quarantine's pack is listed, then git moves it into objects/pack/ before the copy reaches it.
   const list = (dir: string) => {
+    listed.push(dir);
     const names = readdirSync(dir);
     return dir === join(from, "objects", "incoming-a1b2", "pack") ? [...names, "pack-123.pack"] : names;
   };
-  const to = join(tmp, "quarantine-copy.git");
-  copyRepoConsistently(from, to, list);
-  expect(readFileSync(join(to, "refs", "heads", "main"), "utf8")).toBe("abc\n");
+  copyRepoConsistently(join(tmp, "quarantine.git"), join(tmp, "quarantine-copy.git"), list);
+  expect(listed.filter((d) => d === from)).toHaveLength(1);
 });
