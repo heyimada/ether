@@ -1,5 +1,3 @@
-import { formatDistanceToNowStrict } from "date-fns";
-
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -14,10 +12,23 @@ export async function api<T = unknown>(path: string, init: RequestInit & { json?
     headers: { ...(json !== undefined ? { "Content-Type": "application/json" } : {}), ...rest.headers },
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
+  return readBody<T>(res);
+}
+
+export async function upload<T = unknown>(path: string, body: Blob, method = "PUT"): Promise<T> {
+  return readBody<T>(await fetch(path, { method, body, credentials: "same-origin" }));
+}
+
+async function readBody<T>(res: Response): Promise<T> {
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
-  if (!res.ok) throw new ApiError(res.status, data.error ?? data.message ?? res.statusText);
-  return data as T;
+  if (!res.ok) {
+    let parsed: { error?: string; message?: string } | undefined;
+    try {
+      parsed = JSON.parse(text);
+    } catch {}
+    throw new ApiError(res.status, parsed?.error ?? parsed?.message ?? res.statusText);
+  }
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export const post = <T = unknown>(path: string, json: unknown = {}) => api<T>(path, { method: "POST", json });
@@ -29,9 +40,30 @@ export const repoApi = (owner: string, repo: string) => `/api/repos/${encodeURIC
 
 export type Me = { username: string; isAdmin: boolean; accent: string | null; theme: "light" | "dark" | null };
 
+export type Instance = { anonymousRead: boolean; ciEnabled: boolean; ciIsolation: "container" | "host"; sshBase: string | null; sshHostKey: { fingerprint: string; publicKey: string } | null };
+
+export type Person = { username: string; isAdmin: boolean; displayName: string; avatarVersion: number | null };
+
+// One row of GET /api/repos.
+export type RepoRow = {
+  owner: string;
+  name: string;
+  description: string;
+  visibility: "private" | "public";
+  relation: "owner" | "org" | "collaborator" | "public";
+  ownerIsOrg: boolean;
+  mine: boolean;
+  stars: number;
+  updatedAt: string;
+};
+
+export type Role = "owner" | "write" | "read";
+export const canWrite = (role: Role) => role !== "read";
+export const isOwner = (role: Role) => role === "owner";
+
 export type RepoInfo = {
   repo: { owner: string; name: string; description: string; visibility: "private" | "public"; requireApproval: boolean; ciEnabled: boolean; requireChecks: boolean; requireCodeOwnerReview: boolean; allowMergeCommit: boolean; allowSquashMerge: boolean; allowRebaseMerge: boolean; defaultBranch: string; empty: boolean };
-  role: "owner" | "write" | "read";
+  role: Role;
   stars: number;
   starred: boolean;
   branches: string[];
@@ -79,11 +111,3 @@ export function splitRefPath(splat: string, info: RepoInfo): { ref: string; path
   const [first, ...rest] = splat.split("/");
   return { ref: first, path: rest.join("/") };
 }
-
-// Compact relative times ("3 minutes ago", "8 months ago") that fit table columns.
-export const timeAgo = (value: number | string | Date) => {
-  const date = new Date(value);
-  return Date.now() - date.getTime() < 60_000 ? "just now" : formatDistanceToNowStrict(date, { addSuffix: true });
-};
-
-export const shortSha = (sha: string) => sha.slice(0, 7);

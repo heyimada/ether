@@ -12,6 +12,7 @@ import { ownerStatus, requestCodeOwners } from "../owners";
 import { allowedMethods, mergePull, underMergeLock } from "../merge";
 import { findIssue, findPull, headChecks, headDeletable, issueRows, pullStatus, reviewSummary, stackOf, type IssueRow } from "../pulls";
 import { sideEffect } from "../side-effect";
+import { BODY_MAX, TITLE_MAX } from "../../shared/issues";
 
 type Body = Record<string, unknown> | undefined;
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
@@ -150,9 +151,9 @@ export const issueRoutes = new Elysia()
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const b = body as Body;
-    const title = str(b?.title, 256).trim();
+    const title = str(b?.title, TITLE_MAX).trim();
     if (!title) throw new HttpError(400, "Title is required");
-    const text = str(b?.body, 65536);
+    const text = str(b?.body, BODY_MAX);
     const number = insertIssue(a, viewer, { title, body: text });
     record(a.repo.id, viewer.id, "issue_opened", { number, title });
     void sideEffect("Notifying", () => notify(mentioned([text]), "mention", viewer.id, { repoId: a.repo.id, issueNumber: number, title, excerpt: text }));
@@ -172,8 +173,8 @@ export const issueRoutes = new Elysia()
     if (row.issue.authorId !== viewer.id && !allows(a.role, "write")) throw new HttpError(403, "Only the author or collaborators with write access can edit this");
     const b = body as Body;
     const set: Partial<typeof issue.$inferInsert> = {};
-    if (typeof b?.title === "string" && b.title.trim()) set.title = str(b.title, 256).trim();
-    if (typeof b?.body === "string") set.body = str(b.body, 65536);
+    if (typeof b?.title === "string" && b.title.trim()) set.title = str(b.title, TITLE_MAX).trim();
+    if (typeof b?.body === "string") set.body = str(b.body, BODY_MAX);
     if (b?.state === "open" || b?.state === "closed") {
       if (row.issue.state === "merged") throw new HttpError(409, "Merged pull requests cannot be reopened or closed");
       set.state = b.state;
@@ -224,7 +225,7 @@ export const issueRoutes = new Elysia()
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const row = findIssue(a, params.number);
-    const text = str((body as Body)?.body, 65536);
+    const text = str((body as Body)?.body, BODY_MAX);
     if (!text.trim()) throw new HttpError(400, "Comment cannot be empty");
     db.insert(comment).values({ issueId: row.issue.id, authorId: viewer.id, body: text }).run();
     db.update(issue).set({ updatedAt: new Date() }).where(eq(issue.id, row.issue.id)).run();
@@ -241,14 +242,14 @@ export const issueRoutes = new Elysia()
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "write");
     const b = body as Body;
-    const title = str(b?.title, 256).trim();
+    const title = str(b?.title, TITLE_MAX).trim();
     const base = str(b?.base, 255);
     const head = str(b?.head, 255);
     if (!title) throw new HttpError(400, "Title is required");
     if (!base || !head || base === head) throw new HttpError(400, "Choose two different branches");
     for (const branch of [base, head])
       if (!(await git.resolveCommit(a.path, `refs/heads/${branch}`))) throw new HttpError(400, `No branch named ${branch}`);
-    const text = str(b?.body, 65536);
+    const text = str(b?.body, BODY_MAX);
     const number = insertIssue(a, viewer, { title, body: text, isPull: true, draft: b?.draft === true, baseRef: base, headRef: head });
     record(a.repo.id, viewer.id, "pull_opened", { number, title, base, head });
     void sideEffect("Notifying", () => notify(mentioned([text]), "mention", viewer.id, { repoId: a.repo.id, issueNumber: number, title, excerpt: text }));
@@ -285,7 +286,7 @@ export const issueRoutes = new Elysia()
     if (method !== null && method !== "merge" && method !== "squash" && method !== "rebase") throw new HttpError(400, "method must be merge, squash or rebase");
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "write");
-    const title = typeof b?.title === "string" && b.title.trim() ? str(b.title, 256).trim() : null;
-    const message = typeof b?.message === "string" ? str(b.message, 65536) : null;
+    const title = typeof b?.title === "string" && b.title.trim() ? str(b.title, TITLE_MAX).trim() : null;
+    const message = typeof b?.message === "string" ? str(b.message, BODY_MAX) : null;
     return mergePull(a, viewer, params.number, { method, deleteBranch, title, message });
   });

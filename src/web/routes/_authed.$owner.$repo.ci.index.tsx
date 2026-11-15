@@ -1,26 +1,13 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
-import { CiBadge, ciDone, EVENT_LABEL, type CiEvent, type CiStatus } from "../components/ci";
+import { CiBadge, ciDone, EVENT_LABEL, type CiEvent, type CiRun, type CiStatus } from "../components/ci";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
-import { api, post, repoApi, shortSha, timeAgo } from "../lib/api";
+import { api, canWrite, isOwner, post, repoApi } from "../lib/api";
+import { shortSha, timeAgo } from "../lib/format";
 import { rise, staggered } from "../lib/motion";
 
-type Run = {
-  id: number;
-  sha: string;
-  ref: string;
-  refType: "branch" | "tag";
-  workflowName: string;
-  workflowPath: string;
-  event: CiEvent;
-  pullNumber: number | null;
-  status: CiStatus;
-  message: string;
-  subject: string;
-  createdAt: string;
-  jobs: { name: string; status: CiStatus }[];
-};
+type Run = CiRun & { jobs: { name: string; status: CiStatus }[] };
 type Input = { name: string; description: string; type: "string" | "boolean" | "choice" | "number"; required: boolean; default: string | null; options: string[] };
 type Workflow = { path: string; name: string; events: CiEvent[]; inputs: Input[] | null; schedule: string[] | null; error: string | null };
 
@@ -87,7 +74,7 @@ function Runs() {
         {!enabled && (
           <p className="notice m-0">
             CI is off for this repository.{" "}
-            {info.role === "owner" ? (
+            {isOwner(info.role) ? (
               <>
                 Turn it on in <Link to="/$owner/$repo/settings" params={params}>Settings</Link>, then push a workflow to <code>.ether/workflows/</code>.
               </>
@@ -103,7 +90,7 @@ function Runs() {
           </p>
         )}
         {current?.error && <p className="error m-0">{current.error}</p>}
-        {current?.inputs && enabled && info.role !== "read" && <RunWorkflow key={current.path} workflow={current} />}
+        {current?.inputs && enabled && canWrite(info.role) && <RunWorkflow key={current.path} workflow={current} />}
         {runs.length === 0 ? (
           <p className="empty card">No runs yet.</p>
         ) : (

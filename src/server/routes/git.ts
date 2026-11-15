@@ -19,8 +19,8 @@ async function authorize(req: Request, owner: string, repoParam: string, service
 
   const creds = basicCredentials(req);
   // A CI job on an external runner checks out its own repository with the token it got for that job.
-  if (creds?.username === JOB_GIT_USER && service === "git-upload-pack" && !parsed.isWiki) {
-    const found = findRepo(owner, parsed.name);
+  if (creds?.username === JOB_GIT_USER && service === "git-upload-pack") {
+    const found = findRepo(owner, repoParam.slice(0, -4));
     if (found && repoExists(found.path) && jobMayRead(creds.secret, found.repo.id)) return { ...found, role: "read", viewer: VISITOR, dir: found.path, isWiki: false };
   }
   // Without credentials, reads of public repositories may proceed as the visitor when the
@@ -68,7 +68,5 @@ export const gitRoutes = new Elysia()
     if (t instanceof Response) return t;
     const ready = await receiveOrRefusal(t);
     if (ready instanceof Response) return ready;
-    return runService("git-receive-pack", t.dir, request, ready.guard, async (code) => {
-      if (code === 0) await received({ id: t.repo.id, path: t.path }, t.dir, t.isWiki, ready.before, t.viewer.id, t.viewer.id);
-    });
+    return runService("git-receive-pack", t.dir, request, ready.guard, (code) => received({ id: t.repo.id, path: t.path }, t.dir, t.isWiki, ready.before, code, t.viewer.id, t.viewer.id));
   });

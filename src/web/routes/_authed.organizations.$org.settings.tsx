@@ -1,10 +1,11 @@
 import { Link, createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { Avatar, ErrorNote, Field, onSubmit, ROW, useAction } from "../components/ui";
+import { Avatar, ErrorNote, Field, onSubmit, ROW, Status, useAction } from "../components/ui";
 import { Teams, type Team } from "../components/teams";
 import { Runners, type RunnerInfo } from "../components/runners";
-import { api, del, patch, put } from "../lib/api";
+import { api, del, patch, put, upload, type RepoRow } from "../lib/api";
 import { requireAccount } from "../lib/require-account";
+import { PROFILE_FIELDS } from "../../shared/profiles";
 
 type Member = { username: string; role: "owner" | "member"; displayName: string; avatarVersion: number | null };
 type Org = { name: string; basePermission: "read" | "write"; viewerRole: "owner" | "member" | null; members: Member[] };
@@ -18,7 +19,7 @@ export const Route = createFileRoute("/_authed/organizations/$org/settings")({
       api<Org>(base),
       api<OrgProfile>(`/api/users/${encodeURIComponent(params.org)}/profile`),
       api<{ teams: Team[] }>(`${base}/teams`).catch(() => ({ teams: [] as Team[] })),
-      api<{ repos: { owner: string; name: string }[] }>("/api/repos"),
+      api<{ repos: Pick<RepoRow, "owner" | "name">[] }>("/api/repos"),
       api<{ runners: RunnerInfo[] }>(`${base}/runners`).catch(() => ({ runners: [] as RunnerInfo[] })),
     ]);
     if (org.viewerRole !== "owner") throw redirect({ to: "/$owner", params: { owner: params.org } });
@@ -26,13 +27,6 @@ export const Route = createFileRoute("/_authed/organizations/$org/settings")({
   },
   component: OrgSettings,
 });
-
-const Status = ({ text }: { text: string }) =>
-  text ? (
-    <span role="status" className="text-muted">
-      {text}
-    </span>
-  ) : null;
 
 function OrgSettings() {
   const router = useRouter();
@@ -65,9 +59,8 @@ function OrgSettings() {
     setStatus("Organization profile saved");
     await router.invalidate();
   });
-  const upload = useAction(async (file: File) => {
-    const res = await fetch(`${base}/avatar`, { method: "PUT", body: file, headers: { "Content-Type": file.type }, credentials: "same-origin" });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Upload failed");
+  const uploadAvatar = useAction(async (file: File) => {
+    await upload(`${base}/avatar`, file);
     setStatus("Avatar updated");
     await router.invalidate();
   });
@@ -150,7 +143,7 @@ function OrgSettings() {
 
       <section className="card body stack-md">
         <h2 className="m-0">Organization profile</h2>
-        <ErrorNote error={saveProfile.error ?? upload.error} />
+        <ErrorNote error={saveProfile.error ?? uploadAvatar.error} />
         <div className="flex flex-wrap items-start gap-4">
           <Avatar name={org.name} size={72} />
           <label htmlFor="org-avatar" className="button m-0">
@@ -163,21 +156,21 @@ function OrgSettings() {
             accept="image/png,image/jpeg,image/gif,image/webp"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) upload.run(file);
+              if (file) uploadAvatar.run(file);
               e.target.value = "";
             }}
           />
         </div>
         <form className="stack-md" onSubmit={onSubmit(saveProfile.run)}>
           <Field id="o-display" label="Display name">
-            <input id="o-display" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} maxLength={64} />
+            <input id="o-display" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} maxLength={PROFILE_FIELDS.displayName} />
           </Field>
           <Field id="o-bio" label="Description">
-            <textarea className="min-h-[72px]" id="o-bio" value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} maxLength={200} />
+            <textarea className="min-h-[72px]" id="o-bio" value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} maxLength={PROFILE_FIELDS.bio} />
           </Field>
           <div className="grid grid-cols-2 gap-x-4 max-sm:grid-cols-1">
             <Field id="o-location" label="Location">
-              <input id="o-location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} maxLength={64} />
+              <input id="o-location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} maxLength={PROFILE_FIELDS.location} />
             </Field>
             <Field id="o-website" label="Website">
               <input id="o-website" type="url" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} placeholder="https://" />

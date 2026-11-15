@@ -18,37 +18,16 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState, type ReactNode } from "react";
-import { api, shortSha, timeAgo } from "../lib/api";
+import { api } from "../lib/api";
+import { plural, shortSha, timeAgo } from "../lib/format";
 import { rise, staggered } from "../lib/motion";
-import { plural } from "./activity";
+import type { Kind, Payloads } from "../../server/events";
 import { Avatar } from "./ui";
 
-export type FeedEvent = {
-  id: number;
-  kind:
-    | "create"
-    | "push"
-    | "issue_opened"
-    | "issue_closed"
-    | "issue_reopened"
-    | "pull_opened"
-    | "pull_closed"
-    | "pull_reopened"
-    | "pull_merged"
-    | "comment"
-    | "review"
-    | "release"
-    | "star"
-    | "wiki"
-    | "ci_failed";
-  owner: string;
-  repo: string;
-  visibility: "private" | "public";
-  actor: string;
-  at: string;
-  // Shaped by kind; see src/server/events.ts.
-  payload: Record<string, any>;
-};
+// Dates arrive as strings, so `at` differs from the server's FeedEvent.
+export type FeedEvent<K extends Kind = Kind> = {
+  [P in K]: { id: number; kind: P; owner: string; repo: string; visibility: "private" | "public"; actor: string; at: string; payload: Payloads[P] };
+}[K];
 
 export type FeedPage = { events: FeedEvent[]; next: string | null };
 
@@ -89,6 +68,8 @@ const DETAIL = "m-0 flex min-w-0 flex-col gap-1";
 const INLINE_DETAIL = "m-0 flex min-w-0 flex-row flex-wrap items-center gap-1.5 text-sm";
 const QUOTE = "m-0 min-w-0 border-l-[3px] border-border px-2.5 py-1.5 text-sm text-muted wrap-anywhere line-clamp-3";
 
+type IssueKind = "issue_opened" | "issue_closed" | "issue_reopened" | "pull_opened" | "pull_closed" | "pull_reopened" | "pull_merged" | "comment" | "review";
+
 function RepoLink({ e }: { e: FeedEvent }) {
   return (
     <Link to="/$owner/$repo" params={{ owner: e.owner, repo: e.repo }} className="font-semibold text-fg">
@@ -97,7 +78,7 @@ function RepoLink({ e }: { e: FeedEvent }) {
   );
 }
 
-function IssueLink({ e }: { e: FeedEvent }) {
+function IssueLink({ e }: { e: FeedEvent<IssueKind> }) {
   const isPull = e.kind.startsWith("pull_") || e.kind === "review" || (e.kind === "comment" && e.payload.isPull);
   const params = { owner: e.owner, repo: e.repo, number: String(e.payload.number) };
   const text = (
@@ -120,7 +101,6 @@ const REVIEW_VERB = { approved: "approved", changes_requested: "requested change
 
 // What happened, as a sentence that starts with who did it.
 function sentence(e: FeedEvent): ReactNode {
-  const p = e.payload;
   const who = (
     <Link to="/$owner" params={{ owner: e.actor }} className="font-bold text-fg">
       {e.actor}
@@ -140,14 +120,14 @@ function sentence(e: FeedEvent): ReactNode {
         </>
       );
     case "push":
-      return p.commits === 0 && p.created ? (
+      return e.payload.commits === 0 && e.payload.created ? (
         <>
-          {who} created branch <code className={FEED_REF}>{p.ref}</code>
+          {who} created branch <code className={FEED_REF}>{e.payload.ref}</code>
           {inRepo}
         </>
       ) : (
         <>
-          {who} pushed {plural(p.commits, "commit")} to <code className={FEED_REF}>{p.ref}</code>
+          {who} pushed {plural(e.payload.commits, "commit")} to <code className={FEED_REF}>{e.payload.ref}</code>
           {inRepo}
         </>
       );
@@ -180,7 +160,7 @@ function sentence(e: FeedEvent): ReactNode {
     case "review":
       return (
         <>
-          {who} {REVIEW_VERB[p.state] ?? "reviewed"} <IssueLink e={e} />
+          {who} {REVIEW_VERB[e.payload.state] ?? "reviewed"} <IssueLink e={e} />
           {inRepo}
         </>
       );
@@ -188,8 +168,8 @@ function sentence(e: FeedEvent): ReactNode {
       return (
         <>
           {who} published release{" "}
-          <Link to="/$owner/$repo/releases/tag/$tag" params={{ owner: e.owner, repo: e.repo, tag: p.tag }} className={FEED_OBJECT}>
-            {p.title}
+          <Link to="/$owner/$repo/releases/tag/$tag" params={{ owner: e.owner, repo: e.repo, tag: e.payload.tag }} className={FEED_OBJECT}>
+            {e.payload.title}
           </Link>
           {inRepo}
         </>
@@ -203,9 +183,9 @@ function sentence(e: FeedEvent): ReactNode {
     case "wiki":
       return (
         <>
-          {who} {p.created ? "created" : "edited"} wiki page{" "}
-          <Link to="/$owner/$repo/wiki/$slug" params={{ owner: e.owner, repo: e.repo, slug: p.slug }} className={FEED_OBJECT}>
-            {p.title}
+          {who} {e.payload.created ? "created" : "edited"} wiki page{" "}
+          <Link to="/$owner/$repo/wiki/$slug" params={{ owner: e.owner, repo: e.repo, slug: e.payload.slug }} className={FEED_OBJECT}>
+            {e.payload.title}
           </Link>
           {inRepo}
         </>
@@ -213,7 +193,7 @@ function sentence(e: FeedEvent): ReactNode {
     case "ci_failed":
       return (
         <>
-          Checks failed on <code className={FEED_REF}>{p.ref}</code>
+          Checks failed on <code className={FEED_REF}>{e.payload.ref}</code>
           {inRepo}
         </>
       );
@@ -224,14 +204,13 @@ const SHOWN = 3;
 
 // Extra lines under the sentence: commit subjects, a comment excerpt, the failed run.
 function Detail({ e }: { e: FeedEvent }) {
-  const p = e.payload;
   const params = { owner: e.owner, repo: e.repo };
-  if (e.kind === "push" && p.shown?.length) {
-    const more = p.commits - Math.min(SHOWN, p.shown.length);
+  if (e.kind === "push" && e.payload.shown?.length) {
+    const more = e.payload.commits - Math.min(SHOWN, e.payload.shown.length);
     return (
       <div className={DETAIL}>
         <ul className="m-0 flex list-none flex-col gap-1 rounded-sm border border-border bg-surface-2 px-2.5 py-2 text-sm" aria-label="Commits">
-          {(p.shown as { sha: string; subject: string }[]).slice(0, SHOWN).map((c) => (
+          {e.payload.shown.slice(0, SHOWN).map((c) => (
             <li key={c.sha} className="flex min-w-0 items-baseline gap-2.5">
               <Link to="/$owner/$repo/commit/$sha" params={{ ...params, sha: c.sha }} className="flex-none font-mono text-xs">
                 {shortSha(c.sha)}
@@ -241,29 +220,29 @@ function Detail({ e }: { e: FeedEvent }) {
           ))}
         </ul>
         {more > 0 && (
-          <Link to="/$owner/$repo/commits/$" params={{ ...params, _splat: p.ref }} className="text-xs">
+          <Link to="/$owner/$repo/commits/$" params={{ ...params, _splat: e.payload.ref }} className="text-xs">
             {plural(more, "more commit")}
           </Link>
         )}
       </div>
     );
   }
-  if (e.kind === "comment" && p.excerpt) return <p className={QUOTE}>{p.excerpt}</p>;
-  if (e.kind === "release" && p.tag)
+  if (e.kind === "comment" && e.payload.excerpt) return <p className={QUOTE}>{e.payload.excerpt}</p>;
+  if (e.kind === "release" && e.payload.tag)
     return (
       <p className={INLINE_DETAIL}>
-        <Tag size={14} aria-hidden className="text-muted" /> <span className="font-mono">{p.tag}</span>
-        {p.prerelease && <span className="pill">Pre-release</span>}
+        <Tag size={14} aria-hidden className="text-muted" /> <span className="font-mono">{e.payload.tag}</span>
+        {e.payload.prerelease && <span className="pill">Pre-release</span>}
       </p>
     );
   if (e.kind === "ci_failed")
     return (
       <p className={INLINE_DETAIL}>
         <CircleX size={14} aria-hidden className="text-danger" />
-        <Link to="/$owner/$repo/ci/$id" params={{ ...params, id: String(p.runId) }}>
-          {p.subject || shortSha(p.sha)}
+        <Link to="/$owner/$repo/ci/$id" params={{ ...params, id: String(e.payload.runId) }}>
+          {e.payload.subject || shortSha(e.payload.sha)}
         </Link>
-        <span className="font-mono text-muted">{shortSha(p.sha)}</span>
+        <span className="font-mono text-muted">{shortSha(e.payload.sha)}</span>
       </p>
     );
   return null;

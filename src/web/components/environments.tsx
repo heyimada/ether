@@ -1,10 +1,12 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { Rocket } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import { api, del, put, shortSha, timeAgo } from "../lib/api";
+import { api, del, put } from "../lib/api";
+import { shortSha, timeAgo } from "../lib/format";
 import { CiBadge, type CiStatus } from "./ci";
 import { CiSecrets, type CiSecret } from "./ci-secrets";
 import { ErrorNote, Field, onSubmit, ROW, useAction } from "./ui";
+import { ENVIRONMENT_NAME_MAX, MAX_REVIEWERS, MAX_WAIT_MINUTES } from "../../shared/ci";
 
 export type DeploymentRow = { id: number; runId: number; sha: string; ref: string; status: string; url: string | null; actor: string | null; createdAt: string };
 export type EnvironmentInfo = { name: string; branches: string[]; waitMinutes: number; reviewers: string[]; runners: string[]; latest: DeploymentRow | null; active: DeploymentRow | null };
@@ -76,7 +78,7 @@ function EnvironmentEditor({ base, env, candidates, isolation }: { base: string;
             <fieldset className="stack-sm border-0 p-0 m-0">
               <legend>Required reviewers</legend>
               <span className="hint m-0">
-                Each deployment waits until one of them approves it on the CI run. Up to 6 people with write access.
+                Each deployment waits until one of them approves it on the CI run. Up to {MAX_REVIEWERS} people with write access.
               </span>
               {people.map((p) => (
                 <label key={p} className="radio">
@@ -86,7 +88,7 @@ function EnvironmentEditor({ base, env, candidates, isolation }: { base: string;
               ))}
             </fieldset>
             <Field id={`${uid}-wait`} label="Wait timer (minutes)" hint="How long a deployment waits before it starts, after any approval. 0 for none.">
-              <input className="max-w-[140px]" id={`${uid}-wait`} type="number" min={0} max={43200} value={wait} onChange={(e) => setWait(e.target.value)} />
+              <input className="max-w-[140px]" id={`${uid}-wait`} type="number" min={0} max={MAX_WAIT_MINUTES} value={wait} onChange={(e) => setWait(e.target.value)} />
             </Field>
             <div className={ROW}>
               <button className="primary" disabled={save.pending}>
@@ -162,7 +164,7 @@ export function Environments({ base, environments, candidates, isolation }: { ba
         <form className="flex flex-wrap items-end gap-3" onSubmit={onSubmit(add.run)}>
           <div className="flex-1">
             <label htmlFor="new-environment">New environment</label>
-            <input id="new-environment" className="font-mono" value={name} onChange={(e) => setName(e.target.value)} placeholder="production" required maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._\-]*" />
+            <input id="new-environment" className="font-mono" value={name} onChange={(e) => setName(e.target.value)} placeholder="production" required maxLength={ENVIRONMENT_NAME_MAX} pattern="[A-Za-z0-9][A-Za-z0-9._\-]*" />
           </div>
           <button disabled={add.pending}>Add environment</button>
         </form>

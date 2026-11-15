@@ -1,7 +1,8 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { RefPicker } from "../components/code-browser";
-import { api, repoApi, shortSha, splitRefPath, timeAgo, type Commit } from "../lib/api";
+import { RefPicker } from "../components/ref-picker";
+import { api, repoApi, splitRefPath, type Commit } from "../lib/api";
+import { shortSha, timeAgo } from "../lib/format";
 import { rise, staggered } from "../lib/motion";
 import { ROW } from "../components/ui";
 

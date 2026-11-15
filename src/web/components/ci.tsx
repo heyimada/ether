@@ -29,4 +29,19 @@ export function CiBadge({ status }: { status: CiStatus }) {
 export const ciDone = (s: CiStatus) => s !== "queued" && s !== "running" && s !== "waiting";
 
 export type CiEvent = "push" | "pull_request" | "workflow_dispatch" | "schedule";
+
+export type CiRun = {
+  id: number;
+  sha: string;
+  ref: string;
+  refType: "branch" | "tag";
+  workflowName: string;
+  workflowPath: string;
+  event: CiEvent;
+  pullNumber: number | null;
+  status: CiStatus;
+  message: string;
+  subject: string;
+  createdAt: string;
+};
 export const EVENT_LABEL: Record<CiEvent, string> = { push: "push", pull_request: "pull request", workflow_dispatch: "manual", schedule: "scheduled" };

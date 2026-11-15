@@ -11,6 +11,7 @@ AGENTS.md @heyimada @JustKatze
 /src/server/ssh.ts @heyimada @JustKatze
 /src/server/ssh-relay.ts @heyimada @JustKatze
 /src/server/smart-http.ts @heyimada @JustKatze
+/src/server/push.ts @heyimada @JustKatze
 /src/server/git.ts @heyimada @JustKatze
 /src/runner/container.ts @heyimada @JustKatze
 /src/server/ci-secrets.ts @heyimada @JustKatze

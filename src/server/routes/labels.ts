@@ -5,6 +5,7 @@ import { db } from "../db/client";
 import { issue, issueAssignee, issueLabel, label, team, user } from "../db/schema";
 import { notify } from "../notify";
 import { sideEffect } from "../side-effect";
+import { LABEL_DESCRIPTION_MAX, MAX_ASSIGNEES } from "../../shared/issues";
 
 const LABEL_RE = /^[^\s,][^,]{0,49}$/;
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
@@ -35,7 +36,7 @@ export const labelRoutes = new Elysia()
     const n = (name as string).trim().toLowerCase();
     if (db.select().from(label).where(and(eq(label.repoId, a.repo.id), eq(label.name, n))).get()) throw new HttpError(409, "That label already exists");
     db.insert(label)
-      .values({ repoId: a.repo.id, name: n, color: (color as string | undefined)?.toLowerCase() ?? "#8c959f", description: typeof description === "string" ? description.slice(0, 100) : "" })
+      .values({ repoId: a.repo.id, name: n, color: (color as string | undefined)?.toLowerCase() ?? "#8c959f", description: typeof description === "string" ? description.slice(0, LABEL_DESCRIPTION_MAX) : "" })
       .run();
     return { ok: true };
   })
@@ -48,7 +49,7 @@ export const labelRoutes = new Elysia()
     const set: Partial<typeof label.$inferInsert> = {};
     if (typeof b.name === "string") set.name = b.name.trim().toLowerCase();
     if (typeof b.color === "string") set.color = b.color.toLowerCase();
-    if (typeof b.description === "string") set.description = b.description.slice(0, 100);
+    if (typeof b.description === "string") set.description = b.description.slice(0, LABEL_DESCRIPTION_MAX);
     db.update(label).set(set).where(eq(label.id, row.id)).run();
     return { ok: true };
   })
@@ -102,7 +103,7 @@ export const labelRoutes = new Elysia()
     const a = requireRepo(viewer, params.owner, params.repo, "write");
     const issueId = findIssueId(a, params.number);
     const names = (body as { assignees?: unknown } | null)?.assignees;
-    if (!Array.isArray(names) || names.length > 10 || names.some((n) => typeof n !== "string")) throw new HttpError(400, "assignees must be a list of up to ten usernames");
+    if (!Array.isArray(names) || names.length > MAX_ASSIGNEES || names.some((n) => typeof n !== "string")) throw new HttpError(400, "assignees must be a list of up to ten usernames");
     const people = [...new Set(names as string[])].map((n) => {
       const u = findUser(n);
       // Only people who can see the repository can be assigned.

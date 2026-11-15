@@ -4,21 +4,18 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware, APIError } from "better-auth/api";
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { authPlugins } from "./auth-plugins";
-import { config } from "./config";
+import { config, dataPath } from "./config";
 import { db, schema } from "./db/client";
+import { MIN_PASSWORD } from "../shared/accounts";
 
 // Generated once per data directory unless provided by the environment. CI secrets are sealed under a key derived from it.
 export function authSecret(): string {
   if (process.env.BETTER_AUTH_SECRET) return process.env.BETTER_AUTH_SECRET;
-  const file = join(config.dataDir, "auth-secret");
+  const file = dataPath("authSecret");
   if (!existsSync(file)) writeFileSync(file, randomBytes(32).toString("base64"), { mode: 0o600 });
   return readFileSync(file, "utf8").trim();
 }
-
-// Accounts are username-based; Better Auth still wants an email, so we derive an
-// unroutable one from the username.
 
 export const auth = betterAuth({
   appName: "Ether",
@@ -27,7 +24,7 @@ export const auth = betterAuth({
   secret: authSecret(),
   trustedOrigins: config.trustedOrigins,
   database: drizzleAdapter(db, { provider: "sqlite", schema }),
-  emailAndPassword: { enabled: true, minPasswordLength: 10 },
+  emailAndPassword: { enabled: true, minPasswordLength: MIN_PASSWORD },
   plugins: authPlugins,
   session: { expiresIn: 60 * 60 * 24 * 30 },
   // `tailscale serve` on loopback forwards the caller's tailnet address in X-Forwarded-For.

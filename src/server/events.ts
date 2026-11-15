@@ -1,4 +1,5 @@
-import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { cursorOf, olderThan } from "./cursor";
 import { db } from "./db/client";
 import { event, user } from "./db/schema";
 import type { ReadableRepo } from "./access";
@@ -84,11 +85,8 @@ export function listEvents(
   const limit = Math.min(Math.max(opts.limit ?? 30, 1), 100);
   const filters = [inArray(event.repoId, ids), or(sql`${event.kind} <> 'ci_failed'`, eq(event.actorId, viewerId))];
   if (opts.actorId) filters.push(eq(event.actorId, opts.actorId));
-  const cursor = /^(\d+)-(\d+)$/.exec(opts.before ?? "");
-  if (cursor) {
-    const at = new Date(Number(cursor[1]));
-    filters.push(or(lt(event.createdAt, at), and(eq(event.createdAt, at), lt(event.id, Number(cursor[2])))));
-  }
+  const older = olderThan(event.createdAt, event.id, opts.before);
+  if (older) filters.push(older);
   const rows = db
     .select({ e: event, actor: user.username })
     .from(event)
@@ -104,7 +102,7 @@ export function listEvents(
       const r = byId.get(e.repoId)!;
       return { id: e.id, kind: e.kind as Kind, owner: r.owner, repo: r.name, visibility: r.visibility, actor: actor!, at: e.createdAt, payload: JSON.parse(e.payload) };
     }),
-    next: rows.length > limit && last ? `${last.e.createdAt.getTime()}-${last.e.id}` : null,
+    next: rows.length > limit && last ? cursorOf(last.e.createdAt, last.e.id) : null,
   };
 }
 

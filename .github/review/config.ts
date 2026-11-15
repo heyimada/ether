@@ -56,6 +56,7 @@ export const SENSITIVE = [
   "src/server/ssh.ts",
   "src/server/ssh-relay.ts",
   "src/server/smart-http.ts",
+  "src/server/push.ts",
   "src/server/git.ts",
   "src/server/db/**",
   "drizzle/**",

@@ -30,11 +30,13 @@ export async function prepareReceive(repoId: number, dir: string, isWiki: boolea
   return { before, guard: isWiki ? { args: [], env: {} } : receivePackGuard(repoId, before.some((r) => r.kind === "branch")) };
 }
 
-// After receive-pack succeeded. `personId` is who pushed, when a person did (a deploy key has none); `actorId` is
-// who the push counts as. Only the pusher's own commit emails are learned, and a wiki's history is not news about
+// After receive-pack exited with `code`. HEAD is fixed even after a failed push, which may have written refs; the
+// rest only follows a successful one. `personId` is who pushed, when a person did (a deploy key has none); `actorId`
+// is who the push counts as. Only the pusher's own commit emails are learned, and a wiki's history is not news about
 // the repository's code.
-export async function received(repo: Repo, dir: string, isWiki: boolean, before: git.Ref[], personId: string | null, actorId: string) {
+export async function received(repo: Repo, dir: string, isWiki: boolean, before: git.Ref[], code: number, personId: string | null, actorId: string) {
   await sideEffect("Fixing HEAD", () => git.fixHead(dir));
+  if (code !== 0) return;
   const after = await git.listRefs(dir);
   if (personId) await sideEffect("Learning commit emails", async () => recordPush(personId, await git.newAuthorEmails(dir, before.map((r) => r.sha), after.map((r) => r.sha))));
   if (!isWiki) await refsPushed(repo, before, after, actorId);
@@ -51,12 +53,15 @@ export async function refsPushed(repo: Repo, before: git.Ref[], after: git.Ref[]
 export async function refsMoved(repo: Repo, before: git.Ref[], after: git.Ref[], actorId: string) {
   await sideEffect("Starting push workflows", () => onPush(repo.id, repo.path, before, after, actorId));
   const moved = after.filter((ref) => ref.kind === "branch" && before.find((b) => b.kind === "branch" && b.name === ref.name)?.sha !== ref.sha).map((r) => r.name);
-  if (!moved.length) return;
-  const pulls = db
-    .select({ number: issue.number })
-    .from(issue)
-    .where(and(eq(issue.repoId, repo.id), eq(issue.isPull, true), eq(issue.state, "open"), inArray(issue.headRef, moved)))
-    .all();
+  let pulls: { number: number }[] = [];
+  await sideEffect("Finding pull requests that moved", () => {
+    if (moved.length)
+      pulls = db
+        .select({ number: issue.number })
+        .from(issue)
+        .where(and(eq(issue.repoId, repo.id), eq(issue.isPull, true), eq(issue.state, "open"), inArray(issue.headRef, moved)))
+        .all();
+  });
   for (const p of pulls) {
     await sideEffect("Asking code owners", () => requestCodeOwners(repo.id, p.number));
     await sideEffect("Starting pull request workflows", () => onPullRequest(repo.id, repo.path, p.number, "synchronize", actorId));

@@ -3,16 +3,10 @@ import { Elysia } from "elysia";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
 import { record } from "../events";
 import * as git from "../git";
+import { titleToSlug, WIKI_MESSAGE_MAX } from "../../shared/repos";
 
 // Page slugs are file names without ".md"; titles show hyphens as spaces, like GitHub wikis.
 const SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
-export const titleToSlug = (title: string) =>
-  title
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^A-Za-z0-9._-]/g, "")
-    .replace(/^[._-]+/, "")
-    .slice(0, 100);
 const slugToTitle = (slug: string) => slug.replace(/-/g, " ");
 
 function checkSlug(slug: string) {
@@ -66,7 +60,7 @@ export const wikiRoutes = new Elysia()
     const existing = (await pages(wiki)).map((p) => p.slug);
     if (target !== params.slug && existing.includes(target)) throw new HttpError(409, "A page with that title already exists");
     const isNew = !existing.includes(params.slug);
-    const message = typeof b.message === "string" && b.message.trim() ? b.message.trim().slice(0, 200) : `${isNew ? "Create" : "Update"} ${slugToTitle(target)}`;
+    const message = typeof b.message === "string" && b.message.trim() ? b.message.trim().slice(0, WIKI_MESSAGE_MAX) : `${isNew ? "Create" : "Update"} ${slugToTitle(target)}`;
     try {
       await git.wikiCommit(
         wiki,

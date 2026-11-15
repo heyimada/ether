@@ -9,9 +9,8 @@ import { db } from "../db/client";
 import { environment } from "../db/schema";
 import { ensureEnvironment, environmentsOverview, findEnvironment, listDeployments, reviewerIds, setEnvironmentRules } from "../deploy";
 import { eq } from "drizzle-orm";
+import { MAX_REVIEWERS, MAX_WAIT_MINUTES } from "../../shared/ci";
 
-const MAX_REVIEWERS = 6;
-const MAX_WAIT_MINUTES = 30 * 24 * 60;
 
 function environmentOf(a: RepoAccess, name: string) {
   const env = findEnvironment(a.repo.id, name);

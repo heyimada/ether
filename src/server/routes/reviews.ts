@@ -1,14 +1,15 @@
-import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, allows, findUser, readableRepos, repoAccess, requireRepo, requireUser } from "../access";
 import { db } from "../db/client";
-import { issue, review, reviewComment, reviewRequest, team, teamMember, teamReviewRequest, user } from "../db/schema";
+import { review, reviewComment, reviewRequest, team, teamReviewRequest } from "../db/schema";
 import * as git from "../git";
 import { record } from "../events";
 import { answerTeamRequests } from "../owners";
 import { findPull, pullStatus, requestedOf } from "../pulls";
 import { notify, notifyThread, teamMembers } from "../notify";
 import { sideEffect } from "../side-effect";
+import { BODY_MAX } from "../../shared/issues";
 
 // Line numbers on the new side of a unified diff, per file: the lines a review can comment on.
 function commentableLines(diff: string): Map<string, Set<number>> {
@@ -98,7 +99,7 @@ export const reviewRoutes = new Elysia()
       if (!allows(a.role, "write")) throw new HttpError(403, "Only people with write access can approve or request changes");
     }
     const comments = Array.isArray(b.comments) ? (b.comments as { path?: unknown; line?: unknown; body?: unknown }[]) : [];
-    const text = typeof b.body === "string" ? b.body.slice(0, 65536) : "";
+    const text = typeof b.body === "string" ? b.body.slice(0, BODY_MAX) : "";
     if (state === "commented" && !text.trim() && comments.length === 0) throw new HttpError(400, "A comment review needs a summary or line comments");
     const status = await pullStatus(a, row);
     if (status.missing) throw new HttpError(409, "A branch of this pull request no longer exists");
@@ -106,7 +107,7 @@ export const reviewRoutes = new Elysia()
     const checked = comments.map((c) => {
       if (typeof c.path !== "string" || typeof c.line !== "number" || typeof c.body !== "string" || !c.body.trim()) throw new HttpError(400, "Each line comment needs a path, line and body");
       if (!lines.get(c.path)?.has(c.line)) throw new HttpError(400, `${c.path}:${c.line} is not a line in this diff`);
-      return { path: c.path, line: c.line, body: c.body.slice(0, 65536) };
+      return { path: c.path, line: c.line, body: c.body.slice(0, BODY_MAX) };
     });
     const headSha = (await git.resolveCommit(a.path, `refs/heads/${row.issue.headRef}`))!;
     db.transaction((tx) => {

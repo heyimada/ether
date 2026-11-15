@@ -4,6 +4,7 @@ import { auth } from "./auth";
 import { db } from "./db/client";
 import { accessToken, collaborator, instanceSetting, invite, orgMember, organization, repo, teamMember, teamRepo, user } from "./db/schema";
 import { repoPath } from "./git";
+import { INVITE_DAYS } from "../shared/accounts";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -241,7 +242,7 @@ export const tokenUser = (username: string, token: string) => lookupToken(token,
 
 // ---------- invites ----------
 
-const INVITE_TTL = 7 * 24 * 3600 * 1000;
+const INVITE_TTL = INVITE_DAYS * 24 * 3600 * 1000;
 
 export function createInvite(createdBy: string) {
   const code = secret("inv_");

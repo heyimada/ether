@@ -181,7 +181,7 @@ export const MAX_STACK = 25;
 // them aren't stacked on each other (a feature into main isn't "on" a main → release PR), and they're never
 // deleted on merge.
 export async function longLivedBranches(a: RepoAccess): Promise<(branch: string) => boolean> {
-  const main = await git.headBranch(a.path).catch(() => null);
+  const main = await git.headBranch(a.path);
   const rules = branchRules(a.repo.id);
   return (branch) => branch === main || effectiveRule(rules, branch) !== null;
 }

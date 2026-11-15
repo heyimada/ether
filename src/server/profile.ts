@@ -2,15 +2,12 @@ import { eq } from "drizzle-orm";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HttpError } from "./access";
-import { config } from "./config";
+import { dataPath } from "./config";
 import { db } from "./db/client";
 import { profile } from "./db/schema";
+import { AVATAR_MAX_MB, GIF_AVATAR_MAX_MB, LINK_MAX, MAX_AVATAR, MAX_GIF_AVATAR, MAX_SOCIALS, PROFILE_FIELDS } from "../shared/profiles";
 
-const MAX_AVATAR = 1024 * 1024;
-const MAX_GIF_AVATAR = 2 * 1024 * 1024;
-export const avatarDir = () => join(config.dataDir, "avatars");
-
-const FIELDS = { displayName: 64, bio: 200, pronouns: 32, company: 64, location: 64, status: 80 } as const;
+export const avatarDir = () => dataPath("avatars");
 
 // Links are rendered as anchors, so only absolute http(s) URLs are stored.
 function safeUrl(value: string): string {
@@ -22,7 +19,7 @@ function safeUrl(value: string): string {
     throw new HttpError(400, `Not a valid link: ${value}`);
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new HttpError(400, "Links must start with http:// or https://");
-  if (value.length > 300) throw new HttpError(400, "Links can be at most 300 characters");
+  if (value.length > LINK_MAX) throw new HttpError(400, `Links can be at most ${LINK_MAX} characters`);
   return value;
 }
 
@@ -45,7 +42,7 @@ export function upsertProfile(userId: string, set: Partial<typeof profile.$infer
 export function applyProfilePatch(userId: string, body: unknown) {
   const b = (body ?? {}) as Record<string, unknown>;
   const set: Partial<typeof profile.$inferInsert> = {};
-  for (const [key, max] of Object.entries(FIELDS) as [keyof typeof FIELDS, number][]) {
+  for (const [key, max] of Object.entries(PROFILE_FIELDS) as [keyof typeof PROFILE_FIELDS, number][]) {
     if (key in b) {
       if (typeof b[key] !== "string") throw new HttpError(400, `${key} must be text`);
       set[key] = (b[key] as string).trim().slice(0, max);
@@ -58,7 +55,7 @@ export function applyProfilePatch(userId: string, body: unknown) {
   if ("socials" in b) {
     if (!Array.isArray(b.socials) || b.socials.some((s) => typeof s !== "string")) throw new HttpError(400, "socials must be a list of links");
     const links = (b.socials as string[]).map((s) => s.trim()).filter(Boolean);
-    if (links.length > 4) throw new HttpError(400, "Up to four social links");
+    if (links.length > MAX_SOCIALS) throw new HttpError(400, "Up to four social links");
     set.socials = JSON.stringify(links.map(safeUrl));
   }
   if (Object.keys(set).length === 0) throw new HttpError(400, "Nothing to change");
@@ -66,12 +63,12 @@ export function applyProfilePatch(userId: string, body: unknown) {
 }
 
 export async function saveAvatar(userId: string, request: Request) {
-  if (Number(request.headers.get("content-length") ?? 0) > MAX_GIF_AVATAR) throw new HttpError(413, "Avatars can be at most 2 MB");
+  if (Number(request.headers.get("content-length") ?? 0) > MAX_GIF_AVATAR) throw new HttpError(413, `Avatars can be at most ${GIF_AVATAR_MAX_MB} MB`);
   const bytes = new Uint8Array(await request.arrayBuffer());
   const type = sniffImage(bytes);
   // Animated GIFs are uploaded untouched, so they get more room than re-encoded stills.
   const limit = type === "image/gif" ? MAX_GIF_AVATAR : MAX_AVATAR;
-  if (bytes.length > limit) throw new HttpError(413, type === "image/gif" ? "GIF avatars can be at most 2 MB" : "Avatars can be at most 1 MB");
+  if (bytes.length > limit) throw new HttpError(413, type === "image/gif" ? `GIF avatars can be at most ${GIF_AVATAR_MAX_MB} MB` : `Avatars can be at most ${AVATAR_MAX_MB} MB`);
   if (!type) throw new HttpError(400, "Upload a PNG, JPEG, GIF or WebP image");
   mkdirSync(avatarDir(), { recursive: true });
   writeFileSync(join(avatarDir(), userId), bytes);

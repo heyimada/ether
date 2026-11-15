@@ -2,6 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { post, repoApi } from "../lib/api";
+import { TITLE_MAX } from "../../shared/issues";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/issues/new")({ component: NewIssue });
 
@@ -19,7 +20,7 @@ function NewIssue() {
     <form className="card body max-w-[820px]" onSubmit={onSubmit(create.run)}>
       <ErrorNote error={create.error} />
       <Field id="title" label="Title">
-        <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={256} autoFocus />
+        <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={TITLE_MAX} autoFocus />
       </Field>
       <Field id="body" label="Body" hint="Markdown is supported.">
         <textarea id="body" value={body} onChange={(e) => setBody(e.target.value)} />

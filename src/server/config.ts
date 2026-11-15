@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 const host = process.env.ETHER_HOST ?? "127.0.0.1";
 const port = Number(process.env.ETHER_PORT ?? 3000);
@@ -19,4 +19,7 @@ export const config = {
   webDist: resolve(process.env.ETHER_WEB_DIST ?? resolve(import.meta.dirname, "../../dist/client")),
 };
 
-export const reposDir = () => resolve(config.dataDir, "repos");
+// Everything Ether keeps in its data directory. Backup and restore copy all of it; the hooks directory isn't here
+// because Ether writes it afresh.
+export const DATA = { db: "ether.db", repos: "repos", avatars: "avatars", releases: "releases", authSecret: "auth-secret", hostKey: "ssh_host_ed25519_key" } as const;
+export const dataPath = (name: keyof typeof DATA, ...rest: string[]) => join(config.dataDir, DATA[name], ...rest);

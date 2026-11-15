@@ -5,12 +5,13 @@ import { HttpError, requireAdmin, requireOrgOwner, requireRepo, requireUser, sec
 import { claimJob, finishRemoteJob, remoteJob, reportJob, runnerOnline, runnerRemoved } from "../ci";
 import { db } from "../db/client";
 import { ciRunner, ciRunnerRegistration } from "../db/schema";
+import { REGISTRATION_HOURS } from "../../shared/ci";
 
 // External runners (see ../../runner/main.ts). An admin creates a one-time token, a machine trades it for a
 // token of its own and then asks for work; while it runs a job it reports with a token for that job alone.
 // Runners always call in, so their machines need no open port.
 
-const REGISTRATION_TTL = 3600 * 1000;
+const REGISTRATION_TTL = REGISTRATION_HOURS * 3600 * 1000;
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const MAX_REPORT = 256 * 1024;
 

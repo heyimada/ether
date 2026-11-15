@@ -3,20 +3,20 @@ import { BookOpen, FileText, Folder, FolderGit2, GitBranch, History, Star, Tag }
 import { motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import formatSize from "pretty-bytes";
-import { api, repoApi, shortSha, timeAgo, type Commit, type RepoInfo, type TreeEntry } from "../lib/api";
+import { api, canWrite, repoApi, type Commit, type RepoInfo, type TreeEntry } from "../lib/api";
+import { noun, plural, shortSha, timeAgo } from "../lib/format";
 import { rise, staggered } from "../lib/motion";
 import { CodeView, Markdown } from "./content";
 import { RefPicker, TAB_BUTTON } from "./ref-picker";
 import type { Release } from "./releases";
-import { Avatar, CopyButton, ROW } from "./ui";
+import { Avatar, CopyButton, ROW, SETUP } from "./ui";
 
 const LAYOUT_2 = "grid grid-cols-[1fr_260px] gap-6 max-lg:grid-cols-[1fr]";
 const MAIN_COL = "flex min-w-0 flex-col gap-4";
 const SIDE_COL = "flex min-w-0 flex-col gap-6";
 const CARD_HEADER = "flex flex-wrap items-center gap-3 rounded-t-md border-b border-border bg-surface-2 px-4 py-2.5";
-const SETUP = "overflow-x-auto rounded-sm border border-border bg-surface-2 p-3";
 const SIDE_HEADING = "mt-0 mb-2 text-base";
-const SIDE_TEXT = "m-0 text-base wrap-anywhere";
+const SIDE_BODY = "m-0 text-base wrap-anywhere";
 const TD = "border-t border-border px-4 py-2 transition-colors duration-150";
 
 export type TreeData = { sha: string; path: string; entries: TreeEntry[]; lastCommit: Commit | null; commitCount: number | null; readme: string | null };
@@ -100,8 +100,6 @@ export function QuickSetup({ info }: { info: RepoInfo }) {
   );
 }
 
-export { RefPicker };
-
 export function Breadcrumb({ info, gitRef, path }: { info: RepoInfo; gitRef: string; path: string }) {
   const params = { owner: info.repo.owner, repo: info.repo.name };
   const parts = path ? path.split("/") : [];
@@ -165,7 +163,7 @@ export function TreeView({
               {data.commitCount !== null && (
                 <Link to="/$owner/$repo/commits/$" params={{ ...params, _splat: gitRef }} className="inline-flex items-center gap-1 font-semibold text-fg">
                   <History size={16} aria-hidden />
-                  <span className="tabular-nums">{data.commitCount}</span> {data.commitCount === 1 ? "commit" : "commits"}
+                  <span className="tabular-nums">{data.commitCount}</span> {noun(data.commitCount, "commit")}
                 </Link>
               )}
             </header>
@@ -233,16 +231,16 @@ export function TreeView({
           <h3 id="side-about" className={SIDE_HEADING}>
             About
           </h3>
-          <p className={SIDE_TEXT}>{info.repo.description || <span className="text-muted">No description.</span>}</p>
+          <p className={SIDE_BODY}>{info.repo.description || <span className="text-muted">No description.</span>}</p>
           <ul className="mt-2.5 mb-0 mx-0 flex list-none flex-col gap-1.5 p-0 text-sm text-muted">
             <li className="flex items-center gap-2">
-              <Star size={14} aria-hidden /> <span className="font-semibold tabular-nums text-fg">{info.stars}</span> {info.stars === 1 ? "star" : "stars"}
+              <Star size={14} aria-hidden /> <span className="font-semibold tabular-nums text-fg">{info.stars}</span> {noun(info.stars, "star")}
             </li>
             <li className="flex items-center gap-2">
-              <GitBranch size={14} aria-hidden /> <span className="font-semibold tabular-nums text-fg">{info.branches.length}</span> {info.branches.length === 1 ? "branch" : "branches"}
+              <GitBranch size={14} aria-hidden /> <span className="font-semibold tabular-nums text-fg">{info.branches.length}</span> {noun(info.branches.length, "branch", "branches")}
             </li>
             <li className="flex items-center gap-2">
-              <Tag size={14} aria-hidden /> <span className="font-semibold tabular-nums text-fg">{info.tags.length}</span> {info.tags.length === 1 ? "tag" : "tags"}
+              <Tag size={14} aria-hidden /> <span className="font-semibold tabular-nums text-fg">{info.tags.length}</span> {noun(info.tags.length, "tag")}
             </li>
           </ul>
         </section>
@@ -262,7 +260,7 @@ export function TreeView({
             {releases && releases.length > 0 && <span className="count">{releases.length}</span>}
           </h3>
           {releases?.length ? (
-            <div className={`${SIDE_TEXT} flex flex-wrap items-center gap-2`}>
+            <div className={`${SIDE_BODY} flex flex-wrap items-center gap-2`}>
               <Tag size={16} aria-hidden className="text-muted" />
               <Link to="/$owner/$repo/releases/tag/$tag" params={{ ...params, tag: releases[0].tag }}>
                 {releases[0].title}
@@ -275,18 +273,18 @@ export function TreeView({
               </span>
             </div>
           ) : info.tags.length ? (
-            <div className={`${SIDE_TEXT} flex flex-wrap items-center gap-2`}>
+            <div className={`${SIDE_BODY} flex flex-wrap items-center gap-2`}>
               <Tag size={16} aria-hidden className="text-muted" />
               <Link to="/$owner/$repo/tree/$" params={{ ...params, _splat: info.tags[0] }} className="font-mono">
                 {info.tags[0]}
               </Link>
-              <span className="tabular-nums text-muted">{info.tags.length === 1 ? "1 tag" : `${info.tags.length} tags`}</span>
+              <span className="tabular-nums text-muted">{plural(info.tags.length, "tag")}</span>
             </div>
           ) : (
-            <p className={`${SIDE_TEXT} text-muted`}>No releases yet.</p>
+            <p className={`${SIDE_BODY} text-muted`}>No releases yet.</p>
           )}
-          {info.role !== "read" && (
-            <Link to="/$owner/$repo/releases/new" params={params} className={SIDE_TEXT}>
+          {canWrite(info.role) && (
+            <Link to="/$owner/$repo/releases/new" params={params} className={SIDE_BODY}>
               Create a release
             </Link>
           )}

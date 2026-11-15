@@ -11,6 +11,7 @@ import { primaryLanguage } from "../languages";
 import * as git from "../git";
 import { applyProfilePatch, avatarDir, profileRow, saveAvatar, upsertProfile } from "../profile";
 import { starCounts } from "../stars";
+import { MAX_PINS } from "../../shared/profiles";
 
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+$/;
@@ -73,7 +74,7 @@ async function repoCards(repos: ReadableRepo[], withLanguage: Set<number>): Prom
 async function profileReadme(target: { username: string }, readable: ReadableRepo[]) {
   const special = readable.find((r) => r.owner === target.username && r.name === target.username.toLowerCase());
   if (!special) return null;
-  const head = await git.resolveCommit(special.path, await git.headBranch(special.path));
+  const head = await git.headCommit(special.path);
   if (!head) return null;
   const entries = (await git.readTree(special.path, head, "")) ?? [];
   const entry = entries.find((e) => e.type === "blob" && /^readme(\.(md|markdown|txt))?$/i.test(e.name));
@@ -95,7 +96,7 @@ async function contributions(targetId: string, readable: ReadableRepo[]) {
   if (emails.size) {
     await Promise.all(
       readable.map(async (r) => {
-        const head = await git.resolveCommit(r.path, await git.headBranch(r.path));
+        const head = await git.headCommit(r.path);
         if (!head) return;
         for (const c of await git.authorTimes(r.path, head, since))
           if (emails.has(c.email)) {
@@ -141,7 +142,7 @@ async function emailSuggestions(userId: string) {
   if (fromPushes.length) return fromPushes;
   const counts = new Map<string, number>();
   for (const r of readableRepos(userId).filter((x) => x.relation === "owner")) {
-    const head = await git.resolveCommit(r.path, await git.headBranch(r.path));
+    const head = await git.headCommit(r.path);
     if (!head) continue;
     // Recent history is enough to find someone's address.
     for (const c of await git.authorTimes(r.path, head, new Date(0), 2000)) counts.set(c.email, (counts.get(c.email) ?? 0) + 1);
@@ -325,7 +326,7 @@ export const profileRoutes = new Elysia()
   .put("/me/pins", async ({ request, body }) => {
     const viewer = await requireUser(request);
     const list = (body as { repos?: unknown } | null)?.repos;
-    if (!Array.isArray(list) || list.length > 6 || list.some((r) => typeof r !== "string")) throw new HttpError(400, "Pin up to six repositories");
+    if (!Array.isArray(list) || list.length > MAX_PINS || list.some((r) => typeof r !== "string")) throw new HttpError(400, "Pin up to six repositories");
     const readable = readableRepos(viewer.id);
     const ids = (list as string[]).map((full) => {
       const r = readable.find((x) => `${x.owner}/${x.name}` === full.toLowerCase());

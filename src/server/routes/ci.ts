@@ -64,8 +64,8 @@ export const ciRoutes = new Elysia()
   // The default branch's workflows: when they run, what a manual run asks for, or why the file doesn't parse.
   .get("/repos/:owner/:repo/ci/workflows", async ({ request, params }) => {
     const a = requireRepo(await readerOrVisitor(request), params.owner, params.repo, "read");
-    const branch = await git.headBranch(a.path).catch(() => null);
-    const sha = branch ? await git.resolveCommit(a.path, `refs/heads/${branch}`) : null;
+    const branch = await git.headBranch(a.path);
+    const sha = await git.resolveCommit(a.path, `refs/heads/${branch}`);
     const files = sha ? await workflowFiles(a.path, sha) : [];
     return {
       branch,

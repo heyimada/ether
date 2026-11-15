@@ -3,7 +3,7 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 import { Command } from "cmdk";
 import { Check, ChevronDown, GitBranch, GitBranchPlus, Tag } from "lucide-react";
 import { useState } from "react";
-import { post, repoApi, type RepoInfo } from "../lib/api";
+import { canWrite, post, repoApi, type RepoInfo } from "../lib/api";
 import { ErrorNote, useAction } from "./ui";
 
 // The Branches / Tags tabs, shared with the clone box on the repository page.
@@ -25,7 +25,7 @@ export function RefPicker({ info, current, kind }: { info: RepoInfo; current: st
   const refs = (tab === "branches" ? branches : info.tags).filter((r) => r.toLowerCase().includes(query.trim().toLowerCase()));
 
   const wanted = query.trim();
-  const canCreate = tab === "branches" && info.role !== "read" && !info.repo.empty && wanted !== "" && !info.branches.includes(wanted);
+  const canCreate = tab === "branches" && canWrite(info.role) && !info.repo.empty && wanted !== "" && !info.branches.includes(wanted);
 
   const pick = (ref: string) => {
     setOpen(false);

@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import formatSize from "pretty-bytes";
 import { FileArchive, Package, Tag } from "lucide-react";
-import { repoApi, timeAgo, type RepoInfo } from "../lib/api";
+import { repoApi, type RepoInfo } from "../lib/api";
+import { timeAgo } from "../lib/format";
 import { Markdown } from "./content";
 
 export type Release = {

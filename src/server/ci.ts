@@ -9,7 +9,7 @@ import { loadSecrets } from "./ci-secrets";
 import { conditionHolds, matrixEnvName, type MatrixValues, type NeedStatus } from "./ci-graph";
 import { notify } from "./notify";
 import { dueCron, inputEnvName, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
-import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type EnvValue, type ParsedWorkflow, type Step } from "./ci-workflow";
+import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type ParsedWorkflow, type Step } from "./ci-workflow";
 import { config } from "./config";
 import { MIN_INTERVAL_MINUTES } from "./cron";
 import { db } from "./db/client";
@@ -856,8 +856,8 @@ async function changedFiles(repoPath: string, range: string[]): Promise<string[]
 
 // A new branch changed what it has beyond the default branch; the default branch's own first push changed everything.
 async function newBranchChanges(repoPath: string, branch: string, sha: string) {
-  const main = await git.headBranch(repoPath).catch(() => null);
-  const mainSha = main && main !== branch ? await git.resolveCommit(repoPath, `refs/heads/${main}`) : null;
+  const main = await git.headBranch(repoPath);
+  const mainSha = main !== branch ? await git.resolveCommit(repoPath, `refs/heads/${main}`) : null;
   return mainSha ? changedFiles(repoPath, [`${mainSha}...${sha}`]) : null;
 }
 

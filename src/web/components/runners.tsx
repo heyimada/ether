@@ -1,7 +1,9 @@
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { del, post, timeAgo } from "../lib/api";
+import { del, post } from "../lib/api";
+import { timeAgo } from "../lib/format";
 import { CopyButton, ErrorNote, useAction } from "./ui";
+import { REGISTRATION_HOURS } from "../../shared/ci";
 
 export type RunnerInfo = { id: number; name: string; isolation: "container" | "host"; labels: string[]; scope: "server" | "organization" | "repository"; online: boolean; lastSeenAt: string | null };
 
@@ -31,7 +33,7 @@ export function Runners({ base, runners, empty, filled }: { base: string; runner
         <ErrorNote error={add.error ?? remove.error} />
         {command && (
           <div className="notice mb-3">
-            <p className="mt-0">Run this on the other machine, then start it with ether-runner run. The token works once and expires in an hour. Add --labels to name what workflows can ask for with runs-on.</p>
+            <p className="mt-0">Run this on the other machine, then start it with ether-runner run. The token works once and expires in {REGISTRATION_HOURS === 1 ? "an hour" : `${REGISTRATION_HOURS} hours`}. Add --labels to name what workflows can ask for with runs-on.</p>
             <div className="flex items-center gap-2">
               <code aria-label="Runner registration command" className="wrap-anywhere">
                 {command}

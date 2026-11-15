@@ -2,8 +2,10 @@ import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { CopyButton, ErrorNote, useAction } from "../components/ui";
 import { Runners, type RunnerInfo } from "../components/runners";
-import { api, post, put, timeAgo } from "../lib/api";
+import { api, post, put, type Instance } from "../lib/api";
+import { timeAgo } from "../lib/format";
 import { requireAccount } from "../lib/require-account";
+import { INVITE_DAYS } from "../../shared/accounts";
 
 type Invite = { createdAt: string; expiresAt: string; usedBy: string | null };
 type UserRow = { username: string; isAdmin: boolean; isOrg: boolean };
@@ -18,7 +20,7 @@ export const Route = createFileRoute("/_authed/site-admin")({
     const [invites, users, instance, ci, runners] = await Promise.all([
       api<{ invites: Invite[] }>("/api/invites"),
       api<{ users: UserRow[] }>("/api/users"),
-      api<{ anonymousRead: boolean; ciEnabled: boolean; ciIsolation: "container" | "host" }>("/api/instance"),
+      api<Pick<Instance, "anonymousRead" | "ciEnabled" | "ciIsolation">>("/api/instance"),
       api<{ runtime: string | null }>("/api/admin/ci-runtime"),
       api<{ runners: RunnerInfo[] }>("/api/admin/runners"),
     ]);
@@ -158,7 +160,7 @@ function Admin() {
           <ErrorNote error={invite.error} />
           {link && (
             <div className="notice mb-3">
-              <p className="mt-0">Send this one-time link to your friend. It expires in 7 days.</p>
+              <p className="mt-0">Send this one-time link to your friend. It expires in {INVITE_DAYS} days.</p>
               <div className="flex items-center gap-2">
                 <code aria-label="Invite link">{link}</code>
                 <CopyButton text={link} />

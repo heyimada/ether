@@ -3,12 +3,11 @@ import { Link, Outlet, createFileRoute, redirect, useRouter, useRouterState } fr
 import { Bell, Building2, ChevronDown, LogOut, Settings, Shield, User } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { JumpBox } from "../components/jump";
-import { Avatar, BrandMark, MENU_LABEL, MENU_SEP, PeopleContext, type Person } from "../components/ui";
+import { Avatar, BrandMark, MENU_LABEL, MENU_SEP, PeopleContext } from "../components/ui";
 import { applyAppearance, clearAppearance } from "../lib/accent";
-import { ApiError, api, type Me } from "../lib/api";
+import { ApiError, api, type Instance, type Me, type Person } from "../lib/api";
 import { authClient } from "../lib/auth-client";
-
-export type Instance = { anonymousRead: boolean; ciEnabled: boolean; ciIsolation: "container" | "host"; sshBase: string | null; sshHostKey: { fingerprint: string; publicKey: string } | null };
+import { onNotificationsChanged } from "../lib/notifications";
 
 // Every signed-in page lives under this pathless layout. It runs only in the browser so the
 // prerendered SPA shell never bakes in a signed-out session.
@@ -75,11 +74,11 @@ function NotificationBell() {
     load();
     const timer = setInterval(load, 60_000);
     // The inbox page says when it marked something read or unread.
-    window.addEventListener("notifications-changed", load);
+    const unsubscribe = onNotificationsChanged(load);
     return () => {
       live = false;
       clearInterval(timer);
-      window.removeEventListener("notifications-changed", load);
+      unsubscribe();
     };
   }, [location]);
   return (

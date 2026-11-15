@@ -7,15 +7,14 @@ import { refsPushed } from "../push";
 import { sideEffect } from "../side-effect";
 
 // Git's own rules for branch names, plus what `git branch` refuses on top: a leading - and HEAD.
-export function validBranch(name: string) {
-  return name.length > 0 && name.length <= 100 && !name.startsWith("-") && name !== "HEAD" && Bun.spawnSync(["git", "check-ref-format", `refs/heads/${name}`]).exitCode === 0;
+function validBranch(name: string) {
+  return name.length > 0 && name.length <= 100 && !name.startsWith("-") && name !== "HEAD" && git.validRefName("heads", name);
 }
 
 // A branch, tag or full commit id the new branch starts at; never anything rev-parse would read as more.
 async function startPoint(path: string, from: string): Promise<string | null> {
   if (/^[0-9a-f]{40}$/.test(from)) return git.resolveCommit(path, from);
-  // Only plain ref names: check-ref-format refuses ~ ^ : @{ and the rest of rev-parse's syntax.
-  if (Bun.spawnSync(["git", "check-ref-format", `refs/heads/${from}`]).exitCode !== 0) return null;
+  if (!git.validRefName("heads", from)) return null;
   for (const ref of [`refs/heads/${from}`, `refs/tags/${from}`]) {
     const sha = await git.resolveCommit(path, ref);
     if (sha) return sha;

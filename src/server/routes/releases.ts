@@ -3,20 +3,20 @@ import { Elysia } from "elysia";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
-import { config } from "../config";
+import { dataPath } from "../config";
 import { db } from "../db/client";
 import { release, releaseAsset, user } from "../db/schema";
 import { record } from "../events";
 import * as git from "../git";
 import { BodyIncomplete, BodyTooLarge, writeBody } from "../upload";
+import { ASSET_MAX_MB, MAX_ASSET, RELEASE_TITLE_MAX, TAG_MAX } from "../../shared/repos";
 
-const MAX_ASSET = 500 * 1024 * 1024;
 const ASSET_RE = /^[A-Za-z0-9_][A-Za-z0-9._+-]{0,127}$/;
-const releaseDir = (id: number) => join(config.dataDir, "releases", String(id));
+const releaseDir = (id: number) => dataPath("releases", String(id));
 
 // Git's own rules for ref names; no repository needed.
 function validTag(tag: string) {
-  return tag.length > 0 && tag.length <= 100 && Bun.spawnSync(["git", "check-ref-format", `refs/tags/${tag}`]).exitCode === 0;
+  return tag.length > 0 && tag.length <= TAG_MAX && git.validRefName("tags", tag);
 }
 
 function present(a: RepoAccess, r: typeof release.$inferSelect, author: string | null) {
@@ -70,7 +70,7 @@ export const releaseRoutes = new Elysia()
       .values({
         repoId: a.repo.id,
         tag,
-        title: typeof title === "string" && title.trim() ? title.trim().slice(0, 200) : tag,
+        title: typeof title === "string" && title.trim() ? title.trim().slice(0, RELEASE_TITLE_MAX) : tag,
         notes: typeof notes === "string" ? notes.slice(0, 100_000) : "",
         prerelease: prerelease === true,
         authorId: viewer.id,
@@ -85,7 +85,7 @@ export const releaseRoutes = new Elysia()
     const r = findRelease(a, params.tag);
     const b = (body ?? {}) as Record<string, unknown>;
     const set: Partial<typeof release.$inferInsert> = {};
-    if (typeof b.title === "string" && b.title.trim()) set.title = b.title.trim().slice(0, 200);
+    if (typeof b.title === "string" && b.title.trim()) set.title = b.title.trim().slice(0, RELEASE_TITLE_MAX);
     if (typeof b.notes === "string") set.notes = b.notes.slice(0, 100_000);
     if (typeof b.prerelease === "boolean") set.prerelease = b.prerelease;
     if (Object.keys(set).length) db.update(release).set(set).where(eq(release.id, r.id)).run();
@@ -105,7 +105,7 @@ export const releaseRoutes = new Elysia()
     if (!ASSET_RE.test(params.name)) throw new HttpError(400, "Asset names are letters, digits, '.', '_', '+' or '-'");
     const length = request.headers.get("content-length");
     const expected = length !== null && /^\d+$/.test(length) ? Number(length) : undefined;
-    if ((expected ?? 0) > MAX_ASSET) throw new HttpError(413, "Assets can be at most 500 MB");
+    if ((expected ?? 0) > MAX_ASSET) throw new HttpError(413, `Assets can be at most ${ASSET_MAX_MB} MB`);
     const existing = db.select().from(releaseAsset).where(and(eq(releaseAsset.releaseId, r.id), eq(releaseAsset.name, params.name))).get();
     const row = existing ?? db.insert(releaseAsset).values({ releaseId: r.id, name: params.name, size: 0 }).returning().get();
     mkdirSync(releaseDir(r.id), { recursive: true });
@@ -116,7 +116,7 @@ export const releaseRoutes = new Elysia()
     } catch (e) {
       // A failed upload changes nothing: a replaced asset keeps its old file, a new one is forgotten.
       if (!existing) db.delete(releaseAsset).where(eq(releaseAsset.id, row.id)).run();
-      if (e instanceof BodyTooLarge) throw new HttpError(413, "Assets can be at most 500 MB");
+      if (e instanceof BodyTooLarge) throw new HttpError(413, `Assets can be at most ${ASSET_MAX_MB} MB`);
       if (e instanceof BodyIncomplete) throw new HttpError(400, `The upload was cut off (${e.message})`);
       throw e;
     }

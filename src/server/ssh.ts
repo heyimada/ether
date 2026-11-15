@@ -1,19 +1,19 @@
 import { eq } from "drizzle-orm";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { Server, utils, type Connection } from "ssh2";
 import { allows, findRepo, repoAccess, type Role, type Viewer } from "./access";
-import { config } from "./config";
+import { config, dataPath } from "./config";
 import { db } from "./db/client";
 import { deployKey, sshKey, user } from "./db/schema";
 import { GIT_ENV, repoExists, type Ref } from "./git";
 import { ProtectionUnavailable, type Guard } from "./protection";
 import { gitDir, parseRepoName, prepareReceive, received } from "./push";
 import { channelPump, hangUps } from "./ssh-relay";
+import { KEY_TITLE_MAX } from "../shared/accounts";
 
 // One persistent host key per data directory, so clients see a stable identity.
 function hostKey(): Buffer {
-  const file = join(config.dataDir, "ssh_host_ed25519_key");
+  const file = dataPath("hostKey");
   if (!existsSync(file)) {
     mkdirSync(config.dataDir, { recursive: true });
     writeFileSync(file, utils.generateKeyPairSync("ed25519").private, { mode: 0o600 });
@@ -159,9 +159,9 @@ function onClient(client: Connection) {
         relay.release();
         // A deploy key's pushes count as whoever added it. Once that account is deleted they fall back to the
         // repository's owner, which for an organization's repository is the organization itself.
-        if (service === "git-receive-pack" && code === 0) {
+        if (service === "git-receive-pack") {
           const actor = principal.kind === "user" ? { personId: principal.viewer.id, actorId: principal.viewer.id } : { personId: null, actorId: principal.addedBy ?? access.repo.ownerId };
-          await received({ id: access.repo.id, path: access.path }, path, parsed.isWiki, ready.before, actor.personId, actor.actorId);
+          await received({ id: access.repo.id, path: access.path }, path, parsed.isWiki, ready.before, code, actor.personId, actor.actorId);
         }
         stream.exit(code);
         stream.end();
@@ -183,7 +183,7 @@ export function startSsh(): Server | null {
 // A key's title as stored and shown, also at the SSH prompt: without control or invisible formatting
 // characters, so it can't carry terminal escape sequences to whoever uses the key.
 export function keyTitle(title: unknown, fallback: string): string {
-  const clean = typeof title === "string" ? title.replace(/[\p{Cc}\p{Cf}]/gu, "").trim().slice(0, 100) : "";
+  const clean = typeof title === "string" ? title.replace(/[\p{Cc}\p{Cf}]/gu, "").trim().slice(0, KEY_TITLE_MAX) : "";
   return clean || fallback;
 }
 

@@ -1,11 +1,12 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
-import { post, repoApi } from "../lib/api";
+import { canWrite, post, repoApi, upload } from "../lib/api";
+import { ASSET_MAX_MB, RELEASE_TITLE_MAX, TAG_MAX } from "../../shared/repos";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/releases/new")({
   beforeLoad: ({ context, params }) => {
-    if (context.info.role === "read") throw redirect({ to: "/$owner/$repo/releases", params });
+    if (!canWrite(context.info.role)) throw redirect({ to: "/$owner/$repo/releases", params });
   },
   component: NewRelease,
 });
@@ -28,8 +29,7 @@ function NewRelease() {
     for (const [i, f] of files.entries()) {
       setProgress(`Uploading ${f.name} (${i + 1} of ${files.length})…`);
       const name = f.name.replace(/[^A-Za-z0-9._+-]/g, "_").replace(/^\.+/, "_");
-      const res = await fetch(`${base}/${encodeURIComponent(tag)}/assets/${encodeURIComponent(name)}`, { method: "PUT", body: f, credentials: "same-origin" });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Uploading ${f.name} failed`);
+      await upload(`${base}/${encodeURIComponent(tag)}/assets/${encodeURIComponent(name)}`, f);
     }
     setProgress("");
     await router.invalidate();
@@ -42,7 +42,7 @@ function NewRelease() {
       <ErrorNote error={publish.error} />
       <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-x-4 max-sm:grid-cols-[minmax(0,1fr)]">
         <Field id="tag" label="Tag" hint={exists ? "Existing tag." : tag ? "A new tag will be created when you publish." : "For example v1.0.0."}>
-          <input id="tag" value={tag} onChange={(e) => setTag(e.target.value.trim())} required maxLength={100} list="known-tags" />
+          <input id="tag" value={tag} onChange={(e) => setTag(e.target.value.trim())} required maxLength={TAG_MAX} list="known-tags" />
         </Field>
         <Field id="target" label="Target branch" hint={exists ? "Not used: the tag already exists." : undefined}>
           <select id="target" value={target} onChange={(e) => setTarget(e.target.value)} disabled={exists}>
@@ -58,12 +58,12 @@ function NewRelease() {
         ))}
       </datalist>
       <Field id="title" label="Release title">
-        <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} placeholder={tag || undefined} />
+        <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={RELEASE_TITLE_MAX} placeholder={tag || undefined} />
       </Field>
       <Field id="notes" label="Release notes" hint="Markdown is supported.">
         <textarea className="min-h-[160px]" id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Field>
-      <Field id="files" label="Attach files" hint="Binaries or other downloads, up to 500 MB each.">
+      <Field id="files" label="Attach files" hint={`Binaries or other downloads, up to ${ASSET_MAX_MB} MB each.`}>
         <input id="files" type="file" multiple onChange={(e) => setFiles([...(e.target.files ?? [])])} />
       </Field>
       <label className="radio">

@@ -3,6 +3,7 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { repoAccess } from "./access";
 import { db } from "./db/client";
+import { excerpt } from "./events";
 import { comment, issue, issueAssignee, notification, organization, repo, review, team, teamMember, user } from "./db/schema";
 
 export type Reason = (typeof notification.$inferInsert)["reason"];
@@ -22,7 +23,7 @@ function readers(repoId: number, userIds: Iterable<string>): string[] {
 export function notify(userIds: Iterable<string>, reason: Reason, actorId: string | null, t: Target) {
   const ids = readers(t.repoId, [...userIds].filter((id) => id !== actorId));
   if (!ids.length) return;
-  const excerpt = (t.excerpt ?? "").replace(/\s+/g, " ").trim().slice(0, 240);
+  const short = excerpt(t.excerpt ?? "");
   const now = new Date();
   db.transaction((tx) => {
     for (const userId of ids) {
@@ -34,10 +35,10 @@ export function notify(userIds: Iterable<string>, reason: Reason, actorId: strin
         t.issueNumber == null ? isNull(notification.issueNumber) : eq(notification.issueNumber, t.issueNumber),
         t.runId == null ? isNull(notification.runId) : eq(notification.runId, t.runId),
       );
-      const updated = tx.update(notification).set({ actorId, title: t.title, excerpt, createdAt: now }).where(same).returning({ id: notification.id }).all();
+      const updated = tx.update(notification).set({ actorId, title: t.title, excerpt: short, createdAt: now }).where(same).returning({ id: notification.id }).all();
       if (!updated.length)
         tx.insert(notification)
-          .values({ userId, repoId: t.repoId, issueNumber: t.issueNumber ?? null, runId: t.runId ?? null, reason, actorId, title: t.title, excerpt, createdAt: now })
+          .values({ userId, repoId: t.repoId, issueNumber: t.issueNumber ?? null, runId: t.runId ?? null, reason, actorId, title: t.title, excerpt: short, createdAt: now })
           .run();
     }
   });

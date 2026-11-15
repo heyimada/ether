@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
 
@@ -62,4 +62,30 @@ test("writers publish releases with notes, a new tag and attached files", async 
   // Deleting the release keeps the tag.
   expect((await owner.ctx.delete(`${api}/releases/v1.0.0`, { headers: headers() })).ok()).toBe(true);
   expect((await (await owner.ctx.get(api)).json()).tags).toContain("v1.0.0");
+});
+
+test("deleting a repository also deletes its releases' uploaded files", async () => {
+  const admin = await loginAdmin();
+  const owner = await createUser(admin);
+  const repo = await createRepo(owner.ctx, unique("gone"));
+  const api = `/api/repos/${owner.username}/${repo}`;
+  const src = workdir();
+  gitOk(src, ["init", "-q"]);
+  writeFileSync(join(src, "a.txt"), "a\n");
+  gitOk(src, ["add", "-A"]);
+  gitOk(src, ["commit", "-q", "-m", "a"]);
+  gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main"], { username: owner.username, token: owner.token });
+  expect((await owner.ctx.post(`${api}/releases`, { data: { tag: "v1", target: "main", title: "One" }, headers: headers() })).ok()).toBe(true);
+  const marker = Buffer.from(unique("asset-contents"));
+  expect((await owner.ctx.put(`${api}/releases/v1/assets/a.bin`, { data: marker, headers: headers() })).ok()).toBe(true);
+
+  // The release's folder on disk is the one holding the uploaded bytes.
+  const releases = join(process.env.ETHER_DATA!, "releases");
+  const dir = readdirSync(releases)
+    .map((d) => join(releases, d))
+    .find((d) => readdirSync(d).some((f) => readFileSync(join(d, f)).equals(marker)));
+  expect(dir).toBeTruthy();
+
+  expect((await owner.ctx.delete(api, { headers: headers() })).ok()).toBe(true);
+  expect(existsSync(dir!)).toBe(false);
 });

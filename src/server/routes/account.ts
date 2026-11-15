@@ -23,8 +23,8 @@ import { config } from "../config";
 import { db } from "../db/client";
 import { accessToken, instanceSetting, invite, profile, user, userPref } from "../db/schema";
 import { hostKeyInfo } from "../ssh";
+import { MIN_PASSWORD, TOKEN_NAME_MAX } from "../../shared/accounts";
 
-const MIN_PASSWORD = 10;
 // The accent ends up inside a stylesheet, so nothing but a plain hex colour is stored.
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 const registration = new Mutex();
@@ -146,7 +146,7 @@ export const accountRoutes = new Elysia()
   .post("/tokens", async ({ request, body }) => {
     const viewer = await requireUser(request);
     const name = String((body as { name?: unknown } | undefined)?.name ?? "").trim();
-    if (!name || name.length > 100) throw new HttpError(400, "Give the token a name");
+    if (!name || name.length > TOKEN_NAME_MAX) throw new HttpError(400, "Give the token a name");
     return createAccessToken(viewer.id, name);
   })
   .delete("/tokens/:id", async ({ request, params }) => {

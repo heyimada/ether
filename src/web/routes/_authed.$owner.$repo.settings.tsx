@@ -6,13 +6,14 @@ import { DeployKeys, type DeployKey } from "../components/deploy-keys";
 import { Environments, type EnvironmentInfo } from "../components/environments";
 import { Runners, type RunnerInfo } from "../components/runners";
 import { ErrorNote, Field, onSubmit, ROW, useAction } from "../components/ui";
-import { api, del, patch, put, repoApi } from "../lib/api";
+import { api, del, isOwner, patch, put, repoApi } from "../lib/api";
+import { DESCRIPTION_MAX } from "../../shared/repos";
 
 type Collaborator = { username: string; role: "read" | "write" };
 
 export const Route = createFileRoute("/_authed/$owner/$repo/settings")({
   beforeLoad: ({ context, params }) => {
-    if (context.info.role !== "owner") throw redirect({ to: "/$owner/$repo", params });
+    if (!isOwner(context.info.role)) throw redirect({ to: "/$owner/$repo", params });
   },
   loader: async ({ context: { info } }) => {
     const base = repoApi(info.repo.owner, info.repo.name);
@@ -107,7 +108,7 @@ function RepoSettings() {
         <h2>General</h2>
         <ErrorNote error={save.error} />
         <Field id="description" label="Description">
-          <input id="description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} />
+          <input id="description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={DESCRIPTION_MAX} />
         </Field>
         {info.branches.length > 0 && (
           <Field id="default-branch" label="Default branch">

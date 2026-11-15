@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { reposDir } from "./config";
+import { dataPath } from "./config";
+import { ACTIVITY_WEEKS, REPO_NAME_MAX } from "../shared/repos";
 
-export const NAME_RE = /^[A-Za-z0-9_.-]{1,100}$/;
+export const NAME_RE = new RegExp(`^[A-Za-z0-9_.-]{1,${REPO_NAME_MAX}}$`);
 
 export function validRepoName(name: string): boolean {
   return NAME_RE.test(name) && name !== "." && name !== ".." && !name.startsWith(".") && !name.toLowerCase().endsWith(".git");
@@ -11,7 +12,7 @@ export function validRepoName(name: string): boolean {
 
 // Resolves the on-disk bare repo and refuses anything that would land outside the repos dir.
 export function repoPath(owner: string, name: string): string {
-  const root = reposDir();
+  const root = dataPath("repos");
   const path = resolve(root, owner.toLowerCase(), `${name.toLowerCase()}.git`);
   const rel = relative(root, path);
   if (rel.startsWith("..") || rel.includes(`..${sep}`) || resolve(root, rel) !== path) throw new Error("path escapes repos dir");
@@ -90,6 +91,12 @@ export async function fixHead(repo: string): Promise<void> {
   const pick = branches.find((b) => b.name === "main") ?? branches.find((b) => b.name === "master") ?? branches[0];
   await gitText(repo, ["symbolic-ref", "HEAD", `refs/heads/${pick.name}`]);
 }
+
+// The commit the default branch points at, or null in an empty repository.
+export const headCommit = async (repo: string) => resolveCommit(repo, `refs/heads/${await headBranch(repo)}`);
+
+// Git's own rules for a branch or tag name. They also refuse ~ ^ : @{ and the rest of rev-parse's syntax.
+export const validRefName = (kind: "heads" | "tags", name: string) => Bun.spawnSync(["git", "check-ref-format", `refs/${kind}/${name}`]).exitCode === 0;
 
 export async function resolveCommit(repo: string, rev: string): Promise<string | null> {
   const res = await git(repo, ["rev-parse", "--verify", "--quiet", "--end-of-options", `${rev}^{commit}`]);
@@ -201,7 +208,6 @@ export async function commitCount(repo: string, rev: string): Promise<number> {
   return Number((await gitText(repo, ["rev-list", "--count", "--end-of-options", rev])).trim());
 }
 
-export const ACTIVITY_WEEKS = 12;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Non-merge commits reachable from rev in the last 12 weeks, bucketed into 7-day windows
@@ -354,14 +360,15 @@ export async function mergeTree(repo: string, base: string, head: string): Promi
 
 export type Identity = { name: string; email: string };
 
-// Commits Ether writes for someone carry their username and a placeholder address that can't be anyone's mail.
+// Accounts have usernames, not emails; Better Auth and commits Ether writes for someone still need an address, so
+// they get one that can't be anyone's mail.
 export const placeholderEmail = (username: string) => `${username.toLowerCase()}@users.ether.invalid`;
 export const userIdentity = (username: string): Identity => ({ name: username, email: placeholderEmail(username) });
 
 // Keeps a commit reachable under refs/ether, which fetches don't show and pushes can't touch.
 export async function keepRef(repo: string, ref: string, sha: string) {
-  await gitText(repo, ["config", "transfer.hideRefs", "refs/ether"]);
-  await gitText(repo, ["update-ref", "-m", "keep merged pull request", ref, sha]);
+  const [hide, keep] = await Promise.all([git(repo, ["config", "transfer.hideRefs", "refs/ether"]), git(repo, ["update-ref", "-m", "keep merged pull request", ref, sha])]);
+  for (const [res, what] of [[hide, "config"], [keep, "update-ref"]] as const) if (res.code !== 0) throw new GitError([what], res.stderr);
 }
 export type MergeMethod = "merge" | "squash" | "rebase";
 export type MergeResult = { ok: true; sha: string } | { ok: false; reason: "conflict" | "missing" | "raced" | "merges" | "empty" };
