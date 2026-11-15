@@ -1,24 +1,23 @@
 import { eq } from "drizzle-orm";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { Server, utils, type Connection } from "ssh2";
 import { allows, findRepo, repoAccess, type Role, type Viewer } from "./access";
-import { config } from "./config";
-import { onPush } from "./ci";
-import { recordPush } from "./contrib";
-import { recordPushEvents } from "./events";
+import { config, dataPath } from "./config";
 import { db } from "./db/client";
 import { deployKey, sshKey, user } from "./db/schema";
-import { NAME_RE, ensureWiki, fixHead, listRefs, newAuthorEmails, repoExists, wikiPath } from "./git";
-import { ProtectionUnavailable, receivePackGuard, type Guard } from "./protection";
+import { GIT_ENV, repoExists, type Ref } from "./git";
+import { ProtectionUnavailable, type Guard } from "./protection";
+import { gitDir, parseRepoName, prepareReceive, received } from "./push";
+import { newEd25519Key } from "./ssh-keygen";
 import { channelPump, hangUps } from "./ssh-relay";
+import { KEY_TITLE_MAX } from "../shared/accounts";
 
 // One persistent host key per data directory, so clients see a stable identity.
 function hostKey(): Buffer {
-  const file = join(config.dataDir, "ssh_host_ed25519_key");
+  const file = dataPath("hostKey");
   if (!existsSync(file)) {
     mkdirSync(config.dataDir, { recursive: true });
-    writeFileSync(file, utils.generateKeyPairSync("ed25519").private, { mode: 0o600 });
+    writeFileSync(file, newEd25519Key().private, { mode: 0o600 });
   }
   return readFileSync(file);
 }
@@ -122,29 +121,27 @@ function onClient(client: Connection) {
         const m = COMMAND_RE.exec(info.command.trim());
         if (!m || !principal) return deny(stream, "only git clone, fetch and push are supported");
         const [, service, owner, repoParam] = m;
-        const name = repoParam.replace(/\.git$/, "");
-        if (!NAME_RE.test(owner) || !NAME_RE.test(name) || name.startsWith(".")) return deny(stream, "repository not found");
-        const isWiki = name.endsWith(".wiki");
-        const access = reach(principal, owner, isWiki ? name.slice(0, -5) : name);
+        const shown = repoParam.replace(/\.git$/, "");
+        const parsed = parseRepoName(owner, shown);
+        if (!parsed) return deny(stream, "repository not found");
+        const access = reach(principal, owner, parsed.name);
         if (!access || !repoExists(access.path)) return deny(stream, "repository not found");
         const need = service === "git-receive-pack" ? "write" : "read";
-        if (!allows(access.role, need)) return deny(stream, `you need ${need} access to ${owner}/${name}`);
-        const path = isWiki ? await ensureWiki(access.path) : access.path;
+        if (!allows(access.role, need)) return deny(stream, `you need ${need} access to ${owner}/${shown}`);
+        const path = await gitDir(access.path, parsed.isWiki);
 
-        const before = service === "git-receive-pack" ? await listRefs(path) : [];
-        // Branch rules guard the repository's code, not its wiki.
-        let guard: Guard = { args: [], env: {} };
+        let ready: { before: Ref[]; guard: Guard } = { before: [], guard: { args: [], env: {} } };
         try {
-          if (service === "git-receive-pack" && !isWiki) guard = receivePackGuard(access.repo.id, before.some((r) => r.kind === "branch"));
+          if (service === "git-receive-pack") ready = await prepareReceive(access.repo.id, path, parsed.isWiki);
         } catch (e) {
           if (e instanceof ProtectionUnavailable) return deny(stream, e.message);
           throw e;
         }
-        const proc = Bun.spawn(["git", ...guard.args, service.slice(4), path], {
+        const proc = Bun.spawn(["git", ...ready.guard.args, service.slice(4), path], {
           stdin: "pipe",
           stdout: "pipe",
           stderr: "pipe",
-          env: { ...process.env, ...guard.env, GIT_PROTOCOL: gitProtocol, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" },
+          env: { ...process.env, ...GIT_ENV, ...ready.guard.env, GIT_PROTOCOL: gitProtocol },
         });
         const relay = channelPump(hangUps(stream, client), () => proc.kill());
         // Both directions wait for the other side, so a slow peer can't make either end buffer a whole pack in memory.
@@ -161,18 +158,11 @@ function onClient(client: Connection) {
         await Promise.all([relay.pump(proc.stdout, stream), relay.pump(proc.stderr, stream.stderr)]);
         const code = await proc.exited;
         relay.release();
-        if (service === "git-receive-pack" && code === 0) {
-          await fixHead(path).catch(() => {});
-          const after = await listRefs(path);
-          // Author emails are only learned from a person's own pushes; a deploy key has no person behind it.
-          if (principal.kind === "user") recordPush(principal.viewer.id, await newAuthorEmails(path, before.map((r) => r.sha), after.map((r) => r.sha)).catch(() => []));
-          // A deploy key's pushes count as whoever added it. Once that account is deleted they fall back to the
-          // repository's owner, which for an organization's repository is the organization itself.
-          const actorId = principal.kind === "user" ? principal.viewer.id : (principal.addedBy ?? access.repo.ownerId);
-          if (!isWiki) {
-            await recordPushEvents(access.repo.id, actorId, path, before, after).catch(() => {});
-            await onPush(access.repo.id, path, before, after, actorId).catch(() => {});
-          }
+        // A deploy key's pushes count as whoever added it. Once that account is deleted they fall back to the
+        // repository's owner, which for an organization's repository is the organization itself.
+        if (service === "git-receive-pack") {
+          const actor = principal.kind === "user" ? { personId: principal.viewer.id, actorId: principal.viewer.id } : { personId: null, actorId: principal.addedBy ?? access.repo.ownerId };
+          await received({ id: access.repo.id, path: access.path }, path, parsed.isWiki, ready.before, code, actor.personId, actor.actorId);
         }
         stream.exit(code);
         stream.end();
@@ -194,7 +184,7 @@ export function startSsh(): Server | null {
 // A key's title as stored and shown, also at the SSH prompt: without control or invisible formatting
 // characters, so it can't carry terminal escape sequences to whoever uses the key.
 export function keyTitle(title: unknown, fallback: string): string {
-  const clean = typeof title === "string" ? title.replace(/[\p{Cc}\p{Cf}]/gu, "").trim().slice(0, 100) : "";
+  const clean = typeof title === "string" ? title.replace(/[\p{Cc}\p{Cf}]/gu, "").trim().slice(0, KEY_TITLE_MAX) : "";
   return clean || fallback;
 }
 

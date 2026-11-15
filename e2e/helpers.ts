@@ -3,11 +3,14 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import ssh2 from "ssh2";
-import { ADMIN } from "./global-setup";
+import { newEd25519Key } from "../src/server/ssh-keygen";
+import { ADMIN, freePort } from "./global-setup";
 
-export { ADMIN };
+export { ADMIN, freePort };
 export const baseURL = () => process.env.ETHER_URL!;
+
+// Mutating API calls are refused without a same-origin Origin header.
+export const originHeaders = () => ({ Origin: baseURL() });
 
 // The process id keeps names apart across workers, which each count from 0 and can hit the same millisecond.
 let counter = 0;
@@ -21,6 +24,9 @@ export async function login(username: string, password: string): Promise<APIRequ
 }
 
 export const loginAdmin = () => login(ADMIN.username, ADMIN.password);
+
+export type Run = { id: number; sha: string; workflowName: string; event: string; status: string; pullNumber: number | null; ref: string; message: string };
+export const runsOf = async (ctx: APIRequestContext, api: string): Promise<Run[]> => (await (await ctx.get(`${api}/ci/runs`)).json()).runs;
 
 export async function inviteCode(admin: APIRequestContext): Promise<string> {
   const res = await admin.post("/api/invites", { data: {} });
@@ -53,11 +59,20 @@ export const cloneUrl = (owner: string, repo: string) => `${baseURL()}/${owner}/
 
 export const workdir = () => mkdtempSync(join(tmpdir(), "ether-wd-"));
 
+// One file per process: workers share the tmpdir, and rewriting a shared path on every call races with other workers' git.
+let emptyConfigFile: string | undefined;
+function emptyGitConfig() {
+  if (!emptyConfigFile) {
+    emptyConfigFile = join(mkdtempSync(join(tmpdir(), "ether-e2e-gitconfig-")), "empty.gitconfig");
+    writeFileSync(emptyConfigFile, "");
+  }
+  return emptyConfigFile;
+}
+
 // Runs the real git CLI with no system/global config so Git Credential Manager can never
 // prompt or persist anything; credentials go in an explicit Authorization header instead.
 export function git(cwd: string, args: string[], auth?: { username: string; token: string }, env: Record<string, string> = {}) {
-  const emptyConfig = join(tmpdir(), "ether-e2e-empty.gitconfig");
-  writeFileSync(emptyConfig, "");
+  const emptyConfig = emptyGitConfig();
   const pre = ["-c", "credential.helper=", "-c", "user.name=E2E", "-c", "user.email=e2e@ether.test", "-c", "init.defaultBranch=main"];
   if (auth) {
     const basic = Buffer.from(`${auth.username}:${auth.token}`).toString("base64");
@@ -89,7 +104,7 @@ export async function uiLogin(page: Page, username: string, password: string) {
 // A throwaway key pair on disk, and a git that uses only it over Ether's SSH port.
 export function sshIdentity() {
   const dir = mkdtempSync(join(tmpdir(), "ether-ssh-"));
-  const keys = ssh2.utils.generateKeyPairSync("ed25519");
+  const keys = newEd25519Key();
   const keyFile = join(dir, "id_ed25519");
   writeFileSync(keyFile, keys.private, { mode: 0o600 });
   const empty = join(dir, "empty.gitconfig");

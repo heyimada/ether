@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
-import type { EventEmitter } from "node:events";
 import type { AddressInfo } from "node:net";
-import { Client, Server, utils, type Connection, type ServerChannel } from "ssh2";
+import { Client, Server, type Connection, type ServerChannel } from "ssh2";
+import { newEd25519Key } from "./ssh-keygen";
 import { channelPump, hangUps, type HangUp } from "./ssh-relay";
 
 // A real ssh2 server streams endless output, like a big clone, to a client that hangs up partway.
@@ -13,7 +13,7 @@ async function abortedTransfer(hangUp: "channel" | "connection", setup: (stream:
   let killed = false;
   // Writing to a closed channel is what used to hang: write() returns false and drain never comes.
   let writesAfterClose = 0;
-  const server = new Server({ hostKeys: [utils.generateKeyPairSync("ed25519").private] }, (conn) => {
+  const server = new Server({ hostKeys: [newEd25519Key().private] }, (conn) => {
     conn.on("authentication", (ctx) => ctx.accept());
     conn.on("ready", () =>
       conn.on("session", (accept) =>

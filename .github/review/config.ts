@@ -2,7 +2,8 @@
 
 export const MODEL = "claude-opus-5-5";
 
-// Report-only: the App posts findings and a neutral "Review gate" check, but never approves or enables auto-merge.
+// While on, the App only reports: it posts findings and a neutral "Review gate" check, but never approves,
+// requests changes or enables auto-merge.
 export const REPORT_ONLY = false;
 
 // Quick depth: each lens group gets 2 independent finders, and each candidate finding 2 voters. Post only if both say real.
@@ -46,16 +47,18 @@ export const SENSITIVE = [
   ".cursor/**",
   "**/.cursor/**",
   "**/.cursorrules",
-  "src/server/ci-container.ts",
+  "src/runner/container.ts",
   "src/server/ci-secrets.ts",
   "src/server/secret-box.ts",
-  "src/server/log-mask.ts",
+  "src/runner/log-mask.ts",
   "src/server/access.ts",
   "src/server/auth.ts",
   "src/server/auth-plugins.ts",
   "src/server/ssh.ts",
   "src/server/ssh-relay.ts",
+  "src/server/ssh-keygen.ts",
   "src/server/smart-http.ts",
+  "src/server/push.ts",
   "src/server/git.ts",
   "src/server/db/**",
   "drizzle/**",
