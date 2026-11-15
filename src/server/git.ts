@@ -20,12 +20,15 @@ export function repoPath(owner: string, name: string): string {
 
 export type GitResult = { code: number; stdout: Uint8Array; stderr: string };
 
+// Every git Ether runs: never prompts, and ignores the machine's system-wide config.
+export const GIT_ENV = { GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" };
+
 export async function git(repo: string, args: string[], opts: { stdin?: Uint8Array; env?: Record<string, string> } = {}): Promise<GitResult> {
   const proc = Bun.spawn(["git", "--git-dir", repo, ...args], {
     stdin: opts.stdin ?? "ignore",
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1", ...opts.env },
+    env: { ...process.env, ...GIT_ENV, ...opts.env },
   });
   const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).bytes(), new Response(proc.stderr).text(), proc.exited]);
   return { code, stdout, stderr };

@@ -93,15 +93,6 @@ export function notifyThread(issueId: number, reason: Reason, actorId: string, t
 export const teamMembers = (teamIds: number[]) =>
   teamIds.length ? db.select({ id: teamMember.userId }).from(teamMember).where(inArray(teamMember.teamId, teamIds)).all().map((m) => m.id) : [];
 
-// Notifying is a side effect: a failure there must never fail what the person did.
-export function quietly(fn: () => void) {
-  try {
-    fn();
-  } catch (e) {
-    console.error("Notifying failed:", e);
-  }
-}
-
 // Seeing an issue or pull request reads its notifications.
 export function markRead(userId: string, repoId: number, issueNumber: number) {
   db.update(notification)

@@ -7,8 +7,7 @@ import { secret, sha256 } from "./access";
 import { IMAGE_RE, instanceLabel } from "./ci-container";
 import { loadSecrets } from "./ci-secrets";
 import { conditionHolds, matrixEnvName, type MatrixValues, type NeedStatus } from "./ci-graph";
-import { notify, quietly } from "./notify";
-import { requestCodeOwners } from "./owners";
+import { notify } from "./notify";
 import { dueCron, inputEnvName, resolveInputs, starts, type PullAction, type Trigger } from "./ci-triggers";
 import { isWorkflowFile, MAX_WORKFLOWS, parseWorkflow, WORKFLOW, WORKFLOW_DIR, defaultWorkflowName, type EnvValue, type ParsedWorkflow, type Step } from "./ci-workflow";
 import { config } from "./config";
@@ -20,6 +19,7 @@ import { gate } from "./deploy-rules";
 import { record } from "./events";
 import * as git from "./git";
 import { LogMasker } from "./log-mask";
+import { sideEffect } from "./side-effect";
 
 // CI runs workflows from .ether/workflows/*.yml (and the older .ether/ci.yml) when what their `on:`
 // names happens: a push, a pull request or someone starting one by hand. It is opt-in twice: an admin allows it for the server,
@@ -573,7 +573,7 @@ async function reportFailure(run: { id: number; repoId: number; sha: string; ref
   // And into their inbox. No one is the actor, so the person who started it hears about it too.
   const name = db.select({ w: ciRun.workflowName }).from(ciRun).where(eq(ciRun.id, run.id)).get()?.w ?? "A workflow";
   const actorId = run.actorId;
-  quietly(() => notify([actorId], "ci_failed", null, { repoId: run.repoId, runId: run.id, title: `${name} ${status === "error" ? "couldn't run" : "failed"} on ${run.ref}`, excerpt: commit?.subject ?? "" }));
+  void sideEffect("Notifying", () => notify([actorId], "ci_failed", null, { repoId: run.repoId, runId: run.id, title: `${name} ${status === "error" ? "couldn't run" : "failed"} on ${run.ref}`, excerpt: commit?.subject ?? "" }));
 }
 
 const currentStatus = (runId: number) => db.select({ s: ciRun.status }).from(ciRun).where(eq(ciRun.id, runId)).get()?.s;
@@ -873,8 +873,7 @@ async function newBranchChanges(repoPath: string, branch: string, sha: string) {
   return mainSha ? changedFiles(repoPath, [`${mainSha}...${sha}`]) : null;
 }
 
-// After a push, or a merge (which moves the base branch): push workflows for each branch and tag that moved
-// to a new commit, and pull_request workflows for open pull requests whose head branch moved.
+// Push workflows for each branch and tag that moved to a new commit (see push.ts for everything else a move does).
 export async function onPush(repoId: number, repoPath: string, before: git.Ref[], after: git.Ref[], actorId: string) {
   const moved = after.filter((ref) => before.find((b) => b.kind === ref.kind && b.name === ref.name)?.sha !== ref.sha);
   // As on GitHub, pushing more than three tags at once (git push --tags, a mirror) starts nothing for them,
@@ -891,16 +890,6 @@ export async function onPush(repoId: number, repoPath: string, before: git.Ref[]
     }
     const changed = old ? await changedFiles(repoPath, [old.sha, ref.sha]) : await newBranchChanges(repoPath, ref.name, ref.sha);
     await startWorkflows(repoId, repoPath, ref.sha, { event: "push", refType: "branch", ref: ref.name, changed }, { ref: ref.name, refType: "branch", event: "push", pullNumber: null, inputs: {} }, actorId);
-    const pulls = db
-      .select({ number: issue.number })
-      .from(issue)
-      .where(and(eq(issue.repoId, repoId), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.headRef, ref.name)))
-      .all();
-    for (const p of pulls) {
-      // New files may have new code owners to ask.
-      await requestCodeOwners(repoId, p.number).catch(() => {});
-      await onPullRequest(repoId, repoPath, p.number, "synchronize", actorId);
-    }
   }
 }
 

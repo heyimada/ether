@@ -8,12 +8,14 @@ import { branchRules } from "../protection";
 import { effectiveRule } from "../branch-rules";
 import { comment, issue, issueAssignee, issueLabel, label, orgMember, repo, user } from "../db/schema";
 import * as git from "../git";
-import { commitChecks, onPullRequest, onPush } from "../ci";
+import { commitChecks, onPullRequest } from "../ci";
+import { refsMoved } from "../push";
 import { deployedAt } from "../deploy";
 import { excerpt, record } from "../events";
 import { reviewSummary } from "./reviews";
 import { missingOwners, ownerStatus, requestCodeOwners } from "../owners";
-import { markRead, mentioned, notify, notifyThread, quietly } from "../notify";
+import { markRead, mentioned, notify, notifyThread } from "../notify";
+import { sideEffect } from "../side-effect";
 
 const merges = new Mutex();
 const mergedByUser = alias(user, "merged_by_user");
@@ -293,14 +295,14 @@ export const issueRoutes = new Elysia()
     const text = str(b?.body, 65536);
     const number = insertIssue(a, viewer, { title, body: text });
     record(a.repo.id, viewer.id, "issue_opened", { number, title });
-    quietly(() => notify(mentioned([text]), "mention", viewer.id, { repoId: a.repo.id, issueNumber: number, title, excerpt: text }));
+    void sideEffect("Notifying", () => notify(mentioned([text]), "mention", viewer.id, { repoId: a.repo.id, issueNumber: number, title, excerpt: text }));
     return { issue: { number } };
   })
   .get("/repos/:owner/:repo/issues/:number", async ({ request, params }) => {
     const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const row = findIssue(a, params.number);
-    if (viewer.id) quietly(() => markRead(viewer.id, a.repo.id, row.issue.number));
+    if (viewer.id) void sideEffect("Marking notifications read", () => markRead(viewer.id, a.repo.id, row.issue.number));
     return { issue: presentAll([row])[0], comments: listComments(row.issue.id), role: a.role };
   })
   .patch("/repos/:owner/:repo/issues/:number", async ({ request, params, body }) => {
@@ -341,20 +343,20 @@ export const issueRoutes = new Elysia()
         if (set.baseRef && !changed.length) throw new HttpError(409, "Only an open pull request can change its base branch");
       });
     // A new base can bring other code owners.
-    if (set.baseRef && !set.draft && !set.state) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
+    if (set.baseRef && !set.draft && !set.state) await sideEffect("Asking code owners", () => requestCodeOwners(a.repo.id, row.issue.number));
     // Ready (or reopened) and not a draft: the code owners of its files are asked for a review.
-    if (row.issue.isPull && (set.draft === false || (set.state === "open" && row.issue.state !== "open"))) await requestCodeOwners(a.repo.id, row.issue.number).catch(() => {});
+    if (row.issue.isPull && (set.draft === false || (set.state === "open" && row.issue.state !== "open"))) await sideEffect("Asking code owners", () => requestCodeOwners(a.repo.id, row.issue.number));
     // Marked ready on an open pull request (one being reopened gets its own run below): workflows that listen for it run.
-    if (set.draft === false && (!set.state || set.state === row.issue.state) && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "ready_for_review", viewer.id).catch(() => {});
+    if (set.draft === false && (!set.state || set.state === row.issue.state) && allows(a.role, "write")) await sideEffect("Starting pull request workflows", () => onPullRequest(a.repo.id, a.path, row.issue.number, "ready_for_review", viewer.id));
     if (set.state && set.state !== row.issue.state) {
       const ref = { number: row.issue.number, title: set.title ?? row.issue.title };
       if (row.issue.isPull) {
         record(a.repo.id, viewer.id, set.state === "closed" ? "pull_closed" : "pull_reopened", { ...ref, base: row.issue.baseRef, head: row.issue.headRef });
         // Starting runs (with secrets and deployments) takes write access, which an author may have lost since.
-        if (set.state === "open" && allows(a.role, "write")) await onPullRequest(a.repo.id, a.path, row.issue.number, "reopened", viewer.id).catch(() => {});
+        if (set.state === "open" && allows(a.role, "write")) await sideEffect("Starting pull request workflows", () => onPullRequest(a.repo.id, a.path, row.issue.number, "reopened", viewer.id));
       }
       else record(a.repo.id, viewer.id, set.state === "closed" ? "issue_closed" : "issue_reopened", ref);
-      if (set.state === "closed") quietly(() => notifyThread(row.issue.id, "closed", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: ref.title }));
+      if (set.state === "closed") void sideEffect("Notifying", () => notifyThread(row.issue.id, "closed", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: ref.title }));
     }
     return { ok: true };
   })
@@ -367,7 +369,7 @@ export const issueRoutes = new Elysia()
     db.insert(comment).values({ issueId: row.issue.id, authorId: viewer.id, body: text }).run();
     db.update(issue).set({ updatedAt: new Date() }).where(eq(issue.id, row.issue.id)).run();
     record(a.repo.id, viewer.id, "comment", { number: row.issue.number, title: row.issue.title, isPull: row.issue.isPull, excerpt: excerpt(text) });
-    quietly(() => notifyThread(row.issue.id, "comment", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title, excerpt: text }, [text]));
+    void sideEffect("Notifying", () => notifyThread(row.issue.id, "comment", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title, excerpt: text }, [text]));
     return { ok: true };
   })
   // ---------- pull requests ----------
@@ -389,9 +391,9 @@ export const issueRoutes = new Elysia()
     const text = str(b?.body, 65536);
     const number = insertIssue(a, viewer, { title, body: text, isPull: true, draft: b?.draft === true, baseRef: base, headRef: head });
     record(a.repo.id, viewer.id, "pull_opened", { number, title, base, head });
-    quietly(() => notify(mentioned([text]), "mention", viewer.id, { repoId: a.repo.id, issueNumber: number, title, excerpt: text }));
-    await requestCodeOwners(a.repo.id, number).catch(() => {});
-    await onPullRequest(a.repo.id, a.path, number, "opened", viewer.id).catch(() => {});
+    void sideEffect("Notifying", () => notify(mentioned([text]), "mention", viewer.id, { repoId: a.repo.id, issueNumber: number, title, excerpt: text }));
+    await sideEffect("Asking code owners", () => requestCodeOwners(a.repo.id, number));
+    await sideEffect("Starting pull request workflows", () => onPullRequest(a.repo.id, a.path, number, "opened", viewer.id));
     return { pull: { number } };
   })
   .get("/repos/:owner/:repo/pulls/:number", async ({ request, params }) => {
@@ -399,7 +401,7 @@ export const issueRoutes = new Elysia()
     const a = requireRepo(viewer, params.owner, params.repo, "read");
     const row = findIssue(a, params.number);
     if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
-    if (viewer.id) quietly(() => markRead(viewer.id, a.repo.id, row.issue.number));
+    if (viewer.id) void sideEffect("Marking notifications read", () => markRead(viewer.id, a.repo.id, row.issue.number));
     return {
       pull: presentAll([row])[0],
       comments: listComments(row.issue.id),
@@ -476,7 +478,7 @@ export const issueRoutes = new Elysia()
         .set({ state: "merged", mergeCommit: result.sha, mergedBy: viewer.id, mergeMethod: how, mergedBase: baseAt, mergedHead: headAt })
         .where(eq(issue.id, row.issue.id))
         .run();
-      quietly(() => notifyThread(row.issue.id, "merged", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title }));
+      void sideEffect("Notifying", () => notifyThread(row.issue.id, "merged", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title }));
       record(a.repo.id, viewer.id, "pull_merged", { number: row.issue.number, title: row.issue.title, base: row.issue.baseRef, head: row.issue.headRef });
       // Pull requests stacked on this one now go where it went, as on GitHub: their diff stays their own changes,
       // since the merge brought the commits they share into the base branch.
@@ -520,9 +522,9 @@ export const issueRoutes = new Elysia()
             if (!restacked.includes(next.number)) queue.push({ n: next.number, since: moved.before, onto: moved.sha });
         }
       }
-      for (const n of retargeted) void requestCodeOwners(a.repo.id, n).catch(() => {});
+      for (const n of retargeted) void sideEffect("Asking code owners", () => requestCodeOwners(a.repo.id, n));
       // Merging moves the base branch (and restacking the branches on it) like a push would: their workflows run.
-      void onPush(a.repo.id, a.path, movedRefs.map((m) => m.before), movedRefs.map((m) => m.after), viewer.id).catch(() => {});
+      void refsMoved({ id: a.repo.id, path: a.path }, movedRefs.map((m) => m.before), movedRefs.map((m) => m.after), viewer.id);
       return { ok: true, sha: result.sha, method: how, deletedBranch, retargeted, restacked };
     });
   });

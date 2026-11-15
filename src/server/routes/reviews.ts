@@ -7,7 +7,8 @@ import * as git from "../git";
 import { record } from "../events";
 import { findIssue, pullStatus } from "./issues";
 import { answerTeamRequests } from "../owners";
-import { notify, notifyThread, quietly, teamMembers } from "../notify";
+import { notify, notifyThread, teamMembers } from "../notify";
+import { sideEffect } from "../side-effect";
 
 export type Decision = "approved" | "changes_requested" | null;
 
@@ -162,7 +163,7 @@ export const reviewRoutes = new Elysia()
       }
     });
     const asked = [...ids.filter((id) => !before.has(id)), ...teamMembers((teamIds ?? []).filter((id) => !teamsBefore.has(id))).filter((id) => id !== row.issue.authorId)];
-    quietly(() => notify(asked, "review_requested", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title }));
+    void sideEffect("Notifying", () => notify(asked, "review_requested", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title }));
     return { ok: true };
   })
   .post("/repos/:owner/:repo/pulls/:number/reviews", async ({ request, params, body }) => {
@@ -198,7 +199,7 @@ export const reviewRoutes = new Elysia()
     });
     // Only someone who could approve answers for their teams; a read-only member's comment doesn't.
     if (allows(a.role, "write")) answerTeamRequests(row.issue.id, viewer.id);
-    quietly(() =>
+    void sideEffect("Notifying", () =>
       notifyThread(row.issue.id, "review", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title, excerpt: text || checked[0]?.body }, [text, ...checked.map((c) => c.body)]),
     );
     record(a.repo.id, viewer.id, "review", { number: row.issue.number, title: row.issue.title, state });

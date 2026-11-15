@@ -6,7 +6,8 @@ import { CODEOWNERS_PATHS, ownedFiles, ownerText, parseCodeOwners, type CodeOwne
 import { db } from "./db/client";
 import { issue, organization, repo, review, reviewRequest, team, teamMember, teamRepo, teamReviewRequest, user } from "./db/schema";
 import * as git from "./git";
-import { notify, quietly, teamMembers } from "./notify";
+import { notify, teamMembers } from "./notify";
+import { sideEffect } from "./side-effect";
 
 export type LoadedOwners = { path: string; co: CodeOwners } | { path: string; co: null; problems: Problem[] };
 
@@ -144,7 +145,7 @@ export async function requestCodeOwners(repoId: number, number: number) {
   }));
   // Only those newly asked hear about it. CODEOWNERS asks on the author's behalf.
   const asked = [...added.users.map((u) => u.id), ...teamMembers(added.teams.map((t) => t.id))].filter((id) => id !== pr.authorId && !reviewed.has(id));
-  quietly(() => notify(asked, "review_requested", pr.authorId, { repoId, issueNumber: number, title: pr.title }));
+  void sideEffect("Notifying", () => notify(asked, "review_requested", pr.authorId, { repoId, issueNumber: number, title: pr.title }));
 }
 
 // A review by a team member answers the requests made of their teams.

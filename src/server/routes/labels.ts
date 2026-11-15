@@ -3,7 +3,8 @@ import { Elysia } from "elysia";
 import { HttpError, allows, findUser, readerOrVisitor, repoAccess, requireRepo, requireUser, type RepoAccess } from "../access";
 import { db } from "../db/client";
 import { issue, issueAssignee, issueLabel, label, team, user } from "../db/schema";
-import { notify, quietly } from "../notify";
+import { notify } from "../notify";
+import { sideEffect } from "../side-effect";
 
 const LABEL_RE = /^[^\s,][^,]{0,49}$/;
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
@@ -123,6 +124,6 @@ export const labelRoutes = new Elysia()
       if (people.length) tx.insert(issueAssignee).values(people.map((userId) => ({ issueId, userId }))).run();
     });
     const title = db.select({ title: issue.title }).from(issue).where(eq(issue.id, issueId)).get()?.title ?? "";
-    quietly(() => notify(people.filter((id) => !before.has(id)), "assigned", viewer.id, { repoId: a.repo.id, issueNumber: Number(params.number), title }));
+    void sideEffect("Notifying", () => notify(people.filter((id) => !before.has(id)), "assigned", viewer.id, { repoId: a.repo.id, issueNumber: Number(params.number), title }));
     return { ok: true };
   });
