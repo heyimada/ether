@@ -1,12 +1,10 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { readableRepos, readerOrVisitor, requireUser } from "../access";
-import { commitChecks } from "../ci";
 import { db } from "../db/client";
 import { issue, issueAssignee, orgMember, organization, star, user } from "../db/schema";
 import { listEvents } from "../events";
-import * as git from "../git";
-import { requestedOf, reviewSummary } from "./reviews";
+import { headChecks, requestedOf, reviewDecision } from "../pulls";
 
 const LIMIT = 8;
 
@@ -49,8 +47,7 @@ export const dashboardRoutes = new Elysia()
     const pulls = await Promise.all(
       mine.map(async (p) => {
         const r = byId.get(p.repoId)!;
-        const head = p.headRef ? await git.resolveCommit(r.path, `refs/heads/${p.headRef}`) : null;
-        return { ...at(p.repoId), number: p.number, title: p.title, updatedAt: p.updatedAt, reviewDecision: reviewSummary(p.id).reviewDecision, checks: head ? (commitChecks(r.id, head, p.number)?.status ?? null) : null };
+        return { ...at(p.repoId), number: p.number, title: p.title, updatedAt: p.updatedAt, reviewDecision: reviewDecision(p.id), checks: (await headChecks(r.path, r.id, p))?.status ?? null };
       }),
     );
 

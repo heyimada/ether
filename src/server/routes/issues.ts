@@ -1,44 +1,20 @@
-import { Mutex } from "async-mutex";
-import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { Elysia } from "elysia";
-import { HttpError, allows, readerOrVisitor, requireRepo, requireUser, type RepoAccess, type Viewer } from "../access";
+import { HttpError, allows, orgRole, readerOrVisitor, requireRepo, requireUser, type RepoAccess, type Viewer } from "../access";
+import { onPullRequest } from "../ci";
 import { db } from "../db/client";
-import { branchRules } from "../protection";
-import { effectiveRule } from "../branch-rules";
-import { comment, issue, issueAssignee, issueLabel, label, orgMember, repo, user } from "../db/schema";
-import * as git from "../git";
-import { commitChecks, onPullRequest } from "../ci";
-import { refsMoved } from "../push";
+import { comment, issue, issueAssignee, issueLabel, label, repo, user } from "../db/schema";
 import { deployedAt } from "../deploy";
 import { excerpt, record } from "../events";
-import { reviewSummary } from "./reviews";
-import { missingOwners, ownerStatus, requestCodeOwners } from "../owners";
+import * as git from "../git";
 import { markRead, mentioned, notify, notifyThread } from "../notify";
+import { ownerStatus, requestCodeOwners } from "../owners";
+import { allowedMethods, mergePull, underMergeLock } from "../merge";
+import { findIssue, findPull, headChecks, headDeletable, issueRows, pullStatus, reviewSummary, stackOf, type IssueRow } from "../pulls";
 import { sideEffect } from "../side-effect";
-
-const merges = new Mutex();
-const mergedByUser = alias(user, "merged_by_user");
 
 type Body = Record<string, unknown> | undefined;
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
-
-function issueRows(repoId: number) {
-  return db
-    .select({
-      issue,
-      author: user.username,
-      mergedBy: mergedByUser.username,
-      comments: sql<number>`(SELECT count(*) FROM ${comment} WHERE ${comment.issueId} = ${issue.id})`,
-    })
-    .from(issue)
-    .innerJoin(user, eq(issue.authorId, user.id))
-    .leftJoin(mergedByUser, eq(issue.mergedBy, mergedByUser.id))
-    .where(eq(issue.repoId, repoId))
-    .$dynamic();
-}
-
-type IssueRow = Awaited<ReturnType<ReturnType<typeof issueRows>["get"]>>;
 
 export type LabelOut = { name: string; color: string; description: string };
 
@@ -67,12 +43,12 @@ function issueMeta(issueIds: number[]) {
   return { labels, assignees };
 }
 
-function presentAll(rows: NonNullable<IssueRow>[]) {
+function presentAll(rows: IssueRow[]) {
   const meta = issueMeta(rows.map((r) => r.issue.id));
   return rows.map((r) => ({ ...present(r), labels: meta.labels.get(r.issue.id) ?? [], assignees: meta.assignees.get(r.issue.id) ?? [] }));
 }
 
-const present = (r: NonNullable<IssueRow>) => ({
+const present = (r: IssueRow) => ({
   number: r.issue.number,
   title: r.issue.title,
   body: r.issue.body,
@@ -89,12 +65,6 @@ const present = (r: NonNullable<IssueRow>) => ({
   createdAt: r.issue.createdAt,
   updatedAt: r.issue.updatedAt,
 });
-
-export function findIssue(a: RepoAccess, number: string) {
-  const row = issueRows(a.repo.id).where(and(eq(issue.repoId, a.repo.id), eq(issue.number, Number(number)))).get();
-  if (!row) throw new HttpError(404, "No such issue or pull request");
-  return row;
-}
 
 function listComments(issueId: number) {
   return db
@@ -154,15 +124,8 @@ function listIssues(a: RepoAccess, isPull: boolean, q: Record<string, string | u
   return { items: presentAll(rows), open, closed };
 }
 
-// The checks of the pull request's head commit, one per workflow and event, if any ran.
-async function headChecks(a: RepoAccess, row: NonNullable<IssueRow>) {
-  if (!row.issue.headRef) return null;
-  const sha = await git.resolveCommit(a.path, `refs/heads/${row.issue.headRef}`);
-  return sha ? commitChecks(a.repo.id, sha, row.issue.number) : null;
-}
-
 // Environments currently running the pull request's head commit.
-async function headDeployments(a: RepoAccess, row: NonNullable<IssueRow>) {
+async function headDeployments(a: RepoAccess, row: IssueRow) {
   if (!row.issue.headRef) return [];
   const sha = await git.resolveCommit(a.path, `refs/heads/${row.issue.headRef}`);
   return sha ? deployedAt(a.repo.id, sha) : [];
@@ -172,112 +135,9 @@ async function headDeployments(a: RepoAccess, row: NonNullable<IssueRow>) {
 // and isn't a member sees how many teams were asked, not which.
 function hideTeams<T extends { teamRequests: string[] }>(summary: T, a: RepoAccess, viewerId: string): T & { teamRequestCount: number } {
   const count = summary.teamRequests.length;
-  if (allows(a.role, "write") || (viewerId && db.select().from(orgMember).where(and(eq(orgMember.orgId, a.repo.ownerId), eq(orgMember.userId, viewerId))).get()))
+  if (allows(a.role, "write") || (viewerId && orgRole(a.repo.ownerId, viewerId)))
     return { ...summary, teamRequestCount: count };
   return { ...summary, teamRequests: [], teamRequestCount: count };
-}
-
-export async function pullStatus(a: RepoAccess, row: NonNullable<IssueRow>) {
-  const base = row.issue.baseRef!;
-  const head = row.issue.headRef!;
-  // Merged with the commits it was merged from known: what it brought in, whichever way it was merged.
-  if (row.issue.state === "merged" && row.issue.mergedBase && row.issue.mergedHead) {
-    const cmp = await git.compare(a.path, row.issue.mergedBase, row.issue.mergedHead);
-    return { ...cmp, mergeable: false, conflicts: [], missing: false };
-  }
-  if (row.issue.state === "merged" && row.issue.mergeCommit) {
-    const merged = row.issue.mergeCommit;
-    const { diff, truncated } = await git.showCommit(a.path, merged);
-    const commits = await git.rangeCommits(a.path, `${merged}^1`, `${merged}^2`);
-    return { mergeable: false, conflicts: [], commits, diff, truncated, missing: false };
-  }
-  const baseSha = await git.resolveCommit(a.path, `refs/heads/${base}`);
-  const headSha = await git.resolveCommit(a.path, `refs/heads/${head}`);
-  if (!baseSha || !headSha) return { mergeable: false, conflicts: [], commits: [], diff: "", truncated: false, missing: true };
-  const [cmp, merge] = await Promise.all([git.compare(a.path, baseSha, headSha), git.mergeTree(a.path, baseSha, headSha)]);
-  return { ...cmp, mergeable: merge.clean, conflicts: merge.clean ? [] : merge.conflicts, missing: false };
-}
-
-export type StackEntry = { number: number; title: string; draft: boolean; base: string; head: string };
-const MAX_STACK = 25;
-
-// The open pull requests stacked with this one, bottom first: those whose head branch this one goes into (and
-// theirs, and so on), then those that go into this one's head branch. Empty when it stands alone.
-// Branches that outlive pull requests: the default branch and protected ones. Pull requests going into or out of
-// them aren't stacked on each other (a feature into main isn't "on" a main → release PR), and they're never
-// deleted on merge.
-export async function longLivedBranches(a: RepoAccess): Promise<(branch: string) => boolean> {
-  const main = await git.headBranch(a.path).catch(() => null);
-  const rules = branchRules(a.repo.id);
-  return (branch) => branch === main || effectiveRule(rules, branch) !== null;
-}
-
-export function stackOf(repoId: number, row: NonNullable<IssueRow>, longLived: (branch: string) => boolean): StackEntry[] {
-  if (!row.issue.isPull || row.issue.state !== "open" || !row.issue.baseRef || !row.issue.headRef) return [];
-  const open = db
-    .select({ number: issue.number, title: issue.title, draft: issue.draft, base: issue.baseRef, head: issue.headRef })
-    .from(issue)
-    .where(and(eq(issue.repoId, repoId), eq(issue.isPull, true), eq(issue.state, "open")))
-    .orderBy(asc(issue.number))
-    .all() as StackEntry[];
-  // Merged or closed since the row was read.
-  const self = open.find((p) => p.number === row.issue.number);
-  if (!self) return [];
-  const seen = new Set([self.number]);
-  const below: StackEntry[] = [];
-  for (let at = self; below.length < MAX_STACK && !longLived(at.base); ) {
-    const next = open.find((p) => p.head === at.base && !seen.has(p.number));
-    if (!next) break;
-    seen.add(next.number);
-    below.unshift(next);
-    at = next;
-  }
-  // Above may branch out (two pull requests on the same head); they're listed level by level.
-  const above: StackEntry[] = [];
-  for (const queue = longLived(self.head) ? [] : [self.head]; queue.length && above.length < MAX_STACK; ) {
-    const head = queue.shift()!;
-    for (const p of open)
-      // One coming from a long-lived branch (a back-merge of develop into a feature) isn't stacked on it.
-      if (p.base === head && !longLived(p.head) && !seen.has(p.number) && above.length < MAX_STACK) {
-        seen.add(p.number);
-        above.push(p);
-        queue.push(p.head);
-      }
-  }
-  return below.length || above.length ? [...below, self, ...above] : [];
-}
-
-const identity = (username: string): git.Identity => ({ name: username, email: `${username}@users.ether.invalid` });
-
-export const allowedMethods = (r: { allowMergeCommit: boolean; allowSquashMerge: boolean; allowRebaseMerge: boolean }): git.MergeMethod[] => [
-  ...(r.allowMergeCommit ? (["merge"] as const) : []),
-  ...(r.allowSquashMerge ? (["squash"] as const) : []),
-  ...(r.allowRebaseMerge ? (["rebase"] as const) : []),
-];
-
-// The stack, and whether merging may delete the head branch: not a long-lived one, nor one another open pull
-// request comes from.
-async function stackInfo(a: RepoAccess, row: NonNullable<IssueRow>) {
-  const longLived = await longLivedBranches(a);
-  const head = row.issue.headRef;
-  const shared =
-    !!head &&
-    !!db
-      .select({ n: issue.number })
-      .from(issue)
-      .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.headRef, head), ne(issue.id, row.issue.id)))
-      .get();
-  // Nor while a pull request into it couldn't move to this one's base: one coming from that base (a back-merge)
-  // would end up going into itself, and would be left on a branch that no longer exists.
-  const stranded =
-    !!head &&
-    !!row.issue.baseRef &&
-    !!db
-      .select({ n: issue.number })
-      .from(issue)
-      .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.baseRef, head), eq(issue.headRef, row.issue.baseRef)))
-      .get();
-  return { stack: stackOf(a.repo.id, row, longLived), headDeletable: !!head && !longLived(head) && !shared && !stranded };
 }
 
 export const issueRoutes = new Elysia()
@@ -337,7 +197,7 @@ export const issueRoutes = new Elysia()
     // A base only changes while the pull request is still open once the lock is held: a merge or close may have
     // come first.
     if (Object.keys(set).length)
-      await merges.runExclusive(() => {
+      await underMergeLock(() => {
         const where = set.baseRef ? and(eq(issue.id, row.issue.id), eq(issue.state, "open")) : eq(issue.id, row.issue.id);
         const changed = db.update(issue).set(set).where(where).returning({ id: issue.id }).all();
         if (set.baseRef && !changed.length) throw new HttpError(409, "Only an open pull request can change its base branch");
@@ -399,8 +259,7 @@ export const issueRoutes = new Elysia()
   .get("/repos/:owner/:repo/pulls/:number", async ({ request, params }) => {
     const viewer = await readerOrVisitor(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
-    const row = findIssue(a, params.number);
-    if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
+    const row = findPull(a, params.number);
     if (viewer.id) void sideEffect("Marking notifications read", () => markRead(viewer.id, a.repo.id, row.issue.number));
     return {
       pull: presentAll([row])[0],
@@ -411,8 +270,9 @@ export const issueRoutes = new Elysia()
       requireCodeOwnerReview: a.repo.requireCodeOwnerReview,
       mergeMethods: allowedMethods(a.repo),
       codeOwners: await ownerStatus(a.repo.id, row.issue.number).catch(() => null),
-      ...(await stackInfo(a, row)),
-      checks: await headChecks(a, row),
+      stack: await stackOf(a, row),
+      headDeletable: await headDeletable(a, row),
+      checks: await headChecks(a.path, a.repo.id, row.issue),
       deployments: await headDeployments(a, row),
       ...hideTeams(reviewSummary(row.issue.id), a, viewer.id),
       ...(await pullStatus(a, row)),
@@ -425,106 +285,7 @@ export const issueRoutes = new Elysia()
     if (method !== null && method !== "merge" && method !== "squash" && method !== "rebase") throw new HttpError(400, "method must be merge, squash or rebase");
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "write");
-    return merges.runExclusive(async () => {
-      const row = findIssue(a, params.number);
-      if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
-      if (row.issue.state !== "open") throw new HttpError(409, "This pull request is not open");
-      if (row.issue.draft) throw new HttpError(409, "This pull request is still a draft; mark it ready for review first");
-      // With protection on, merging needs an approval and no outstanding request for changes.
-      const decision = reviewSummary(row.issue.id).reviewDecision;
-      if (a.repo.requireApproval && decision !== "approved") throw new HttpError(409, "Merging requires an approving review");
-      // The commits every check below looks at, and the merge then takes or refuses as raced.
-      const [baseAt, headAt] = await Promise.all([git.resolveCommit(a.path, `refs/heads/${row.issue.baseRef}`), git.resolveCommit(a.path, `refs/heads/${row.issue.headRef}`)]);
-      if (!baseAt || !headAt) throw new HttpError(409, "A branch no longer exists");
-      if (a.repo.requireCodeOwnerReview) {
-        const owners = await ownerStatus(a.repo.id, row.issue.number, { base: baseAt, head: headAt });
-        const missing = owners && missingOwners(owners);
-        if (owners && !missing) throw new HttpError(409, "Code owners can't be worked out for this pull request, so it can't be merged while their review is required");
-        if (missing?.length) throw new HttpError(409, `Merging requires a review from code owners of ${missing.map((g) => g.pattern).join(", ")}`);
-      }
-      if (a.repo.requireChecks) {
-        const checks = commitChecks(a.repo.id, headAt, row.issue.number);
-        if (checks && checks.status !== "success") throw new HttpError(409, "Merging requires passing checks");
-      }
-      // The first method the repository allows, unless one is asked for.
-      const allowed = allowedMethods(a.repo);
-      const how = method ?? allowed[0];
-      if (!how || !allowed.includes(how)) throw new HttpError(409, `This repository doesn't allow ${how === "squash" ? "squash merging" : how === "rebase" ? "rebase merging" : "merge commits"}`);
-      const before = baseAt;
-      const committer = identity(viewer.username);
-      const commits = how === "squash" ? await git.rangeCommits(a.path, baseAt, headAt) : [];
-      const title = typeof b?.title === "string" && b.title.trim() ? str(b.title, 256).trim() : null;
-      const message =
-        how === "squash"
-          ? `${title ?? `${row.issue.title} (#${row.issue.number})`}\n\n${typeof b?.message === "string" ? str(b.message, 65536) : commits.reverse().map((c) => `* ${c.subject}`).join("\n")}`
-          : `${title ?? `Merge pull request #${row.issue.number} from ${row.issue.headRef}`}\n\n${typeof b?.message === "string" ? str(b.message, 65536) : row.issue.title}`;
-      const result = await git.mergeBranches(a.path, row.issue.baseRef!, row.issue.headRef!, message, committer, { base: baseAt, head: headAt }, { method: how, author: identity(row.author!) });
-      if (!result.ok) {
-        const reason = {
-          conflict: how === "rebase" ? "These commits can't be rebased onto the base branch without conflicts" : "The branches have conflicts",
-          missing: "A branch no longer exists",
-          raced: "A branch changed while merging; try again",
-          merges: "This branch has merge commits, which can't be rebased; merge or squash it instead",
-          empty: "There's nothing to rebase",
-        }[result.reason];
-        throw new HttpError(409, reason);
-      }
-      // After a squash or rebase nothing in the base reaches the merged commits, and deleting the branch would leave
-      // them to garbage collection; this hidden ref keeps them, so the merged pull request still shows what it
-      // brought in. refs/ether is hidden from fetches and refused to pushes.
-      await git.git(a.path, ["config", "transfer.hideRefs", "refs/ether"]).catch(() => {});
-      await git.git(a.path, ["update-ref", "-m", "keep merged pull request", `refs/ether/pull/${row.issue.number}/head`, headAt]).catch(() => {});
-      db.update(issue)
-        .set({ state: "merged", mergeCommit: result.sha, mergedBy: viewer.id, mergeMethod: how, mergedBase: baseAt, mergedHead: headAt })
-        .where(eq(issue.id, row.issue.id))
-        .run();
-      void sideEffect("Notifying", () => notifyThread(row.issue.id, "merged", viewer.id, { repoId: a.repo.id, issueNumber: row.issue.number, title: row.issue.title }));
-      record(a.repo.id, viewer.id, "pull_merged", { number: row.issue.number, title: row.issue.title, base: row.issue.baseRef, head: row.issue.headRef });
-      // Pull requests stacked on this one now go where it went, as on GitHub: their diff stays their own changes,
-      // since the merge brought the commits they share into the base branch.
-      // Deleting the head branch, when asked and allowed, is what moves pull requests stacked on it, as on GitHub:
-      // a branch that stays (develop, a release branch) keeps the pull requests going into it.
-      const deletedBranch = deleteBranch && (await stackInfo(a, { ...row, issue: { ...row.issue, state: "open" } })).headDeletable
-        ? await git.git(a.path, ["update-ref", "-m", "delete merged branch", "-d", `refs/heads/${row.issue.headRef}`, headAt]).then((r) => r.code === 0)
-        : false;
-      const retargeted = deletedBranch
-        ? db
-            .update(issue)
-            .set({ baseRef: row.issue.baseRef })
-            .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.baseRef, row.issue.headRef!), ne(issue.headRef, row.issue.baseRef!)))
-            .returning({ number: issue.number })
-            .all()
-            .map((p) => p.number)
-        : [];
-      // After a squash or rebase the base has new commits for the merged ones, so the pull requests moved onto it
-      // would show those changes again. Their own commits are made again on top of it, as a rebase --onto would;
-      // one that can't be (a conflict, merge commits, a protected branch) is left as it was.
-      const restacked: number[] = [];
-      const movedRefs: { before: git.Ref; after: git.Ref }[] = [{ before: { name: row.issue.baseRef!, kind: "branch", sha: before }, after: { name: row.issue.baseRef!, kind: "branch", sha: result.sha } }];
-      if (how !== "merge" && retargeted.length) {
-        const longLived = await longLivedBranches(a);
-        // Each rewritten branch carries the pull requests stacked on it along: their own commits move from the
-        // branch's old tip onto its new one, down the whole stack.
-        const queue = retargeted.map((n) => ({ n, since: headAt, onto: result.sha }));
-        while (queue.length && restacked.length < MAX_STACK) {
-          const { n, since, onto } = queue.shift()!;
-          const up = db.select({ head: issue.headRef }).from(issue).where(and(eq(issue.repoId, a.repo.id), eq(issue.number, n))).get();
-          if (!up?.head || longLived(up.head)) continue;
-          const moved = await git.restack(a.path, up.head, since, onto, committer).catch(() => ({ ok: false as const }));
-          if (!moved.ok) continue;
-          restacked.push(n);
-          movedRefs.push({ before: { name: up.head, kind: "branch", sha: moved.before }, after: { name: up.head, kind: "branch", sha: moved.sha } });
-          for (const next of db
-            .select({ number: issue.number })
-            .from(issue)
-            .where(and(eq(issue.repoId, a.repo.id), eq(issue.isPull, true), eq(issue.state, "open"), eq(issue.baseRef, up.head)))
-            .all())
-            if (!restacked.includes(next.number)) queue.push({ n: next.number, since: moved.before, onto: moved.sha });
-        }
-      }
-      for (const n of retargeted) void sideEffect("Asking code owners", () => requestCodeOwners(a.repo.id, n));
-      // Merging moves the base branch (and restacking the branches on it) like a push would: their workflows run.
-      void refsMoved({ id: a.repo.id, path: a.path }, movedRefs.map((m) => m.before), movedRefs.map((m) => m.after), viewer.id);
-      return { ok: true, sha: result.sha, method: how, deletedBranch, retargeted, restacked };
-    });
+    const title = typeof b?.title === "string" && b.title.trim() ? str(b.title, 256).trim() : null;
+    const message = typeof b?.message === "string" ? str(b.message, 65536) : null;
+    return mergePull(a, viewer, params.number, { method, deleteBranch, title, message });
   });

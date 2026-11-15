@@ -19,7 +19,6 @@ export function authSecret(): string {
 
 // Accounts are username-based; Better Auth still wants an email, so we derive an
 // unroutable one from the username.
-export const placeholderEmail = (name: string) => `${name.toLowerCase()}@users.ether.invalid`;
 
 export const auth = betterAuth({
   appName: "Ether",

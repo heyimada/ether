@@ -1,16 +1,17 @@
-import { and, count, eq, inArray } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-import { HttpError, findUser, isOrg, readableRepos, requireRepo, requireUser, readerOrVisitor } from "../access";
+import { HttpError, findUser, isOrg, orgRole, readableRepos, requireRepo, requireUser, readerOrVisitor } from "../access";
 import { ownerText, ownersFor } from "../codeowners";
 import { readCodeOwners } from "../owners";
 import { db } from "../db/client";
-import { collaborator, orgMember, repo, star, user } from "../db/schema";
+import { collaborator, repo, star, user } from "../db/schema";
 import * as git from "../git";
 import { ciAllowed } from "../ci";
 import { usernamesByEmail } from "../contrib";
 import { lastActivity, record } from "../events";
 import { languages } from "../languages";
-import { addDefaultLabels } from "./labels";
+import { addDefaultLabels } from "../labels";
+import { starCounts } from "../stars";
 
 type Q = Record<string, string | undefined>;
 
@@ -31,19 +32,6 @@ const cleanPath = (p: string | undefined) => {
 function withUsernames<T extends { email: string }>(items: T[]): (T & { username: string | null })[] {
   const names = usernamesByEmail(items.map((c) => c.email));
   return items.map((c) => ({ ...c, username: names.get(c.email.toLowerCase()) ?? null }));
-}
-
-export function starCounts(repoIds: number[]): Map<number, number> {
-  if (repoIds.length === 0) return new Map();
-  return new Map(
-    db
-      .select({ repoId: star.repoId, n: count() })
-      .from(star)
-      .where(inArray(star.repoId, repoIds))
-      .groupBy(star.repoId)
-      .all()
-      .map((r) => [r.repoId, r.n]),
-  );
 }
 
 export const repoRoutes = new Elysia()
@@ -77,8 +65,7 @@ export const repoRoutes = new Elysia()
     if (typeof owner === "string" && owner.toLowerCase() !== viewer.username) {
       const target = findUser(owner);
       if (!target || !isOrg(target.id)) throw new HttpError(403, "You can only create repositories for yourself or an organization");
-      const membership = db.select().from(orgMember).where(and(eq(orgMember.orgId, target.id), eq(orgMember.userId, viewer.id))).get();
-      if (membership?.role !== "owner") throw new HttpError(403, "Only organization owners can create repositories there");
+      if (orgRole(target.id, viewer.id) !== "owner") throw new HttpError(403, "Only organization owners can create repositories there");
       ownerRow = { id: target.id, username: target.username! };
     }
     const lower = name.toLowerCase();

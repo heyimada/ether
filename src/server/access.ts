@@ -59,6 +59,23 @@ export const findUser = (username: string) =>
 
 export const isOrg = (userId: string) => !!db.select({ id: organization.userId }).from(organization).where(eq(organization.userId, userId)).get();
 
+// ---------- organizations ----------
+
+export function requireOrg(name: string) {
+  const row = findUser(name);
+  if (!row || !isOrg(row.id)) throw new HttpError(404, "No such organization");
+  return { id: row.id, name: row.username! };
+}
+
+export const orgRole = (orgId: string, userId: string) =>
+  db.select({ role: orgMember.role }).from(orgMember).where(and(eq(orgMember.orgId, orgId), eq(orgMember.userId, userId))).get()?.role ?? null;
+
+export function requireOrgOwner(viewer: Viewer, name: string) {
+  const org = requireOrg(name);
+  if (orgRole(org.id, viewer.id) !== "owner") throw new HttpError(403, "Only organization owners can do that");
+  return org;
+}
+
 // ---------- repositories ----------
 
 export type RepoAccess = {
@@ -205,30 +222,22 @@ export function createAccessToken(userId: string, name: string) {
   return { id: row.id, token };
 }
 
-// The account a personal access token belongs to, from the token alone (tokens are unique).
-export function tokenOwner(token: string): Viewer | null {
+function lookupToken(token: string, username?: string): Viewer | null {
   const row = db
     .select({ id: user.id, username: user.username, role: user.role, tokenId: accessToken.id })
     .from(accessToken)
     .innerJoin(user, eq(accessToken.userId, user.id))
-    .where(eq(accessToken.tokenHash, sha256(token)))
+    .where(and(eq(accessToken.tokenHash, sha256(token)), username === undefined ? undefined : eq(user.username, username.toLowerCase())))
     .get();
   if (!row?.username) return null;
   db.update(accessToken).set({ lastUsedAt: new Date() }).where(eq(accessToken.id, row.tokenId)).run();
   return { id: row.id, username: row.username, isAdmin: row.role === "admin" };
 }
 
-export function tokenUser(username: string, token: string): Viewer | null {
-  const row = db
-    .select({ id: user.id, username: user.username, role: user.role, tokenId: accessToken.id })
-    .from(accessToken)
-    .innerJoin(user, eq(accessToken.userId, user.id))
-    .where(and(eq(accessToken.tokenHash, sha256(token)), eq(user.username, username.toLowerCase())))
-    .get();
-  if (!row?.username) return null;
-  db.update(accessToken).set({ lastUsedAt: new Date() }).where(eq(accessToken.id, row.tokenId)).run();
-  return { id: row.id, username: row.username, isAdmin: row.role === "admin" };
-}
+// The account a personal access token belongs to, from the token alone (tokens are unique).
+export const tokenOwner = (token: string) => lookupToken(token);
+
+export const tokenUser = (username: string, token: string) => lookupToken(token, username);
 
 // ---------- invites ----------
 

@@ -72,7 +72,7 @@ export const wikiRoutes = new Elysia()
         wiki,
         { file: `${target}.md`, content: b.content.slice(0, 1_000_000), renameFrom: isNew ? undefined : `${params.slug}.md` },
         message,
-        { name: viewer.username, email: `${viewer.username}@users.ether.invalid` },
+        git.userIdentity(viewer.username),
       );
     } catch (e) {
       if (e instanceof git.WikiConflict) throw new HttpError(409, e.message);
@@ -87,9 +87,6 @@ export const wikiRoutes = new Elysia()
     checkSlug(params.slug);
     const wiki = wikiOf(a);
     if (!(await pages(wiki)).some((p) => p.slug === params.slug)) throw new HttpError(404, "No such page");
-    await git.wikiCommit(wiki, { file: `${params.slug}.md`, content: null }, `Delete ${slugToTitle(params.slug)}`, {
-      name: viewer.username,
-      email: `${viewer.username}@users.ether.invalid`,
-    });
+    await git.wikiCommit(wiki, { file: `${params.slug}.md`, content: null }, `Delete ${slugToTitle(params.slug)}`, git.userIdentity(viewer.username));
     return { ok: true };
   });

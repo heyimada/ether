@@ -14,8 +14,9 @@ import {
   requireAdmin,
   requireUser,
 } from "../access";
-import { auth, placeholderEmail } from "../auth";
-import { USERNAME_RE } from "../auth-plugins";
+import { auth } from "../auth";
+import { placeholderEmail } from "../git";
+import { RESERVED, USERNAME_RE } from "../auth-plugins";
 import { ciAllowed, ciIsolation } from "../ci";
 import { containerRuntime } from "../ci-container";
 import { config } from "../config";
@@ -26,9 +27,6 @@ import { hostKeyInfo } from "../ssh";
 const MIN_PASSWORD = 10;
 // The accent ends up inside a stylesheet, so nothing but a plain hex colour is stored.
 const HEX_RE = /^#[0-9a-f]{6}$/i;
-// First path segments the web app uses for its own pages; a user with one of these names
-// would have unreachable repository URLs.
-export const RESERVED = new Set(["api", "assets", "login", "register", "new", "settings", "site-admin", "organizations", "notifications", "_shell"]);
 const registration = new Mutex();
 
 type RegisterBody = { code?: unknown; username?: unknown; password?: unknown };

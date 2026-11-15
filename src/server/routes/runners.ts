@@ -1,11 +1,10 @@
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { LABEL_RE, MAX_LABELS, PROTOCOL, RESULTS, type Isolation, type JobResult } from "../../runner/protocol";
-import { HttpError, requireAdmin, requireRepo, requireUser, secret, sha256 } from "../access";
+import { HttpError, requireAdmin, requireOrgOwner, requireRepo, requireUser, secret, sha256 } from "../access";
 import { abandonRemoteJobs, claimJob, finishRemoteJob, RUNNER_ONLINE_MS, remoteJob, reportJob, resumePump } from "../ci";
 import { db } from "../db/client";
 import { ciRunner, ciRunnerRegistration } from "../db/schema";
-import { requireOrgOwner } from "./orgs";
 
 // External runners (see ../../runner/main.ts). An admin creates a one-time token, a machine trades it for a
 // token of its own and then asks for work; while it runs a job it reports with a token for that job alone.

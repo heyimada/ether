@@ -353,6 +353,16 @@ export async function mergeTree(repo: string, base: string, head: string): Promi
 }
 
 export type Identity = { name: string; email: string };
+
+// Commits Ether writes for someone carry their username and a placeholder address that can't be anyone's mail.
+export const placeholderEmail = (username: string) => `${username.toLowerCase()}@users.ether.invalid`;
+export const userIdentity = (username: string): Identity => ({ name: username, email: placeholderEmail(username) });
+
+// Keeps a commit reachable under refs/ether, which fetches don't show and pushes can't touch.
+export async function keepRef(repo: string, ref: string, sha: string) {
+  await gitText(repo, ["config", "transfer.hideRefs", "refs/ether"]);
+  await gitText(repo, ["update-ref", "-m", "keep merged pull request", ref, sha]);
+}
 export type MergeMethod = "merge" | "squash" | "rebase";
 export type MergeResult = { ok: true; sha: string } | { ok: false; reason: "conflict" | "missing" | "raced" | "merges" | "empty" };
 

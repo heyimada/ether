@@ -5,15 +5,13 @@ import { db } from "../db/client";
 import { issue, review, reviewComment, reviewRequest, team, teamMember, teamReviewRequest, user } from "../db/schema";
 import * as git from "../git";
 import { record } from "../events";
-import { findIssue, pullStatus } from "./issues";
 import { answerTeamRequests } from "../owners";
+import { findPull, pullStatus, requestedOf } from "../pulls";
 import { notify, notifyThread, teamMembers } from "../notify";
 import { sideEffect } from "../side-effect";
 
-export type Decision = "approved" | "changes_requested" | null;
-
 // Line numbers on the new side of a unified diff, per file: the lines a review can comment on.
-export function commentableLines(diff: string): Map<string, Set<number>> {
+function commentableLines(diff: string): Map<string, Set<number>> {
   const files = new Map<string, Set<number>>();
   let current: Set<number> | null = null;
   let line = 0;
@@ -35,90 +33,11 @@ export function commentableLines(diff: string): Map<string, Set<number>> {
   return files;
 }
 
-// Reviews with their line comments, outstanding requests, and the overall decision: changes
-// requested if any reviewer's latest verdict asks for them, else approved if anyone approved.
-export function reviewSummary(issueId: number) {
-  const rows = db
-    .select({ r: review, author: user.username })
-    .from(review)
-    .innerJoin(user, eq(user.id, review.authorId))
-    .where(eq(review.issueId, issueId))
-    .orderBy(asc(review.id))
-    .all();
-  const comments = rows.length
-    ? db.select().from(reviewComment).where(inArray(reviewComment.reviewId, rows.map((x) => x.r.id))).orderBy(asc(reviewComment.id)).all()
-    : [];
-  const latest = new Map<string, "approved" | "changes_requested">();
-  for (const { r, author } of rows) if (r.state !== "commented") latest.set(author!, r.state);
-  const verdicts = [...latest.values()];
-  const decision: Decision = verdicts.includes("changes_requested") ? "changes_requested" : verdicts.includes("approved") ? "approved" : null;
-  const requests = db
-    .select({ username: user.username })
-    .from(reviewRequest)
-    .innerJoin(user, eq(user.id, reviewRequest.userId))
-    .where(eq(reviewRequest.issueId, issueId))
-    .orderBy(user.username)
-    .all()
-    .map((x) => x.username!);
-  const teamRequests = db
-    .select({ org: user.username, name: team.name })
-    .from(teamReviewRequest)
-    .innerJoin(team, eq(team.id, teamReviewRequest.teamId))
-    .innerJoin(user, eq(user.id, team.orgId))
-    .where(eq(teamReviewRequest.issueId, issueId))
-    .orderBy(team.name)
-    .all()
-    .map((t) => `${t.org}/${t.name}`);
-  return {
-    teamRequests,
-    reviews: rows.map(({ r, author }) => ({
-      id: r.id,
-      author,
-      state: r.state,
-      body: r.body,
-      commitSha: r.commitSha,
-      createdAt: r.createdAt,
-      comments: comments.filter((c) => c.reviewId === r.id).map((c) => ({ path: c.path, line: c.line, body: c.body })),
-    })),
-    reviewRequests: requests,
-    reviewers: Object.fromEntries(latest),
-    reviewDecision: decision,
-  };
-}
-
-// Open pull requests waiting for someone's review in the given repositories: asked directly, or through one of
-// their teams if they haven't reviewed yet. Drafts and their own pull requests wait. Most recently updated first.
-export function requestedOf(userId: string, repoIds: number[], limit = 100) {
-  if (!repoIds.length) return [];
-  const cols = { id: issue.id, number: issue.number, title: issue.title, repoId: issue.repoId, authorId: issue.authorId, updatedAt: issue.updatedAt };
-  const open = and(eq(issue.state, "open"), eq(issue.draft, false), inArray(issue.repoId, repoIds));
-  const direct = db
-    .select(cols)
-    .from(reviewRequest)
-    .innerJoin(issue, eq(issue.id, reviewRequest.issueId))
-    .where(and(eq(reviewRequest.userId, userId), open))
-    .all();
-  const reviewed = db.select({ id: review.issueId }).from(review).where(eq(review.authorId, userId));
-  const viaTeam = db
-    .select(cols)
-    .from(teamReviewRequest)
-    .innerJoin(teamMember, and(eq(teamMember.teamId, teamReviewRequest.teamId), eq(teamMember.userId, userId)))
-    .innerJoin(issue, eq(issue.id, teamReviewRequest.issueId))
-    .where(and(open, notInArray(issue.id, reviewed)))
-    .all();
-  const seen = new Set<number>();
-  return [...direct, ...viaTeam]
-    .filter((p) => p.authorId !== userId && !seen.has(p.id) && !!seen.add(p.id))
-    .sort((a, b) => +b.updatedAt - +a.updatedAt)
-    .slice(0, limit);
-}
-
 export const reviewRoutes = new Elysia()
   .put("/repos/:owner/:repo/pulls/:number/reviewers", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "write");
-    const row = findIssue(a, params.number);
-    if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
+    const row = findPull(a, params.number);
     const names = (body as { reviewers?: unknown } | null)?.reviewers;
     const teamNames = (body as { teams?: unknown } | null)?.teams;
     if (!Array.isArray(names) || names.length > 15 || names.some((n) => typeof n !== "string")) throw new HttpError(400, "reviewers must be a list of usernames");
@@ -169,8 +88,7 @@ export const reviewRoutes = new Elysia()
   .post("/repos/:owner/:repo/pulls/:number/reviews", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "read");
-    const row = findIssue(a, params.number);
-    if (!row.issue.isPull) throw new HttpError(404, "Not a pull request");
+    const row = findPull(a, params.number);
     if (row.issue.state !== "open") throw new HttpError(409, "This pull request is not open");
     const b = (body ?? {}) as { state?: unknown; body?: unknown; comments?: unknown };
     const state = b.state;

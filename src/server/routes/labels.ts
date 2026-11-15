@@ -9,15 +9,6 @@ import { sideEffect } from "../side-effect";
 const LABEL_RE = /^[^\s,][^,]{0,49}$/;
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
 
-export const DEFAULT_LABELS = [
-  { name: "bug", color: "#d73a4a", description: "Something isn't working" },
-  { name: "enhancement", color: "#a2eeef", description: "New feature or request" },
-  { name: "documentation", color: "#0075ca", description: "Improvements or additions to documentation" },
-  { name: "question", color: "#d876e3", description: "Further information is requested" },
-];
-
-export const addDefaultLabels = (repoId: number) => db.insert(label).values(DEFAULT_LABELS.map((l) => ({ ...l, repoId }))).onConflictDoNothing().run();
-
 const labelsOf = (repoId: number) =>
   db.select({ name: label.name, color: label.color, description: label.description }).from(label).where(eq(label.repoId, repoId)).orderBy(label.name).all();
 

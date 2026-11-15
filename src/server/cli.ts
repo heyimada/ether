@@ -36,7 +36,8 @@ That folder has no ether.db; point at one snapshot folder made by backup.`);
 
 const { eq } = await import("drizzle-orm");
 const { createInvite, findUser, isOrg } = await import("./access");
-const { auth, placeholderEmail } = await import("./auth");
+const { auth } = await import("./auth");
+const { placeholderEmail } = await import("./git");
 const { db } = await import("./db/client");
 const { user } = await import("./db/schema");
 
