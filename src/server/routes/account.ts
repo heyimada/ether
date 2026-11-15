@@ -18,7 +18,7 @@ import { auth } from "../auth";
 import { placeholderEmail } from "../git";
 import { RESERVED, USERNAME_RE } from "../auth-plugins";
 import { ciAllowed, ciIsolation } from "../ci";
-import { containerRuntime } from "../ci-container";
+import { containerRuntime } from "../../runner/container";
 import { config } from "../config";
 import { db } from "../db/client";
 import { accessToken, instanceSetting, invite, profile, user, userPref } from "../db/schema";

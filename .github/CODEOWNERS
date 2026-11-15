@@ -12,10 +12,10 @@ AGENTS.md @heyimada @JustKatze
 /src/server/ssh-relay.ts @heyimada @JustKatze
 /src/server/smart-http.ts @heyimada @JustKatze
 /src/server/git.ts @heyimada @JustKatze
-/src/server/ci-container.ts @heyimada @JustKatze
+/src/runner/container.ts @heyimada @JustKatze
 /src/server/ci-secrets.ts @heyimada @JustKatze
 /src/server/secret-box.ts @heyimada @JustKatze
-/src/server/log-mask.ts @heyimada @JustKatze
+/src/runner/log-mask.ts @heyimada @JustKatze
 /src/server/db/ @heyimada @JustKatze
 /drizzle/ @heyimada @JustKatze
 /package.json @heyimada @JustKatze

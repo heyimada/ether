@@ -8,7 +8,8 @@ import type { Context } from "./expr";
 export const LABEL_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 export const MAX_LABELS = 10;
 
-export type Shell = "bash" | "sh" | "pwsh" | "powershell" | "cmd";
+export const SHELLS = ["bash", "sh", "pwsh", "powershell", "cmd"] as const;
+export type Shell = (typeof SHELLS)[number];
 export type Isolation = "container" | "host";
 
 // Which assignments a runner understands; a runner of another version is told to update.

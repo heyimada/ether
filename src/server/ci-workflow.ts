@@ -1,8 +1,8 @@
 // Parsing workflow files into triggers, jobs and steps. Pure, so it can be tested without a database.
 import { parse as parseYaml } from "yaml";
 import { checkTemplate, hasTemplate, secretsIn, unwrap, checkExpression } from "../runner/expr";
-import { LABEL_RE, MAX_LABELS } from "../runner/protocol";
-import { IMAGE_RE } from "./ci-container";
+import { LABEL_RE, MAX_LABELS, SHELLS, type Shell } from "../runner/protocol";
+import { IMAGE_RE } from "../runner/container";
 import { checkGraph, comboName, parseCondition, parseNeeds, parseStrategy, type MatrixValues } from "./ci-graph";
 import { LEGACY_TRIGGERS, parseOn, type Triggers } from "./ci-triggers";
 
@@ -15,8 +15,6 @@ export const isWorkflowFile = (name: string) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,99
 // The name a workflow goes by when it doesn't give one.
 export const defaultWorkflowName = (path: string) => (path === WORKFLOW ? "CI" : path.slice(path.lastIndexOf("/") + 1).replace(/\.ya?ml$/, ""));
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$/;
-const SHELLS = ["bash", "sh", "pwsh", "powershell", "cmd"] as const;
-export type Shell = (typeof SHELLS)[number];
 // A secret is stored by name; its value is only looked up when the job starts.
 export type EnvValue = string | { secret: string };
 // A step's texts can hold `${{ }}` expressions. id, if and continueOnError are missing in jobs queued before they existed.

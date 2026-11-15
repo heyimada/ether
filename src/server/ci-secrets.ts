@@ -1,11 +1,22 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
+import { HttpError } from "./access";
 import { authSecret } from "./auth";
 import { db } from "./db/client";
 import { ciSecret, environmentSecret, user } from "./db/schema";
 import { deriveKey, open, seal } from "./secret-box";
 
-export { SECRET_NAME_RE } from "./ci-workflow";
-export const MAX_SECRET = 64 * 1024;
+import { SECRET_NAME_RE } from "./ci-workflow";
+
+const MAX_SECRET = 64 * 1024;
+
+// The value to store for a secret someone sets, in a repository or an environment.
+export function secretValue(name: string, body: unknown): string {
+  if (!SECRET_NAME_RE.test(name)) throw new HttpError(400, "Secret names are upper-case letters, digits and _, not starting with a digit, and not CI or CI_…");
+  const value = (body as { value?: unknown } | undefined)?.value;
+  if (typeof value !== "string" || value.length === 0) throw new HttpError(400, "Enter a value");
+  if (value.length > MAX_SECRET) throw new HttpError(413, "Secrets can be at most 64 KB");
+  return value;
+}
 
 let key: Buffer | null = null;
 const secretKey = () => (key ??= deriveKey(authSecret(), "ci secrets"));

@@ -2,14 +2,14 @@ import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { chownWorkspaceArgs, cli, collect, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, scriptExtension, shellCommand } from "../server/ci-container";
-import { LogMasker } from "../server/log-mask";
+import { chownWorkspaceArgs, cli, collect, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, scriptExtension, shellCommand } from "./container";
+import { LogMasker } from "./log-mask";
 import { evalTemplate, fillTemplate, holds, toText, type Context, type Status, type Value } from "./expr";
 import type { JobAssignment, JobChannel, JobResult, RunningJob, Shell } from "./protocol";
 import { parseOutputs, readOutputFile } from "./step-output";
 
 // Runs a job from its assignment: a fresh checkout, then its steps, in a container of its own or on the host.
-// By default each job runs in a container (see ci-container.ts) and sees nothing of the machine. Everything
+// By default each job runs in a container (see container.ts) and sees nothing of the machine. Everything
 // this does on Ether's behalf comes in through the assignment and goes out through the channel.
 
 // The shell a host step runs with when it names none.

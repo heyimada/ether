@@ -4,7 +4,7 @@ import { removeLeftoverContainers, startJob } from "../runner/execute";
 import { evalTemplate, secretsIn, toText, type Context, type Value } from "../runner/expr";
 import { LABEL_RE, type Claim, type Isolation, type JobAssignment, type JobResult, type RunningJob } from "../runner/protocol";
 import { HttpError, secret, sha256 } from "./access";
-import { IMAGE_RE, instanceLabel } from "./ci-container";
+import { IMAGE_RE, instanceLabel } from "../runner/container";
 import { loadSecrets } from "./ci-secrets";
 import { conditionHolds, matrixEnvName, type MatrixValues, type NeedStatus } from "./ci-graph";
 import { notify } from "./notify";
@@ -18,7 +18,7 @@ import { cancelDeployments, deploymentOfJob, ensureEnvironment, environmentOfJob
 import { gate } from "./deploy-rules";
 import { record } from "./events";
 import * as git from "./git";
-import { LogMasker } from "./log-mask";
+import { LogMasker } from "../runner/log-mask";
 import { sideEffect } from "./side-effect";
 
 // CI runs workflows from .ether/workflows/*.yml (and the older .ether/ci.yml) when what their `on:`

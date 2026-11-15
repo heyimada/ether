@@ -3,7 +3,7 @@ import { Elysia } from "elysia";
 import { allows, findUser, HttpError, isOrg, readerOrVisitor, repoAccess, requireRepo, requireUser, type RepoAccess } from "../access";
 import { patternProblem } from "../branch-rules";
 import { abandonEnvironment, reconsiderEnvironment, reviewDeployment } from "../ci";
-import { deleteEnvironmentSecret, listEnvironmentSecrets, MAX_SECRET, SECRET_NAME_RE, setEnvironmentSecret } from "../ci-secrets";
+import { deleteEnvironmentSecret, listEnvironmentSecrets, secretValue, setEnvironmentSecret } from "../ci-secrets";
 import { ENVIRONMENT_RE } from "../ci-workflow";
 import { db } from "../db/client";
 import { environment } from "../db/schema";
@@ -91,11 +91,7 @@ export const deploymentRoutes = new Elysia()
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "owner");
     const env = environmentOf(a, params.name);
-    if (!SECRET_NAME_RE.test(params.secret)) throw new HttpError(400, "Secret names are upper-case letters, digits and _, not starting with a digit, and not CI or CI_…");
-    const value = (body as { value?: unknown } | undefined)?.value;
-    if (typeof value !== "string" || value.length === 0) throw new HttpError(400, "Enter a value");
-    if (value.length > MAX_SECRET) throw new HttpError(413, "Secrets can be at most 64 KB");
-    setEnvironmentSecret(env.id, params.secret, value, viewer.id);
+    setEnvironmentSecret(env.id, params.secret, secretValue(params.secret, body), viewer.id);
     return { ok: true };
   })
   .delete("/repos/:owner/:repo/environments/:name/secrets/:secret", async ({ request, params }) => {

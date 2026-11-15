@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
-import { instanceLabel } from "../server/ci-container";
+import { instanceLabel } from "./container";
 import { removeLeftoverContainers, startJob } from "./execute";
 import { PROTOCOL, type Claim, type Isolation, type JobResult, type Progress, type RunningJob } from "./protocol";
 

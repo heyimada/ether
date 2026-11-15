@@ -56,8 +56,8 @@ Where each user-visible feature lives in the code, and which end-to-end spec cov
 | Workflows | `.ether/workflows/*.yml`: triggers, `needs` graph, matrix, `if:`, and `${{ }}` expressions. | `ci-workflow.ts`, `ci-triggers.ts`, `ci-graph.ts`, `src/runner/expr.ts` | `workflows.spec.ts`, `job-graph.spec.ts` |
 | Scheduling and queue | Job queue, `ETHER_CI_JOBS` limit, cancel and re-run. | `ci.ts`, `routes/ci.ts` | `ci.spec.ts` |
 | Cron | `schedule:` triggers in UTC, at most once every 5 minutes. | `cron.ts` | `schedule.spec.ts` |
-| Isolation | A container per job (Docker or Podman), or host mode chosen by an admin. | `ci-container.ts` | `ci-isolation.spec.ts` |
-| Secrets | Encrypted repository and environment secrets, masked in logs. | `ci-secrets.ts`, `secret-box.ts`, `log-mask.ts` | `ci-isolation.spec.ts` |
+| Isolation | A container per job (Docker or Podman), or host mode chosen by an admin. | `src/runner/container.ts` | `ci-isolation.spec.ts` |
+| Secrets | Encrypted repository and environment secrets, masked in logs. | `ci-secrets.ts`, `secret-box.ts`, `src/runner/log-mask.ts` | `ci-isolation.spec.ts` |
 | Pull request checks | The newest run per workflow shows as a check, and **Require passing checks** blocks merges until they pass. | `ci.ts`, `routes/issues.ts` | `ci.spec.ts` |
 | Environments and deployments | Allowed branches, required reviewers, wait timer, secrets and runner labels per environment. | `deploy.ts`, `deploy-rules.ts`, `routes/deployments.ts` | `deployments.spec.ts` |
 | External runners | The `ether-runner` binary, server-wide or scoped to a repository or organization, with labels and `runs-on`. | `src/runner/`, `routes/runners.ts` | `runners.spec.ts` |

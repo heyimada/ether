@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { HttpError, readerOrVisitor, requireRepo, requireUser, type RepoAccess } from "../access";
 import { cancel, dispatch, isWorkflowPath, rerun, runnerLabels, runnerProblem, workflowFiles } from "../ci";
-import { deleteSecret, listSecrets, MAX_SECRET, SECRET_NAME_RE, setSecret } from "../ci-secrets";
+import { deleteSecret, listSecrets, secretValue, setSecret } from "../ci-secrets";
 import { db } from "../db/client";
 import { ciJob, ciRun, user } from "../db/schema";
 import { parseWorkflow } from "../ci-workflow";
@@ -136,11 +136,7 @@ export const ciRoutes = new Elysia()
   .put("/repos/:owner/:repo/ci/secrets/:name", async ({ request, params, body }) => {
     const viewer = await requireUser(request);
     const a = requireRepo(viewer, params.owner, params.repo, "owner");
-    if (!SECRET_NAME_RE.test(params.name)) throw new HttpError(400, "Secret names are upper-case letters, digits and _, not starting with a digit, and not CI or CI_…");
-    const value = (body as { value?: unknown } | undefined)?.value;
-    if (typeof value !== "string" || value.length === 0) throw new HttpError(400, "Enter a value");
-    if (value.length > MAX_SECRET) throw new HttpError(413, "Secrets can be at most 64 KB");
-    setSecret(a.repo.id, params.name, value, viewer.id);
+    setSecret(a.repo.id, params.name, secretValue(params.name, body), viewer.id);
     return { ok: true };
   })
   .delete("/repos/:owner/:repo/ci/secrets/:name", async ({ request, params }) => {
