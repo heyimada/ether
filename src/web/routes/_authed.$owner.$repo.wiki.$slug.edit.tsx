@@ -1,10 +1,10 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { WikiEditor } from "../components/wiki";
-import { api, repoApi } from "../lib/api";
+import { api, canWrite, repoApi } from "../lib/api";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/wiki/$slug/edit")({
   beforeLoad: ({ context, params }) => {
-    if (context.info.role === "read") throw redirect({ to: "/$owner/$repo/wiki/$slug", params });
+    if (!canWrite(context.info.role)) throw redirect({ to: "/$owner/$repo/wiki/$slug", params });
   },
   loader: ({ context: { info }, params }) =>
     api<{ slug: string; title: string; content: string }>(`${repoApi(info.repo.owner, info.repo.name)}/wiki/${encodeURIComponent(params.slug)}`),

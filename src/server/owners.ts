@@ -6,11 +6,12 @@ import { CODEOWNERS_PATHS, ownedFiles, ownerText, parseCodeOwners, type CodeOwne
 import { db } from "./db/client";
 import { issue, organization, repo, review, reviewRequest, team, teamMember, teamRepo, teamReviewRequest, user } from "./db/schema";
 import * as git from "./git";
-import { notify, quietly, teamMembers } from "./notify";
+import { notify, teamMembers } from "./notify";
+import { latestVerdicts, pullRange } from "./pulls";
+import { sideEffect } from "./side-effect";
 
 export type LoadedOwners = { path: string; co: CodeOwners } | { path: string; co: null; problems: Problem[] };
 
-// The first CODEOWNERS file at a commit, parsed.
 export async function readCodeOwners(repoPath: string, rev: string): Promise<LoadedOwners | null> {
   for (const path of CODEOWNERS_PATHS) {
     const blob = await git.readBlob(repoPath, rev, path);
@@ -72,15 +73,9 @@ async function evaluate(repoId: number, number: number, at?: { base: string; hea
     .get();
   if (!row?.issue.isPull || !row.issue.baseRef || !row.issue.headRef) return null;
   const path = git.repoPath(row.ownerName!, row.repoName);
-  const merged = row.issue.state === "merged" && row.issue.mergeCommit;
-  const [base, head] = at
-    ? [at.base, at.head]
-    : row.issue.state === "merged" && row.issue.mergedBase && row.issue.mergedHead
-    ? [row.issue.mergedBase, row.issue.mergedHead]
-    : merged
-    ? [`${row.issue.mergeCommit}^1`, `${row.issue.mergeCommit}^2`]
-    : await Promise.all([git.resolveCommit(path, `refs/heads/${row.issue.baseRef}`), git.resolveCommit(path, `refs/heads/${row.issue.headRef}`)]);
-  if (!base || !head) return null;
+  const range = at ?? (await pullRange(path, row.issue));
+  if (!range) return null;
+  const { base, head } = range;
   const loaded = await readCodeOwners(path, base);
   if (!loaded) return null;
   if (!loaded.co) return { status: { path: loaded.path, groups: [], problems: loaded.problems, incomplete: false }, resolved: [] };
@@ -88,19 +83,8 @@ async function evaluate(repoId: number, number: number, at?: { base: string; hea
   const owned = files ? ownedFiles(loaded.co, files) : null;
   if (!owned) return { status: { path: loaded.path, groups: [], problems: loaded.co.problems, incomplete: true }, resolved: [] };
 
-  // Approvals: each reviewer's latest verdict, as in the review decision; the author's own never counts.
-  const latest = new Map<string, { name: string; state: string }>();
-  for (const r of db
-    .select({ authorId: review.authorId, state: review.state, name: user.username })
-    .from(review)
-    .innerJoin(user, eq(user.id, review.authorId))
-    .where(eq(review.issueId, row.issue.id))
-    .orderBy(review.id)
-    .all())
-    if (r.state !== "commented") latest.set(r.authorId, { name: r.name!, state: r.state });
-  latest.delete(row.issue.authorId);
-  const approvers = [...latest].filter(([, v]) => v.state === "approved");
-
+  // The author's own approval never counts.
+  const approvers = latestVerdicts(row.issue.id).filter((v) => v.state === "approved" && v.userId !== row.issue.authorId);
   const target = { repoName: row.repoName, ownerName: row.ownerName!, ownerId: row.ownerId };
   const cache = new Map<string, Resolved>();
   const resolve = (o: Owner) => cache.get(ownerText(o)) ?? cache.set(ownerText(o), resolveOwner(o, target)).get(ownerText(o))!;
@@ -109,8 +93,8 @@ async function evaluate(repoId: number, number: number, at?: { base: string; hea
   const resolved = rules.map(([rule]) => rule.owners.map(resolve));
   const groups = rules.map(([rule, paths], i): OwnerGroup => {
     const ids = new Set(resolved[i].flatMap((r) => r.userIds));
-    const by = approvers.find(([id]) => ids.has(id));
-    return { pattern: rule.pattern, line: rule.line, owners: resolved[i].map((r) => ({ name: r.text, valid: r.valid })), files: paths.slice(0, MAX_SHOWN_FILES), fileCount: paths.length, approvedBy: by ? by[1].name : null };
+    const by = approvers.find((v) => ids.has(v.userId));
+    return { pattern: rule.pattern, line: rule.line, owners: resolved[i].map((r) => ({ name: r.text, valid: r.valid })), files: paths.slice(0, MAX_SHOWN_FILES), fileCount: paths.length, approvedBy: by ? by.username : null };
   });
   return { status: { path: loaded.path, groups, problems: loaded.co.problems, incomplete: false }, resolved };
 }
@@ -144,10 +128,9 @@ export async function requestCodeOwners(repoId: number, number: number) {
   }));
   // Only those newly asked hear about it. CODEOWNERS asks on the author's behalf.
   const asked = [...added.users.map((u) => u.id), ...teamMembers(added.teams.map((t) => t.id))].filter((id) => id !== pr.authorId && !reviewed.has(id));
-  quietly(() => notify(asked, "review_requested", pr.authorId, { repoId, issueNumber: number, title: pr.title }));
+  void sideEffect("Notifying", () => notify(asked, "review_requested", pr.authorId, { repoId, issueNumber: number, title: pr.title }));
 }
 
-// A review by a team member answers the requests made of their teams.
 export function answerTeamRequests(issueId: number, userId: string) {
   const mine = db.select({ id: teamMember.teamId }).from(teamMember).where(eq(teamMember.userId, userId)).all().map((t) => t.id);
   if (mine.length) db.delete(teamReviewRequest).where(and(eq(teamReviewRequest.issueId, issueId), inArray(teamReviewRequest.teamId, mine))).run();

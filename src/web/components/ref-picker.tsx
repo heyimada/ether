@@ -3,16 +3,10 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 import { Command } from "cmdk";
 import { Check, ChevronDown, GitBranch, GitBranchPlus, Tag } from "lucide-react";
 import { useState } from "react";
-import { post, repoApi, type RepoInfo } from "../lib/api";
-import { ErrorNote, useAction } from "./ui";
+import { canWrite, post, repoApi, type RepoInfo } from "../lib/api";
+import { ErrorNote, TAB_BUTTON, useAction } from "./ui";
 
-// The Branches / Tags tabs, shared with the clone box on the repository page.
-export const TAB_BUTTON =
-  "min-h-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-1.5 shadow-none [transition:border-color_220ms_var(--ease-out),background-color_150ms_ease] hover:not-disabled:border-transparent hover:not-disabled:bg-surface-3 active:transform-none aria-selected:border-b-accent aria-selected:font-semibold aria-selected:hover:not-disabled:border-b-accent";
-
-// Branch and tag switcher: a filter field, Branches and Tags tabs, the current ref checked
-// and the default branch marked. Picking a ref opens the same view at that ref. Typing a name that
-// isn't a branch yet offers to create it from the current ref, for anyone who may push.
+// Typing a name that isn't a branch yet offers to create it from the current ref, for anyone who may push.
 export function RefPicker({ info, current, kind }: { info: RepoInfo; current: string; kind: "tree" | "commits" }) {
   const navigate = useNavigate();
   const router = useRouter();
@@ -25,7 +19,7 @@ export function RefPicker({ info, current, kind }: { info: RepoInfo; current: st
   const refs = (tab === "branches" ? branches : info.tags).filter((r) => r.toLowerCase().includes(query.trim().toLowerCase()));
 
   const wanted = query.trim();
-  const canCreate = tab === "branches" && info.role !== "read" && !info.repo.empty && wanted !== "" && !info.branches.includes(wanted);
+  const canCreate = tab === "branches" && canWrite(info.role) && !info.repo.empty && wanted !== "" && !info.branches.includes(wanted);
 
   const pick = (ref: string) => {
     setOpen(false);

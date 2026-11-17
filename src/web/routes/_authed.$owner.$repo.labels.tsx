@@ -2,7 +2,8 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { LabelPill } from "../components/labels";
 import { ErrorNote, Field, onSubmit, useAction } from "../components/ui";
-import { api, del, post, repoApi, type Label } from "../lib/api";
+import { api, canWrite, del, post, repoApi, type Label } from "../lib/api";
+import { LABEL_DESCRIPTION_MAX, LABEL_NAME_MAX } from "../../shared/issues";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/labels")({
   loader: ({ context: { info } }) => api<{ labels: Label[] }>(`${repoApi(info.repo.owner, info.repo.name)}/labels`),
@@ -16,7 +17,7 @@ function Labels() {
   const { info } = Route.useRouteContext();
   const { labels } = Route.useLoaderData();
   const base = `${repoApi(info.repo.owner, info.repo.name)}/labels`;
-  const canEdit = info.role !== "read";
+  const canEdit = canWrite(info.role);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(SUGGESTED[labels.length % SUGGESTED.length]);
@@ -75,10 +76,10 @@ function Labels() {
           <ErrorNote error={create.error} />
           <div className="grid grid-cols-2 gap-x-4 max-sm:grid-cols-1">
             <Field id="label-name" label="Label name">
-              <input id="label-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={50} />
+              <input id="label-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={LABEL_NAME_MAX} />
             </Field>
             <Field id="label-description" label="Description">
-              <input id="label-description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={100} />
+              <input id="label-description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={LABEL_DESCRIPTION_MAX} />
             </Field>
           </div>
           <div className="flex flex-wrap items-center gap-3">

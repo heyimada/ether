@@ -4,8 +4,10 @@ import { ProfileSettings, loadMyProfile } from "../components/profile-settings";
 import { SshKeys, loadSshKeys } from "../components/ssh-keys";
 import { CopyButton, ErrorNote, Field, onSubmit, useAction } from "../components/ui";
 import { ACCENT_PRESETS, DEFAULT_ACCENT, applyAccent, type Theme } from "../lib/accent";
-import { api, del, post, put, timeAgo } from "../lib/api";
+import { api, del, post, put, type RepoRow } from "../lib/api";
+import { timeAgo } from "../lib/format";
 import { requireAccount } from "../lib/require-account";
+import { TOKEN_NAME_MAX } from "../../shared/accounts";
 
 type Token = { id: number; name: string; createdAt: string; lastUsedAt: string | null };
 
@@ -15,7 +17,7 @@ export const Route = createFileRoute("/_authed/settings")({
     const [{ tokens }, profile, { repos }, sshKeys] = await Promise.all([
       api<{ tokens: Token[] }>("/api/tokens"),
       loadMyProfile(),
-      api<{ repos: { owner: string; name: string }[] }>("/api/repos"),
+      api<{ repos: Pick<RepoRow, "owner" | "name">[] }>("/api/repos"),
       loadSshKeys(),
     ]);
     return { tokens, profile, repos: repos.map((r) => `${r.owner}/${r.name}`), sshKeys };
@@ -55,7 +57,7 @@ function Settings() {
       <form className="card body" onSubmit={onSubmit(create.run)}>
         <ErrorNote error={create.error} />
         <Field id="token-name" label="Token name" hint="For example the machine it’s used on.">
-          <input id="token-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={100} />
+          <input id="token-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={TOKEN_NAME_MAX} />
         </Field>
         <button className="primary" disabled={create.pending}>
           Generate token

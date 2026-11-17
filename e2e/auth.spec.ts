@@ -1,5 +1,5 @@
 import { expect, request, test } from "@playwright/test";
-import { baseURL, createRepo, createUser, inviteCode, login, loginAdmin, unique } from "./helpers";
+import { baseURL, createRepo, createUser, inviteCode, login, loginAdmin, originHeaders, unique } from "./helpers";
 
 test("registration requires a valid invite that can be used only once", async () => {
   const admin = await loginAdmin();
@@ -77,7 +77,7 @@ test("logging out invalidates the session", async () => {
   const ctx = await loginAdmin();
   expect((await ctx.get("/api/repos")).status()).toBe(200);
   // Browsers always send Origin on POST; Better Auth refuses cookie-bearing POSTs without it.
-  const out = await ctx.post("/api/auth/sign-out", { data: {}, headers: { Origin: baseURL() } });
+  const out = await ctx.post("/api/auth/sign-out", { data: {}, headers: originHeaders() });
   expect(out.status()).toBe(200);
   expect((await ctx.get("/api/repos")).status()).toBe(401);
 });

@@ -64,7 +64,6 @@ start_once() {
     if ! kill -0 "$PID" 2>/dev/null; then
       cp "$RUN_DIR/server.log" "$RUN_DIR/server-failed-start.log"
       rm -rf "$DATA"
-      grep -q "Malformed OpenSSH private key" "$RUN_DIR/server.log" && return 2
       echo "server exited early; tail of $RUN_DIR/server.log:" >&2
       tail -20 "$RUN_DIR/server.log" >&2
       return 1
@@ -75,25 +74,16 @@ start_once() {
   return 3
 }
 
-for attempt in 1 2; do
-  rc=0
-  start_once || rc=$?
-  if [[ $rc == 0 ]]; then
-    echo "ready: $URL (ssh :$SSH_PORT, pid $PID)" >&2
-    cat "$RUN_DIR/state.env"
-    exit 0
-  fi
-  if [[ $rc == 2 && $attempt == 1 ]]; then
-    # Product bug, not a verification failure: ssh2's generateKeyPairSync("ed25519") sometimes
-    # writes a host key its own parseKey rejects (about 1 in 200 fresh data dirs).
-    echo "WARNING: server crashed on a malformed generated SSH host key (known ssh2 flake, log in $RUN_DIR/server-failed-start.log); retrying with a fresh data dir" >&2
-    continue
-  fi
-  if [[ $rc == 3 ]]; then
-    # The server is still alive but not healthy; stop it so a failed launch leaves nothing running.
-    echo "server did not answer /api/health within 20s; stopping it (logs kept in $RUN_DIR)" >&2
-    "$ROOT/.claude/skills/verify-ether/scripts/cleanup.sh" "$RUN_DIR" >&2
-  fi
-  exit 1
-done
+rc=0
+start_once || rc=$?
+if [[ $rc == 0 ]]; then
+  echo "ready: $URL (ssh :$SSH_PORT, pid $PID)" >&2
+  cat "$RUN_DIR/state.env"
+  exit 0
+fi
+if [[ $rc == 3 ]]; then
+  # The server is still alive but not healthy; stop it so a failed launch leaves nothing running.
+  echo "server did not answer /api/health within 20s; stopping it (logs kept in $RUN_DIR)" >&2
+  "$ROOT/.claude/skills/verify-ether/scripts/cleanup.sh" "$RUN_DIR" >&2
+fi
 exit 1

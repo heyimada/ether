@@ -2,17 +2,16 @@ import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { chownWorkspaceArgs, cli, collect, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, scriptExtension, shellCommand } from "../server/ci-container";
-import { LogMasker } from "../server/log-mask";
+import { chownWorkspaceArgs, cli, collect, containerRuntime, createArgs, DEFAULT_IMAGE, envScript, execArgs, scriptExtension, shellCommand } from "./container";
+import { LogMasker } from "./log-mask";
 import { evalTemplate, fillTemplate, holds, toText, type Context, type Status, type Value } from "./expr";
 import type { JobAssignment, JobChannel, JobResult, RunningJob, Shell } from "./protocol";
 import { parseOutputs, readOutputFile } from "./step-output";
 
 // Runs a job from its assignment: a fresh checkout, then its steps, in a container of its own or on the host.
-// By default each job runs in a container (see ci-container.ts) and sees nothing of the machine. Everything
+// By default each job runs in a container (see container.ts) and sees nothing of the machine. Everything
 // this does on Ether's behalf comes in through the assignment and goes out through the channel.
 
-// The shell a host step runs with when it names none.
 const hostShell = (shell: Shell | null): Shell => shell ?? (Bun.which("bash") ? "bash" : process.platform === "win32" ? "cmd" : "sh");
 
 // Runs a step's script file. Only the path is on the command line, where `ps` would show a secret in the script.
@@ -49,7 +48,21 @@ const removeContainer = (runtime: string, name: string) => Bun.spawn([runtime, "
 // test runner's workers), which would otherwise keep running and hold its output open.
 function killTree(proc: ReturnType<typeof Bun.spawn>) {
   try {
-    if (process.platform !== "win32") return void process.kill(-proc.pid, "SIGKILL");
+    if (process.platform !== "win32") {
+      process.kill(-proc.pid, "SIGKILL");
+      // A process forking just then can leave a child the signal missed, still holding the step's output open; so
+      // the group is killed again until nothing is left in it, for a few seconds at most.
+      const again = (tries: number) => {
+        try {
+          process.kill(-proc.pid, "SIGKILL");
+          if (tries > 0) setTimeout(() => again(tries - 1), 50).unref();
+        } catch {
+          // The group is empty.
+        }
+      };
+      setTimeout(() => again(100), 50).unref();
+      return;
+    }
   } catch {
     // Already gone, or not a group leader (a container CLI): fall through.
   }
@@ -180,7 +193,6 @@ export function startJob(job: JobAssignment, channel: JobChannel, instance: stri
         }
         append(masked(`▶ ${name}\n`));
         const started = Date.now();
-        // Steps write their outputs to this file, a fresh one each, and their script is read from another.
         const tag = `${index}-${randomBytes(6).toString("hex")}`;
         const outputFile = box ? `/tmp/ether-ci-output-${tag}` : join(work!, `output-${tag}`);
         const shell = box ? step.shell : hostShell(step.shell);

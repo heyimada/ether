@@ -98,13 +98,14 @@ test("workflow_dispatch inputs are checked and filled in", () => {
   expect(() => parseOn({ workflow_dispatch: { inputs: { "a-b": {}, a_b: {} } } })).toThrow("both become CI_INPUT_A_B");
 });
 
+// Backtracking takes exponential time, so the bound only has to be far above a loaded machine's noise.
 test("path globs match in linear time, even for patterns built to backtrack", () => {
   const evil = parseOn({ push: { paths: ["**a".repeat(60) + "**b", "**/".repeat(60) + "z"] } });
   const started = performance.now();
   expect(starts(evil, push("main", ["a".repeat(4000), "/".repeat(2000) + "y", `${"x/".repeat(1500)}y`]))).toBe(false);
-  expect(performance.now() - started).toBeLessThan(2000);
+  expect(performance.now() - started).toBeLessThan(10_000);
   expect(starts(evil, push("main", [`${"a".repeat(70)}b`]))).toBe(true);
-});
+}, 20_000);
 
 test("schedule takes a list of crons, and starts the workflow in the minutes one of them names", () => {
   const t = parseOn({ push: null, schedule: [{ cron: "0 3 * * *" }, { cron: " 30 12 * * MON " }] });

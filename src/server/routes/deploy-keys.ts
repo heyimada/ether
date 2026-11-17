@@ -5,7 +5,7 @@ import { db } from "../db/client";
 import { deployKey } from "../db/schema";
 import { keyInUse, keyTitle, parsePublicKey } from "../ssh";
 
-// Like collaborators, only owners see and manage a repository's deploy keys.
+// Unlike the collaborator list, which any reader can see, only owners see and manage a repository's deploy keys.
 export const deployKeyRoutes = new Elysia()
   .get("/repos/:owner/:repo/deploy-keys", async ({ request, params }) => {
     const viewer = await requireUser(request);

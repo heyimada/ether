@@ -23,7 +23,7 @@ Where each user-visible feature lives in the code, and which end-to-end spec cov
 | Feature | What it does | Server | e2e |
 |---|---|---|---|
 | Smart HTTP | Clone, fetch and push, streamed in both directions. | `smart-http.ts`, `routes/git.ts` | `git.spec.ts` |
-| SSH | Public-key login on port 2222, git protocol v2. The host key fingerprint is shown in Settings. | `ssh.ts`, `ssh-relay.ts`, `routes/ssh-keys.ts` | `ssh.spec.ts` |
+| SSH | Public-key login on port 2222, git protocol v2. The host key fingerprint is shown in Settings. | `ssh.ts`, `ssh-relay.ts`, `ssh-keygen.ts`, `routes/ssh-keys.ts` | `ssh.spec.ts` |
 | Deploy keys | SSH keys for one repository, read-only unless writes are allowed. | `routes/deploy-keys.ts` | `ssh.spec.ts` |
 | Protected branches | Rules by name or pattern that block direct pushes, force pushes and deletion. An update hook enforces them, and refuses protected pushes if the check can't run. | `branch-rules.ts`, `protection.ts`, `hooks/update.ts`, `routes/branch-protection.ts` | `protection.spec.ts` |
 | Backup and restore | `bun run ether backup` and `restore`. | `cli.ts`, `backup-copy.ts` | `backup.spec.ts` |
@@ -56,8 +56,8 @@ Where each user-visible feature lives in the code, and which end-to-end spec cov
 | Workflows | `.ether/workflows/*.yml`: triggers, `needs` graph, matrix, `if:`, and `${{ }}` expressions. | `ci-workflow.ts`, `ci-triggers.ts`, `ci-graph.ts`, `src/runner/expr.ts` | `workflows.spec.ts`, `job-graph.spec.ts` |
 | Scheduling and queue | Job queue, `ETHER_CI_JOBS` limit, cancel and re-run. | `ci.ts`, `routes/ci.ts` | `ci.spec.ts` |
 | Cron | `schedule:` triggers in UTC, at most once every 5 minutes. | `cron.ts` | `schedule.spec.ts` |
-| Isolation | A container per job (Docker or Podman), or host mode chosen by an admin. | `ci-container.ts` | `ci-isolation.spec.ts` |
-| Secrets | Encrypted repository and environment secrets, masked in logs. | `ci-secrets.ts`, `secret-box.ts`, `log-mask.ts` | `ci-isolation.spec.ts` |
+| Isolation | A container per job (Docker or Podman), or host mode chosen by an admin. | `src/runner/container.ts` | `ci-isolation.spec.ts` |
+| Secrets | Encrypted repository and environment secrets, masked in logs. | `ci-secrets.ts`, `secret-box.ts`, `src/runner/log-mask.ts` | `ci-isolation.spec.ts` |
 | Pull request checks | The newest run per workflow shows as a check, and **Require passing checks** blocks merges until they pass. | `ci.ts`, `routes/issues.ts` | `ci.spec.ts` |
 | Environments and deployments | Allowed branches, required reviewers, wait timer, secrets and runner labels per environment. | `deploy.ts`, `deploy-rules.ts`, `routes/deployments.ts` | `deployments.spec.ts` |
 | External runners | The `ether-runner` binary, server-wide or scoped to a repository or organization, with labels and `runs-on`. | `src/runner/`, `routes/runners.ts` | `runners.spec.ts` |

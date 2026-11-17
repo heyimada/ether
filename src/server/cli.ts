@@ -2,7 +2,8 @@ import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { copyRepoConsistently, copyTree, listIfPresent } from "./backup-copy";
-import { config } from "./config";
+import { config, DATA, dataPath } from "./config";
+import { MIN_PASSWORD } from "../shared/accounts";
 
 const usage = `Usage:
   bun src/server/cli.ts create-admin <username> --password <password>
@@ -17,13 +18,12 @@ const { positionals, values } = parseArgs({
 });
 
 const [command, arg] = positionals;
-const MIN_PASSWORD = 10;
 
-const DATA_FILES = ["ether.db", "repos", "avatars", "releases", "auth-secret", "ssh_host_ed25519_key"];
+const DATA_FILES = Object.values(DATA);
 
-// Restore never imports the database layer: that would create a fresh ether.db first.
+// Restore never imports the database layer: that would create a fresh database first.
 if (command === "restore") {
-  if (!arg || !existsSync(join(arg, "ether.db"))) throw new Error(`${usage}
+  if (!arg || !existsSync(join(arg, DATA.db))) throw new Error(`${usage}
 
 That folder has no ether.db; point at one snapshot folder made by backup.`);
   if (DATA_FILES.some((f) => existsSync(join(config.dataDir, f))))
@@ -36,7 +36,8 @@ That folder has no ether.db; point at one snapshot folder made by backup.`);
 
 const { eq } = await import("drizzle-orm");
 const { createInvite, findUser, isOrg } = await import("./access");
-const { auth, placeholderEmail } = await import("./auth");
+const { auth } = await import("./auth");
+const { placeholderEmail } = await import("./git");
 const { db } = await import("./db/client");
 const { user } = await import("./db/schema");
 
@@ -79,13 +80,13 @@ switch (command) {
     mkdirSync(dest, { recursive: true });
     // VACUUM INTO gives a consistent snapshot while the server keeps running.
     const { Database } = await import("bun:sqlite");
-    new Database(join(config.dataDir, "ether.db")).exec(`VACUUM INTO '${join(dest, "ether.db").replaceAll("'", "''")}'`);
-    const repos = join(config.dataDir, "repos");
+    new Database(dataPath("db")).exec(`VACUUM INTO '${join(dest, DATA.db).replaceAll("'", "''")}'`);
+    const repos = dataPath("repos");
     for (const owner of listIfPresent(repos) ?? [])
-      for (const repo of listIfPresent(join(repos, owner)) ?? []) copyRepoConsistently(join(repos, owner, repo), join(dest, "repos", owner, repo));
-    for (const extra of ["avatars", "releases"]) copyTree(join(config.dataDir, extra), join(dest, extra));
-    if (existsSync(join(config.dataDir, "ssh_host_ed25519_key"))) cpSync(join(config.dataDir, "ssh_host_ed25519_key"), join(dest, "ssh_host_ed25519_key"));
-    if (existsSync(join(config.dataDir, "auth-secret"))) cpSync(join(config.dataDir, "auth-secret"), join(dest, "auth-secret"));
+      for (const repo of listIfPresent(join(repos, owner)) ?? []) copyRepoConsistently(join(repos, owner, repo), join(dest, DATA.repos, owner, repo));
+    for (const extra of ["avatars", "releases"] as const) copyTree(dataPath(extra), join(dest, DATA[extra]));
+    if (existsSync(dataPath("hostKey"))) cpSync(dataPath("hostKey"), join(dest, DATA.hostKey));
+    if (existsSync(dataPath("authSecret"))) cpSync(dataPath("authSecret"), join(dest, DATA.authSecret));
     else console.warn("No auth-secret file (BETTER_AUTH_SECRET is set in the environment); keep that value with this backup.");
     console.log(`Backed up to ${dest}`);
     break;

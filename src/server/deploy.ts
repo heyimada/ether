@@ -41,7 +41,6 @@ export function setDeployment(jobId: number, set: Partial<typeof deployment.$inf
   db.update(deployment).set(set).where(eq(deployment.jobId, jobId)).run();
 }
 
-// Every unfinished deployment of a run, when the run is cancelled.
 export function cancelDeployments(runId: number) {
   db.update(deployment)
     .set({ status: "cancelled", finishedAt: new Date() })
@@ -63,7 +62,6 @@ const deploymentColumns = {
   actor: user.username,
 };
 
-// Newest first, for one environment or all of a repository's.
 export function listDeployments(repoId: number, environmentId?: number, limit = 50) {
   return db
     .select(deploymentColumns)
@@ -75,7 +73,6 @@ export function listDeployments(repoId: number, environmentId?: number, limit = 
     .all();
 }
 
-// The repository's environments with their rules and, for each, the latest deployment and the latest that succeeded.
 export function environmentsOverview(repoId: number) {
   const envs = db.select().from(environment).where(eq(environment.repoId, repoId)).orderBy(asc(environment.name)).all();
   return envs.map((env) => {
@@ -117,5 +114,4 @@ export function deployedAt(repoId: number, sha: string) {
     .map((e) => ({ environment: e.name, url: e.active!.url, runId: e.active!.runId }));
 }
 
-// The job's environment, for a deploy job.
 export const environmentOfJob = (job: typeof ciJob.$inferSelect, repoId: number) => (job.environment ? findEnvironment(repoId, job.environment) : null);

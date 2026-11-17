@@ -1,8 +1,9 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef, type ReactNode } from "react";
-import { CiBadge, ciDone, EVENT_LABEL, type CiEvent, type CiStatus } from "../components/ci";
+import { CiBadge, ciDone, EVENT_LABEL, type CiRun, type CiStatus } from "../components/ci";
 import { ErrorNote, ROW, useAction } from "../components/ui";
-import { api, post, repoApi, shortSha, timeAgo } from "../lib/api";
+import { api, canWrite, post, repoApi } from "../lib/api";
+import { shortSha, timeAgo } from "../lib/format";
 
 type JobDeployment = {
   environment: string;
@@ -15,21 +16,7 @@ type JobDeployment = {
 };
 type Job = { runner: string | null; runsOn: string[]; runnerProblem: "none" | "offline" | null; id: number; key: string; name: string; needs: string[]; condition: string | null; status: CiStatus; log: string; steps: { name: string }[]; startedAt: string | null; finishedAt: string | null; deployment: JobDeployment | null };
 type RunDetail = {
-  run: {
-    id: number;
-    sha: string;
-    ref: string;
-    refType: "branch" | "tag";
-    workflowName: string;
-    workflowPath: string;
-    event: CiEvent;
-    pullNumber: number | null;
-    inputs: string;
-    status: CiStatus;
-    message: string;
-    subject: string;
-    createdAt: string;
-  };
+  run: CiRun & { inputs: string };
   jobs: Job[];
 };
 
@@ -77,7 +64,7 @@ function RunPage() {
           ← All runs
         </Link>
         <span className="flex-1" />
-        {info.role !== "read" &&
+        {canWrite(info.role) &&
           (ciDone(run.status) ? (
             <button className="small" onClick={() => act.run("rerun")} disabled={act.pending}>
               Re-run
@@ -154,7 +141,6 @@ function waitingFor(job: Job, jobs: Job[]) {
   return `Waiting for ${wanted}…`;
 }
 
-// What a manual run was started with.
 function RunInputs({ inputs }: { inputs: Record<string, string> }) {
   const entries = Object.entries(inputs);
   if (!entries.length) return null;
@@ -170,7 +156,6 @@ function RunInputs({ inputs }: { inputs: Record<string, string> }) {
   );
 }
 
-// Where a deploy job goes and what it waits for; reviewers approve or reject it here.
 function DeploymentNote({ job, deployment: d, base }: { job: Job; deployment: JobDeployment; base: string }) {
   const router = useRouter();
   const review = useAction(async (approve: boolean) => {

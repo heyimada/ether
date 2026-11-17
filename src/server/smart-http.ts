@@ -1,4 +1,4 @@
-import { fixHead } from "./git";
+import { GIT_ENV } from "./git";
 import type { Guard } from "./protection";
 
 export type Service = "git-upload-pack" | "git-receive-pack";
@@ -11,7 +11,6 @@ const noCache = {
   Expires: "Fri, 01 Jan 1980 00:00:00 GMT",
 };
 
-
 function spawnService(service: Service, repo: string, advertise: boolean, guard: Guard = { args: [], env: {} }) {
   const args = [...guard.args, service.slice(4), "--stateless-rpc"];
   if (advertise) args.push("--advertise-refs");
@@ -21,11 +20,10 @@ function spawnService(service: Service, repo: string, advertise: boolean, guard:
     stdout: "pipe",
     stderr: "pipe",
     // Protocol v0/v1 only: the advertisement framing below is the v0 form.
-    env: { ...process.env, ...guard.env, GIT_PROTOCOL: "", GIT_CONFIG_NOSYSTEM: "1" },
+    env: { ...process.env, ...GIT_ENV, ...guard.env, GIT_PROTOCOL: "" },
   });
 }
 
-// GET /info/refs?service=...
 export function advertiseRefs(service: Service, repo: string): Response {
   const proc = spawnService(service, repo, true);
   const header = new TextEncoder().encode(pktLine(`# service=${service}\n`) + "0000");
@@ -42,9 +40,9 @@ export function advertiseRefs(service: Service, repo: string): Response {
   return new Response(body, { headers: { "Content-Type": `application/x-${service}-advertisement`, ...noCache } });
 }
 
-// POST /git-upload-pack and /git-receive-pack. Both directions are streamed: pushes arrive
-// chunked with no Content-Length and can be far larger than memory should hold.
-export function runService(service: Service, repo: string, req: Request, afterPush?: () => Promise<void>, guard?: Guard): Response {
+// Both directions are streamed: pushes arrive chunked with no Content-Length and can be far larger than memory
+// should hold. The response ends after `onExit`, so a client waits for what its push sets off.
+export function runService(service: Service, repo: string, req: Request, guard?: Guard, onExit?: (code: number) => Promise<void>): Response {
   const proc = spawnService(service, repo, false, guard);
   let input = req.body;
   const encoding = req.headers.get("content-encoding")?.toLowerCase();
@@ -67,10 +65,7 @@ export function runService(service: Service, repo: string, req: Request, afterPu
       await pump;
       const code = await proc.exited;
       if (code !== 0) console.error(`${service} exited ${code}: ${(await stderr).trim()}`);
-      if (service === "git-receive-pack") {
-        await fixHead(repo).catch((e) => console.error("fixHead", e));
-        if (code === 0 && afterPush) await afterPush().catch((e) => console.error("afterPush", e));
-      }
+      if (onExit) await onExit(code).catch((e) => console.error(`After ${service}:`, e));
       controller.close();
     },
     cancel() {

@@ -1,6 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { WikiContent, WikiSidebar, type WikiPage } from "../components/wiki";
-import { api, repoApi, timeAgo, type Commit } from "../lib/api";
+import { api, canWrite, repoApi, type Commit } from "../lib/api";
+import { plural, timeAgo } from "../lib/format";
 
 type Page = { slug: string; title: string; content: string; lastEdit: Commit | null; revisions: number; pages: WikiPage[] };
 
@@ -19,7 +20,7 @@ function WikiPageView() {
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="m-0">{page.title}</h2>
           <span className="flex-1" />
-          {info.role !== "read" && (
+          {canWrite(info.role) && (
             <Link to="/$owner/$repo/wiki/$slug/edit" params={params} className="button small">
               Edit page
             </Link>
@@ -32,7 +33,7 @@ function WikiPageView() {
             </>
           )}
           <Link to="/$owner/$repo/wiki/$slug/history" params={params}>
-            {page.revisions} {page.revisions === 1 ? "revision" : "revisions"}
+            {plural(page.revisions, "revision")}
           </Link>
         </p>
         <section className="card">

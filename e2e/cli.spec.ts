@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { baseURL, createUser, loginAdmin, unique } from "./helpers";
+import { baseURL, createUser, loginAdmin, originHeaders, unique } from "./helpers";
 
 const root = join(import.meta.dirname, "..");
 const bin = join(root, "cli", "target", "release", process.platform === "win32" ? "ether.exe" : "ether");
@@ -122,7 +122,7 @@ test("the CLI drives drafts, reviews, stacks and squash merges, and prints shell
   const repo = unique("cli-pr");
   const full = `${me.username}/${repo}`;
   ok(["repo", "create", repo]);
-  await me.ctx.put(`/api/repos/${full}/collaborators/${reviewer.username}`, { data: { role: "write" }, headers: { Origin: baseURL() } });
+  await me.ctx.put(`/api/repos/${full}/collaborators/${reviewer.username}`, { data: { role: "write" }, headers: originHeaders() });
   const work = mkdtempSync(join(tmpdir(), "ether-cli-work-"));
   ok(["repo", "clone", full, "w"], { cwd: work });
   const dir = join(work, "w");
@@ -165,9 +165,9 @@ test("the CLI drives drafts, reviews, stacks and squash merges, and prints shell
   expect(again.split(reviewer.username).length - 1).toBe(1);
   // Someone asked who has since lost access doesn't block changing the list.
   const gone = await createUser(admin);
-  await me.ctx.put(`/api/repos/${full}/collaborators/${gone.username}`, { data: { role: "write" }, headers: { Origin: baseURL() } });
+  await me.ctx.put(`/api/repos/${full}/collaborators/${gone.username}`, { data: { role: "write" }, headers: originHeaders() });
   ok(["pr", "edit", "1", "--add-reviewer", gone.username], { cwd: dir });
-  await me.ctx.delete(`/api/repos/${full}/collaborators/${gone.username}`, { headers: { Origin: baseURL() } });
+  await me.ctx.delete(`/api/repos/${full}/collaborators/${gone.username}`, { headers: originHeaders() });
   ok(["pr", "edit", "1", "--remove-reviewer", reviewer.username], { cwd: dir });
   expect(ok(["pr", "view", "1"], { cwd: dir })).not.toContain(gone.username);
 

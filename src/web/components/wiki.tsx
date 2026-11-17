@@ -1,18 +1,11 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { put, repoApi, type RepoInfo } from "../lib/api";
+import { canWrite, put, repoApi, type RepoInfo } from "../lib/api";
 import { Markdown } from "./content";
 import { ErrorNote, Field, onSubmit, useAction } from "./ui";
+import { titleToSlug, WIKI_MESSAGE_MAX, WIKI_TITLE_MAX } from "../../shared/repos";
 
 export type WikiPage = { slug: string; title: string };
-
-export const titleToSlug = (title: string) =>
-  title
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^A-Za-z0-9._-]/g, "")
-    .replace(/^[._-]+/, "")
-    .slice(0, 100);
 
 // [[Page]] and [[text|Page]] become links; missing pages link to creating them.
 function linkWikiPages(source: string, info: RepoInfo, pages: WikiPage[]) {
@@ -48,7 +41,7 @@ export function WikiSidebar({ info, pages, current }: { info: RepoInfo; pages: W
             </li>
           ))}
         </ul>
-        {info.role !== "read" && (
+        {canWrite(info.role) && (
           <Link to="/$owner/$repo/wiki/new" params={params} search={{}} className="button small mt-3">
             New page
           </Link>
@@ -80,13 +73,13 @@ export function WikiEditor({ info, slug, initial }: { info: RepoInfo; slug?: str
     <form className="card body stack-md" onSubmit={onSubmit(save.run)}>
       <ErrorNote error={save.error} />
       <Field id="wiki-title" label="Page title">
-        <input id="wiki-title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={100} />
+        <input id="wiki-title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={WIKI_TITLE_MAX} />
       </Field>
       <Field id="wiki-content" label="Content" hint="Markdown. Link other pages with [[Page title]].">
         <textarea id="wiki-content" value={content} onChange={(e) => setContent(e.target.value)} className="font-mono min-h-[320px]" />
       </Field>
       <Field id="wiki-message" label="Edit message" hint="Optional: what changed.">
-        <input id="wiki-message" value={message} onChange={(e) => setMessage(e.target.value)} maxLength={200} />
+        <input id="wiki-message" value={message} onChange={(e) => setMessage(e.target.value)} maxLength={WIKI_MESSAGE_MAX} />
       </Field>
       <div>
         <button className="primary" disabled={save.pending}>

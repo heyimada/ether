@@ -110,7 +110,6 @@ Stops our PID (TERM, then KILL after 10 s), removes Docker/Podman containers lab
 
 ## Gotchas
 
-- **SSH host key flake (product bug).** On a fresh data dir, ssh2's `generateKeyPairSync("ed25519")` sometimes writes a host key that its own `parseKey` rejects (about 1 in 200), and the server dies with `Cannot parse privateKey: Malformed OpenSSH private key` at `src/server/ssh.ts`. `launch.sh` retries once with a new data dir and prints a WARNING; the failed log is kept as `server-failed-start.log`.
 - Mutating API calls need an `Origin` header matching the server; `api()` sets it.
 - A stale `dist/` serves an old UI against new server code. Launch without `--no-build` unless you're sure.
 - Names created by journeys use `unique()` so reruns against the same instance don't collide; lists and counters therefore include earlier runs' items. Scope assertions to the row or item you created.

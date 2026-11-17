@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { startJob } from "./execute";
 import type { JobAssignment, RunnerStep } from "./protocol";
 
@@ -50,7 +50,6 @@ test("a job runs its steps in a checkout of its commit, with the run's variables
   expect(log).toContain("first.txt");
   expect(log).not.toContain("second.txt");
   expect(log).toContain("true/uno/dos");
-  // env is the step's own.
   expect(log).toContain("second step: .");
 });
 
@@ -80,12 +79,32 @@ test("stopping a job ends what its step started", async () => {
   let log = "";
   const started = Date.now();
   const job = startJob(assignment([step("echo started; sleep 60 & wait"), step("echo never")]), { log: (t) => void (log += t) }, "test");
-  while (!log.includes("started")) await Bun.sleep(20);
+  // The step's own output line, not the "▶ echo started" line printed before it spawns.
+  while (!/^started$/m.test(log)) {
+    if (Date.now() - started > 20_000) throw new Error(`step never started:\n${log}`);
+    await Bun.sleep(20);
+  }
   job.stop();
   expect(await job.done).toBe("cancelled");
   expect(Date.now() - started).toBeLessThan(30_000);
   expect(log).not.toContain("▶ echo never");
-});
+}, 45_000);
+
+// Stopping a step whose shell is forking at that moment must still end the child: the group is killed until it's
+// empty. Without that, some of these stops leave the sleep holding the step's output open for a minute.
+test("stopping a job ends its step's children every time, also mid-fork", async () => {
+  for (let i = 0; i < 25; i++) {
+    let log = "";
+    const job = startJob(assignment([step("echo started; sleep 60 & wait")]), { log: (t) => void (log += t) }, "test");
+    const started = Date.now();
+    while (!/^started$/m.test(log)) {
+      if (Date.now() - started > 20_000) throw new Error(`step never started:\n${log}`);
+      await Bun.sleep(5);
+    }
+    job.stop();
+    expect(await Promise.race([job.done, Bun.sleep(5_000).then(() => `still running after stop (try ${i + 1})`)])).toBe("cancelled");
+  }
+}, 120_000);
 
 test("a job stopped during its checkout ends there", async () => {
   let log = "";
@@ -159,11 +178,20 @@ test("a step that runs out of time fails the job", async () => {
   expect(log).toContain("Timed out");
 });
 
-test("the runner stands on its own: it reaches into the server only for the pure modules it shares", () => {
-  const shared = new Set(["../server/ci-container", "../server/log-mask"]);
-  for (const file of readdirSync(import.meta.dirname).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))) {
-    const source = readFileSync(join(import.meta.dirname, file), "utf8");
-    for (const [, from] of source.matchAll(/from "([^"]+)"/g)) expect(from.startsWith("node:") || from.startsWith("./") || shared.has(from), `${file} imports ${from}`).toBe(true);
-  }
-  for (const file of shared) expect(readFileSync(join(import.meta.dirname, `${file}.ts`), "utf8")).not.toMatch(/^import /m);
+// ether-runner is compiled on its own and runs on other machines, so nothing it loads may come from the server.
+test("the runner stands on its own: everything it loads is in src/runner or built in", () => {
+  const transpiler = new Bun.Transpiler({ loader: "ts" });
+  const seen = new Set<string>();
+  const visit = (file: string) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    for (const { path } of transpiler.scanImports(readFileSync(file, "utf8").replace(/^#!.*/, ""))) {
+      if (path.startsWith("node:") || path === "bun") continue;
+      const target = Bun.resolveSync(path, dirname(file));
+      expect(target.startsWith(import.meta.dirname + "/"), `${file} loads ${path}`).toBe(true);
+      visit(target);
+    }
+  };
+  visit(join(import.meta.dirname, "main.ts"));
+  expect(seen.size).toBeGreaterThan(3);
 });

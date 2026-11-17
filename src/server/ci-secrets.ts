@@ -1,11 +1,21 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
+import { HttpError } from "./access";
 import { authSecret } from "./auth";
 import { db } from "./db/client";
 import { ciSecret, environmentSecret, user } from "./db/schema";
 import { deriveKey, open, seal } from "./secret-box";
 
-export { SECRET_NAME_RE } from "./ci-workflow";
-export const MAX_SECRET = 64 * 1024;
+import { SECRET_NAME_RE } from "./ci-workflow";
+import { MAX_SECRET, SECRET_MAX_KB } from "../shared/ci";
+
+
+export function secretValue(name: string, body: unknown): string {
+  if (!SECRET_NAME_RE.test(name)) throw new HttpError(400, "Secret names are upper-case letters, digits and _, not starting with a digit, and not CI or CI_…");
+  const value = (body as { value?: unknown } | undefined)?.value;
+  if (typeof value !== "string" || value.length === 0) throw new HttpError(400, "Enter a value");
+  if (value.length > MAX_SECRET) throw new HttpError(413, `Secrets can be at most ${SECRET_MAX_KB} KB`);
+  return value;
+}
 
 let key: Buffer | null = null;
 const secretKey = () => (key ??= deriveKey(authSecret(), "ci secrets"));
@@ -67,8 +77,8 @@ export function deleteEnvironmentSecret(environmentId: number, name: string): bo
   return true;
 }
 
-// The values a job asks for, or a message saying which one can't be provided. A deploy job looks in its
-// environment first, then in the repository.
+// Throws naming a secret that isn't set or can't be decrypted. A deploy job looks in its environment first,
+// then in the repository.
 export function loadSecrets(repoId: number, names: string[], environmentId: number | null = null): Map<string, string> {
   if (!names.length) return new Map();
   const repoRows = db.select().from(ciSecret).where(and(eq(ciSecret.repoId, repoId), inArray(ciSecret.name, names))).all();

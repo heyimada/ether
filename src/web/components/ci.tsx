@@ -1,3 +1,4 @@
+import type { EventName } from "../../server/ci-triggers";
 import { CircleCheck, CircleDashed, CircleMinus, CircleSlash, CircleX, Hourglass, LoaderCircle } from "lucide-react";
 
 export type CiStatus = "queued" | "waiting" | "running" | "success" | "failure" | "cancelled" | "error" | "skipped";
@@ -28,5 +29,20 @@ export function CiBadge({ status }: { status: CiStatus }) {
 // Waiting runs (a deployment waits for a reviewer or a timer) aren't done, but may stay that way for a long time.
 export const ciDone = (s: CiStatus) => s !== "queued" && s !== "running" && s !== "waiting";
 
-export type CiEvent = "push" | "pull_request" | "workflow_dispatch" | "schedule";
+export type CiEvent = EventName;
+
+export type CiRun = {
+  id: number;
+  sha: string;
+  ref: string;
+  refType: "branch" | "tag";
+  workflowName: string;
+  workflowPath: string;
+  event: CiEvent;
+  pullNumber: number | null;
+  status: CiStatus;
+  message: string;
+  subject: string;
+  createdAt: string;
+};
 export const EVENT_LABEL: Record<CiEvent, string> = { push: "push", pull_request: "pull request", workflow_dispatch: "manual", schedule: "scheduled" };

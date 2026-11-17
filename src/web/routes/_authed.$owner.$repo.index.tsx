@@ -2,8 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ActivityStrip, CommitSparkline, Contributors, LanguageBar, RecentCommits, loadActivity, loadLanguages, loadRecentCommits } from "../components/activity";
 import { QuickSetup, TreeView, loadTree } from "../components/code-browser";
 import { DeploymentsSide, type EnvironmentInfo } from "../components/environments";
-import type { Release } from "../components/releases";
-import { api, repoApi } from "../lib/api";
+import { api, repoApi, type Release } from "../lib/api";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/")({
   loader: async ({ context: { info } }) => {

@@ -1,6 +1,6 @@
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import type { WikiPage } from "../components/wiki";
-import { api, repoApi } from "../lib/api";
+import { api, canWrite, repoApi } from "../lib/api";
 
 export const Route = createFileRoute("/_authed/$owner/$repo/wiki/")({
   loader: async ({ context: { info }, params }) => {
@@ -18,7 +18,7 @@ function EmptyWiki() {
     <section className="card empty stack-sm items-center">
       <strong>This wiki has no pages yet.</strong>
       <span className="text-muted">Wikis hold longer documentation: guides, decisions, how-tos.</span>
-      {info.role !== "read" && (
+      {canWrite(info.role) && (
         <Link to="/$owner/$repo/wiki/new" params={{ owner: info.repo.owner, repo: info.repo.name }} search={{ title: "Home" }} className="button primary">
           Create the first page
         </Link>

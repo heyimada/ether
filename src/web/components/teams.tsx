@@ -2,6 +2,7 @@ import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { del, post, put } from "../lib/api";
 import { Avatar, ErrorNote, Field, onSubmit, ROW, useAction } from "./ui";
+import { NAME_MAX } from "../../shared/accounts";
 
 export type Team = { name: string; description: string; members: string[]; repos: { name: string; role: "read" | "write" }[] };
 
@@ -29,7 +30,7 @@ export function Teams({ org, teams, repos }: { org: string; teams: Team[]; repos
         <form className="flex flex-wrap items-end gap-3" onSubmit={onSubmit(create.run)}>
           <ErrorNote error={create.error} />
           <Field id="team-name" label="Team name">
-            <input id="team-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={39} pattern="[A-Za-z0-9][A-Za-z0-9\-]{0,38}" />
+            <input id="team-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={NAME_MAX} pattern="[A-Za-z0-9][A-Za-z0-9\-]{0,38}" />
           </Field>
           <button className="mb-4" disabled={create.pending}>
             Create team

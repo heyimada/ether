@@ -1,9 +1,7 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, uiLogin, unique, workdir } from "./helpers";
-
-const headers = () => ({ Origin: baseURL() });
+import { baseURL, cloneUrl, createRepo, createUser, gitOk, loginAdmin, originHeaders, uiLogin, unique, workdir } from "./helpers";
 
 type N = { id: number; reason: string; issueNumber: number | null; actor: string | null; excerpt: string; read: boolean; title: string };
 const inbox = async (ctx: APIRequestContext, all = false): Promise<{ notifications: N[]; unread: number }> =>
@@ -18,25 +16,25 @@ test("people hear about mentions, comments, review requests, reviews, merges and
   const outsider = await createUser(admin);
   const repo = await createRepo(owner.ctx, unique("inbox"));
   const api = `/api/repos/${owner.username}/${repo}`;
-  await owner.ctx.put(`${api}/collaborators/${dev.username}`, { data: { role: "write" }, headers: headers() });
-  await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: headers() });
+  await owner.ctx.put(`${api}/collaborators/${dev.username}`, { data: { role: "write" }, headers: originHeaders() });
+  await owner.ctx.put(`${api}/collaborators/${reader.username}`, { data: { role: "read" }, headers: originHeaders() });
 
   // A mention reaches people who can read the repository, not outsiders, and not inside code.
   const body = `@${dev.username} can you look? cc @${outsider.username}, and not \`@${reader.username}\``;
-  const { issue } = await (await owner.ctx.post(`${api}/issues`, { data: { title: "Broken build", body }, headers: headers() })).json();
+  const { issue } = await (await owner.ctx.post(`${api}/issues`, { data: { title: "Broken build", body }, headers: originHeaders() })).json();
   expect(await reasons(dev.ctx)).toEqual([["mention", issue.number]]);
   expect(await reasons(outsider.ctx)).toEqual([]);
   expect(await reasons(reader.ctx)).toEqual([]);
 
   // Comments reach the participants, not the commenter; a second one updates the same unread entry.
-  await reader.ctx.post(`${api}/issues/${issue.number}/comments`, { data: { body: "Same here." }, headers: headers() });
-  await reader.ctx.post(`${api}/issues/${issue.number}/comments`, { data: { body: "Still broken on main." }, headers: headers() });
+  await reader.ctx.post(`${api}/issues/${issue.number}/comments`, { data: { body: "Same here." }, headers: originHeaders() });
+  await reader.ctx.post(`${api}/issues/${issue.number}/comments`, { data: { body: "Still broken on main." }, headers: originHeaders() });
   const ownerInbox = await inbox(owner.ctx);
   expect(ownerInbox.notifications.map((n) => [n.reason, n.actor, n.excerpt])).toEqual([["comment", reader.username, "Still broken on main."]]);
   expect(await reasons(reader.ctx)).toEqual([]);
 
   // Assigning someone tells them.
-  await owner.ctx.put(`${api}/issues/${issue.number}/assignees`, { data: { assignees: [reader.username] }, headers: headers() });
+  await owner.ctx.put(`${api}/issues/${issue.number}/assignees`, { data: { assignees: [reader.username] }, headers: originHeaders() });
   expect(await reasons(reader.ctx)).toEqual([["assigned", issue.number]]);
 
   // The bell shows the count; opening the issue from the inbox reads it.
@@ -61,40 +59,40 @@ test("people hear about mentions, comments, review requests, reviews, merges and
   writeFileSync(join(src, "a.txt"), "b\n");
   gitOk(src, ["commit", "-qam", "fix"]);
   gitOk(src, ["push", "-q", cloneUrl(owner.username, repo), "main", "fix"], { username: owner.username, token: owner.token });
-  const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "Fix build", body: "", base: "main", head: "fix" }, headers: headers() })).json();
-  await owner.ctx.put(`${api}/pulls/${pull.number}/reviewers`, { data: { reviewers: [dev.username] }, headers: headers() });
+  const { pull } = await (await owner.ctx.post(`${api}/pulls`, { data: { title: "Fix build", body: "", base: "main", head: "fix" }, headers: originHeaders() })).json();
+  await owner.ctx.put(`${api}/pulls/${pull.number}/reviewers`, { data: { reviewers: [dev.username] }, headers: originHeaders() });
   // Asking again doesn't add another.
-  await owner.ctx.put(`${api}/pulls/${pull.number}/reviewers`, { data: { reviewers: [dev.username] }, headers: headers() });
+  await owner.ctx.put(`${api}/pulls/${pull.number}/reviewers`, { data: { reviewers: [dev.username] }, headers: originHeaders() });
   expect(await reasons(dev.ctx)).toEqual([["review_requested", pull.number]]);
-  await dev.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "approved", body: "Looks good" }, headers: headers() });
+  await dev.ctx.post(`${api}/pulls/${pull.number}/reviews`, { data: { state: "approved", body: "Looks good" }, headers: originHeaders() });
   expect((await reasons(owner.ctx))[0]).toEqual(["review", pull.number]);
-  await owner.ctx.post(`${api}/pulls/${pull.number}/merge`, { headers: headers() });
+  await owner.ctx.post(`${api}/pulls/${pull.number}/merge`, { headers: originHeaders() });
   expect((await reasons(dev.ctx)).filter(([r]) => r === "merged")).toEqual([["merged", pull.number]]);
 
   // Read, unread again, and mark all read; nobody can touch someone else's.
   const [first] = (await inbox(owner.ctx)).notifications;
-  expect((await owner.ctx.patch(`/api/me/notifications/${first.id}`, { data: { read: true }, headers: headers() })).ok()).toBe(true);
-  expect((await dev.ctx.patch(`/api/me/notifications/${first.id}`, { data: { read: false }, headers: headers() })).status()).toBe(404);
-  expect((await owner.ctx.patch(`/api/me/notifications/${first.id}`, { data: { read: false }, headers: headers() })).ok()).toBe(true);
+  expect((await owner.ctx.patch(`/api/me/notifications/${first.id}`, { data: { read: true }, headers: originHeaders() })).ok()).toBe(true);
+  expect((await dev.ctx.patch(`/api/me/notifications/${first.id}`, { data: { read: false }, headers: originHeaders() })).status()).toBe(404);
+  expect((await owner.ctx.patch(`/api/me/notifications/${first.id}`, { data: { read: false }, headers: originHeaders() })).ok()).toBe(true);
   expect((await inbox(owner.ctx)).notifications.some((n) => n.id === first.id)).toBe(true);
   // Marking an older entry of a thread unread while a newer one is unread keeps one entry for the thread.
-  await owner.ctx.patch(`/api/me/notifications/${first.id}`, { data: { read: true }, headers: headers() });
-  await dev.ctx.post(`${api}/issues/${pull.number}/comments`, { data: { body: "One more thing." }, headers: headers() });
-  await dev.ctx.post(`${api}/issues/${pull.number}/comments`, { data: { body: "And another." }, headers: headers() });
+  await owner.ctx.patch(`/api/me/notifications/${first.id}`, { data: { read: true }, headers: originHeaders() });
+  await dev.ctx.post(`${api}/issues/${pull.number}/comments`, { data: { body: "One more thing." }, headers: originHeaders() });
+  await dev.ctx.post(`${api}/issues/${pull.number}/comments`, { data: { body: "And another." }, headers: originHeaders() });
   const comments = async () => (await inbox(owner.ctx, true)).notifications.filter((n) => n.reason === "comment" && n.issueNumber === pull.number);
   const [newer] = (await comments()).filter((n) => !n.read);
-  await owner.ctx.patch(`/api/me/notifications/${newer.id}`, { data: { read: true }, headers: headers() });
-  await dev.ctx.post(`${api}/issues/${pull.number}/comments`, { data: { body: "Last one." }, headers: headers() });
+  await owner.ctx.patch(`/api/me/notifications/${newer.id}`, { data: { read: true }, headers: originHeaders() });
+  await dev.ctx.post(`${api}/issues/${pull.number}/comments`, { data: { body: "Last one." }, headers: originHeaders() });
   const [latest] = (await comments()).filter((n) => !n.read);
-  await owner.ctx.patch(`/api/me/notifications/${newer.id}`, { data: { read: false }, headers: headers() });
+  await owner.ctx.patch(`/api/me/notifications/${newer.id}`, { data: { read: false }, headers: originHeaders() });
   const unreadComments = (await comments()).filter((n) => !n.read);
   expect(unreadComments.map((n) => [n.id, n.excerpt])).toEqual([[newer.id, latest.excerpt]]);
-  await owner.ctx.post("/api/me/notifications/read", { headers: headers() });
+  await owner.ctx.post("/api/me/notifications/read", { headers: originHeaders() });
   expect((await inbox(owner.ctx)).unread).toBe(0);
   expect((await inbox(owner.ctx, true)).notifications.length).toBeGreaterThan(0);
 
   // Losing access hides what's there.
-  await owner.ctx.delete(`${api}/collaborators/${reader.username}`, { headers: headers() });
+  await owner.ctx.delete(`${api}/collaborators/${reader.username}`, { headers: originHeaders() });
   expect(await inbox(reader.ctx, true)).toEqual({ notifications: [], unread: 0, next: null });
 });
 
@@ -103,15 +101,15 @@ test("a team mention at the end of a sentence reaches its members, and the bell 
   const founder = await createUser(admin);
   const member = await createUser(admin);
   const org = unique("ping").slice(0, 30);
-  await founder.ctx.post("/api/orgs", { data: { name: org }, headers: headers() });
-  await founder.ctx.put(`/api/orgs/${org}/members/${member.username}`, { data: { role: "member" }, headers: headers() });
-  await founder.ctx.post(`/api/orgs/${org}/teams`, { data: { name: "devs" }, headers: headers() });
-  await founder.ctx.put(`/api/orgs/${org}/teams/devs/members/${member.username}`, { headers: headers() });
+  await founder.ctx.post("/api/orgs", { data: { name: org }, headers: originHeaders() });
+  await founder.ctx.put(`/api/orgs/${org}/members/${member.username}`, { data: { role: "member" }, headers: originHeaders() });
+  await founder.ctx.post(`/api/orgs/${org}/teams`, { data: { name: "devs" }, headers: originHeaders() });
+  await founder.ctx.put(`/api/orgs/${org}/teams/devs/members/${member.username}`, { headers: originHeaders() });
   const repo = unique("team");
-  await founder.ctx.post("/api/repos", { data: { name: repo, owner: org }, headers: headers() });
+  await founder.ctx.post("/api/repos", { data: { name: repo, owner: org }, headers: originHeaders() });
   const api = `/api/repos/${org}/${repo}`;
   for (const n of [1, 2])
-    await founder.ctx.post(`${api}/issues`, { data: { title: `Ping ${n}`, body: `Thoughts, @${org}/devs.` }, headers: headers() });
+    await founder.ctx.post(`${api}/issues`, { data: { title: `Ping ${n}`, body: `Thoughts, @${org}/devs.` }, headers: originHeaders() });
   expect((await inbox(member.ctx)).unread).toBe(2);
 
   await uiLogin(page, member.username, member.password);
