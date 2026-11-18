@@ -1,6 +1,7 @@
 # Changes to these paths need an approval from a maintainer other than the author, even when the review App would
-# otherwise approve. Keep in sync with SENSITIVE in .github/review/config.ts. CODEOWNERS matching is case-sensitive,
-# so the agent files are listed in their usual spelling; config.ts also catches other spellings.
+# otherwise approve. Keep in sync with "sensitive" in .github/review.json; the Review config check in CI fails on a
+# sensitive path no entry here covers. CODEOWNERS matching is case-sensitive, so the agent files are listed in their usual spelling; the
+# review also catches other spellings.
 /.github/ @heyimada @JustKatze
 CLAUDE.md @heyimada @JustKatze
 AGENTS.md @heyimada @JustKatze

@@ -1,12 +1,9 @@
 name: Merge gate
 
-# Posts the "Review gate" check run (as the review App) with its decision for the pull request's head commit. When the
-# change qualifies, the App approves that commit and enables auto-merge; otherwise a person has to approve. Runs gate.ts
-# from main and never checks out the pull request's code.
-#
-# Re-runs when the pull request changes, and through workflow_run when a review, CI or a human review finishes.
-# workflow_run always runs from main with secrets, also for forks, and carries no pull request for them, so gate.ts
-# finds the pull request by head commit.
+# Posts the "Review gate" check run (as the review App) with its decision for the pull request's head commit, through
+# the shared engine in heyimada/review. When the change qualifies, the App approves that commit and enables auto-merge;
+# otherwise a person has to approve. Never checks out the pull request's code. Re-runs when the pull request changes,
+# and through workflow_run when a review, CI or a human review finishes.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
@@ -23,48 +20,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
-env:
-  BUN_VERSION: 1.4.0
-
 jobs:
   gate:
-    name: Gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment: review
+    uses: heyimada/review/.github/workflows/gate.yml@3ad7182dc644e6a59efa8e1042a42b61f48624de # main
     permissions:
       contents: read
       pull-requests: read
       checks: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-      # Pinned because later steps in this job hold the App key or the Claude token; Dependabot bumps it.
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      # Pinned because this step holds the App's private key; Dependabot bumps it.
-      - id: app
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
-          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
-          permission-checks: write
-          # Approving, enabling auto-merge and merging. Merges by the App start the push CI on main, unlike GITHUB_TOKEN's.
-          permission-pull-requests: write
-          permission-contents: write
-      # gate.ts only uses Bun built-ins, so there is nothing to install.
-      - run: |
-          if [ -n "$PR" ]; then
-            bun .github/review/gate.ts --pr "$PR"
-          else
-            bun .github/review/gate.ts --sha "$SHA"
-          fi
-        env:
-          PR: ${{ github.event.pull_request.number }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
-          GITHUB_TOKEN: ${{ github.token }}
-          REVIEW_APP_TOKEN: ${{ steps.app.outputs.token }}
-          REVIEW_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+      id-token: write

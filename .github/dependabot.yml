@@ -19,3 +19,7 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    groups:
+      # The review, gate, fix and config check callers pin one engine commit; they move together.
+      review-engine:
+        patterns: ["heyimada/review*"]
