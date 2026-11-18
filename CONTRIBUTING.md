@@ -19,6 +19,7 @@ You need:
 - Git
 - An OpenSSH client (`ssh`, `ssh-keygen`) for the SSH tests
 - A Rust toolchain ([rustup](https://rustup.rs)), only if you work on `cli/` or run the full e2e suite
+- Optionally, [kache](https://github.com/kunobi-ninja/kache) for faster Rust rebuilds, the same compiler cache CI uses: `cargo install kache --locked --version 2.1.1 && kache init`
 
 ```sh
 git clone https://github.com/heyimada/ether.git
