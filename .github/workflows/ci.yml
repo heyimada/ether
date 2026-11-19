@@ -45,9 +45,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      # Sets kache as RUSTC_WRAPPER and keeps its store in the GitHub Actions cache. Only main saves, so pull requests
+      # restore main's cache without filling the 10 GB quota with one entry per branch.
+      - uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
         with:
-          workspaces: cli
+          version: v2.1.1
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
@@ -64,9 +67,12 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       # e2e/cli.spec.ts builds the Rust client.
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      # Sets kache as RUSTC_WRAPPER and keeps its store in the GitHub Actions cache. Only main saves, so pull requests
+      # restore main's cache without filling the 10 GB quota with one entry per branch.
+      - uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
         with:
-          workspaces: cli
+          version: v2.1.1
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
       - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps chromium
       - run: bun run test:e2e
