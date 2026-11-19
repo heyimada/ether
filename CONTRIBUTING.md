@@ -49,7 +49,7 @@ Open http://localhost:5173 and sign in. Your development data lives in `./data` 
 | `e2e/` | Playwright end-to-end tests against a real server |
 | `scripts/` | Deployment helpers and the Better Auth schema generator config |
 | `docs/` | [FEATURES.md](docs/FEATURES.md), a map from each feature to its code and tests |
-| `.github/review/` | The automated review, `/fix` and merge gate described below |
+| `.github/review.json` | Settings for the automated review, `/fix` and merge gate described below |
 
 Indent with 2 spaces, or 4 in Rust (see `.editorconfig`).
 
@@ -88,7 +88,7 @@ cargo build --locked
 
 ```sh
 bun run typecheck
-bun run test                      # unit tests next to the code (src/ and .github/review/)
+bun run test                      # unit tests next to the code in src/
 bunx playwright install chromium  # once
 bun run test:e2e                  # builds, boots a throwaway server, drives git and Chromium
 bun run test:e2e -- e2e/git.spec.ts   # one file
@@ -113,7 +113,7 @@ New behavior needs an e2e test. Write it the way the existing specs read: one us
 
 ### Automated review
 
-Pull requests from collaborators with write access also get an automated review, posted by the review GitHub App. Its code lives in `.github/review/`. Two reviews, one for bugs and then one for security, run when the pull request is opened, reopened or marked ready for review, and on every push. Draft pull requests aren't reviewed. Several agents look for problems, and a separate group checks each one. A finding is posted only when they agree it is real. Findings are inline comments tagged **Important**, **Nit** or **Pre-existing**. Style and cleanup remarks are never posted. When a review posts an **Important** finding, the App requests changes. The merge gate dismisses that request once every finding is resolved. Resolving a thread doesn't start the gate, so if you resolve the last finding after everything else is done, re-run the **Merge gate** workflow or have a maintainer dismiss the App's review.
+Pull requests from collaborators with write access also get an automated review, posted by the review GitHub App. Its code lives in [heyimada/review](https://github.com/heyimada/review), shared with other repositories, and its settings for Ether in `.github/review.json`. Two reviews, one for bugs and then one for security, run when the pull request is opened, reopened or marked ready for review, and on every push. Draft pull requests aren't reviewed. Several agents look for problems, and a separate group checks each one. A finding is posted only when they agree it is real. Findings are inline comments tagged **Important**, **Nit** or **Pre-existing**. Style and cleanup remarks are never posted. When a review posts an **Important** finding, the App requests changes. The merge gate dismisses that request once every finding is resolved. Resolving a thread doesn't start the gate, so if you resolve the last finding after everything else is done, re-run the **Merge gate** workflow or have a maintainer dismiss the App's review.
 
 Answer every finding. Either fix it, or resolve the thread with a short reply that says why it isn't a problem. When a later commit fixes a finding, the review resolves the thread itself. A finding resolved by a person instead means a maintainer has to approve the pull request. From the third round on, only the commits since the last review are checked, and from the fourth round on only **Important** findings are posted.
 

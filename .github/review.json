@@ -1,0 +1,41 @@
+{
+  "project": "Ether, a self-hosted git server: a Bun + Elysia server (src/server/), a TanStack Start web app (src/web/), a Rust CLI (cli/) and Playwright e2e tests (e2e/). CONTRIBUTING.md describes the layout and conventions.",
+  "botLogin": "ether-review[bot]",
+  "markerTag": "ether-review",
+  "reportOnly": false,
+  "checks": "the typecheck, unit tests, cargo clippy or the e2e suite",
+  "focus": {
+    "correctness": "Logic errors: wrong conditions, off-by-one, wrong results, unhandled failures, data that is lost or corrupted.",
+    "lifecycle": "Lifecycle and concurrency: processes, streams, sockets, file handles, transactions or timers left open (especially when a client disconnects or a request aborts), races, ordering, cleanup on error paths.",
+    "contracts": "Broken contracts between modules: callers and callees that disagree, changed API or response shapes, a schema change without a migration, a stale src/web/routeTree.gen.ts, invariants one module relies on that another breaks.",
+    "security": "Security: access control that skips src/server/access.ts or shows data the viewer can't read, authentication and session handling, git smart HTTP and SSH handling, path traversal, injection, SSRF, secrets in logs or responses."
+  },
+  "eligibility": {
+    "storedData": "database, repositories on disk, config files",
+    "interfaces": "HTTP routes, the git and SSH protocols, the CLI's commands, flags and output, and the web app's URLs",
+    "alwaysNotLow": "how requests are authenticated or authorized, permissions and branch protection, git or SSH handling (including push hooks and what a push may change), how user input reaches the shell, git, the filesystem or SQL, how untrusted content is rendered as HTML (sanitizing, dangerouslySetInnerHTML), security headers and CSP, secrets, rate limits or resource limits"
+  },
+  "lowRisk": ["**/*.md", "LICENSE", "design/**"],
+  "sensitive": [
+    "src/runner/container.ts",
+    "src/server/ci-secrets.ts",
+    "src/server/secret-box.ts",
+    "src/runner/log-mask.ts",
+    "src/server/access.ts",
+    "src/server/auth.ts",
+    "src/server/auth-plugins.ts",
+    "src/server/ssh.ts",
+    "src/server/ssh-relay.ts",
+    "src/server/ssh-keygen.ts",
+    "src/server/smart-http.ts",
+    "src/server/push.ts",
+    "src/server/git.ts",
+    "src/server/db/**",
+    "drizzle/**",
+    "package.json",
+    "bun.lock",
+    "cli/Cargo.*"
+  ],
+  "requiredChecks": ["Build and typecheck", "CLI (Rust)", "End-to-end tests"],
+  "fixTrailer": "Written-by: ether-review /fix"
+}

@@ -76,3 +76,11 @@ jobs:
           name: e2e-report
           path: e2e-report/
           retention-days: 14
+
+  review-config:
+    name: Review config
+    uses: heyimada/review/.github/workflows/check.yml@3ad7182dc644e6a59efa8e1042a42b61f48624de # main
+    permissions:
+      contents: read
+      # Tells the engine which of its commits this is.
+      id-token: write
