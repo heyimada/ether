@@ -85,8 +85,9 @@ jobs:
 
   review-config:
     name: Review config
-    uses: heyimada/review/.github/workflows/check.yml@3ad7182dc644e6a59efa8e1042a42b61f48624de # main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
-      # Tells the engine which of its commits this is.
-      id-token: write
+    steps:
+      - uses: heyimada/review/actions/check@0fbfe9190b3cd91a1ba8ba5f609f9b786a1a928c # main

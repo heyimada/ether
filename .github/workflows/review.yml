@@ -1,8 +1,9 @@
 name: Review
 
-# Bug and security review by the shared engine in heyimada/review, posted by the review GitHub App, with the settings in
-# .github/review.json. pull_request_target, so the engine, the settings and the secrets come from trusted refs and a pull
-# request can't change its own reviewer. The engine never installs, builds or runs the pull request's code.
+# Bug and security review of each pull request by the shared engine in heyimada/review, posted by the review GitHub App,
+# with this repository's settings in .github/review.json. pull_request_target, so this file, the settings and the
+# secrets come from main and a pull request can't change its own reviewer. The engine never installs, builds or runs the
+# pull request's code. The secrets live in the review environment, which only these jobs name.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -14,10 +15,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  trust:
+    name: Trust
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: review
+    permissions: {}
+    outputs:
+      trusted: ${{ steps.trust.outputs.trusted }}
+    steps:
+      # Only collaborators with write access get an AI review; the gate sends everyone else to a person.
+      - id: trust
+        uses: heyimada/review/actions/trust@0fbfe9190b3cd91a1ba8ba5f609f9b786a1a928c # main
+        with:
+          client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+
   review:
-    uses: heyimada/review/.github/workflows/review.yml@3ad7182dc644e6a59efa8e1042a42b61f48624de # main
+    name: ${{ matrix.lens }}
+    needs: trust
+    if: ${{ needs.trust.outputs.trusted == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: review
     permissions:
       contents: read
       pull-requests: read
-      # Tells the engine which of its commits this is.
-      id-token: write
+    strategy:
+      fail-fast: false
+      # One after the other, so the security review sees what the bugs review posted and doesn't post it again.
+      max-parallel: 1
+      matrix:
+        lens: [bugs, security]
+    steps:
+      - uses: heyimada/review/actions/review@0fbfe9190b3cd91a1ba8ba5f609f9b786a1a928c # main
+        with:
+          lens: ${{ matrix.lens }}
+          client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+          claude-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

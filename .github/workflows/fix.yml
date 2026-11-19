@@ -1,8 +1,10 @@
 name: Fix
 
-# A "/fix" comment on a pull request asks an agent to fix the open review findings, through the shared engine in
-# heyimada/review. issue_comment always runs this file from main. Only works when both the commenter and the pull
-# request's author have write access and the branch is in this repository.
+# A "/fix" comment on a pull request asks an agent to fix the open review findings. Only works when both the commenter
+# and the pull request's author have write access and the branch is in this repository. issue_comment always runs this
+# file from main. Nothing here runs the pull request's code: these jobs run on main, so that code could write cache
+# entries main's CI restores. The agent only reads and edits files in pr/ and holds only the Claude token from the fix
+# environment; the commit job checks its patch and commits it as the App, which makes the gate ask for a person.
 on:
   issue_comment:
     types: [created]
@@ -10,10 +12,60 @@ on:
 permissions: {}
 
 jobs:
-  fix:
+  trust:
+    name: Trust
     if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/fix') }}
-    uses: heyimada/review/.github/workflows/fix.yml@3ad7182dc644e6a59efa8e1042a42b61f48624de # main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: review
+    permissions: {}
+    outputs:
+      trusted: ${{ steps.trust.outputs.trusted }}
+      sha: ${{ steps.trust.outputs.sha }}
+      bot-login: ${{ steps.trust.outputs.bot-login }}
+    steps:
+      - id: trust
+        uses: heyimada/review/actions/trust@0fbfe9190b3cd91a1ba8ba5f609f9b786a1a928c # main
+        with:
+          for: fix
+          client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+
+  fix:
+    name: Fix
+    needs: trust
+    if: ${{ needs.trust.outputs.trusted == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: fix
+    # On the job, not the workflow: every comment starts this workflow, and a queued run is replaced by the next one.
+    concurrency:
+      group: fix-${{ github.event.issue.number }}
+      cancel-in-progress: false
     permissions:
       contents: read
       pull-requests: read
-      id-token: write
+    steps:
+      - uses: heyimada/review/actions/fix-edit@0fbfe9190b3cd91a1ba8ba5f609f9b786a1a928c # main
+        with:
+          sha: ${{ needs.trust.outputs.sha }}
+          bot-login: ${{ needs.trust.outputs.bot-login }}
+          # Its own secret, not the review's.
+          claude-token: ${{ secrets.FIX_CLAUDE_CODE_OAUTH_TOKEN }}
+
+  commit:
+    name: Commit
+    needs: [trust, fix]
+    # Also after a failed fix job, to say so on the pull request. Not after a cancelled one: a newer /fix replaced it.
+    if: ${{ always() && needs.trust.outputs.trusted == 'true' && needs.fix.result != 'cancelled' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: review
+    permissions:
+      contents: read
+    steps:
+      - uses: heyimada/review/actions/fix-commit@0fbfe9190b3cd91a1ba8ba5f609f9b786a1a928c # main
+        with:
+          sha: ${{ needs.trust.outputs.sha }}
+          client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}

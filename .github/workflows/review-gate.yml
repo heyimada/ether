@@ -1,9 +1,9 @@
 name: Merge gate
 
-# Posts the "Review gate" check run (as the review App) with its decision for the pull request's head commit, through
-# the shared engine in heyimada/review. When the change qualifies, the App approves that commit and enables auto-merge;
-# otherwise a person has to approve. Never checks out the pull request's code. Re-runs when the pull request changes,
-# and through workflow_run when a review, CI or a human review finishes.
+# Posts the "Review gate" check run (as the review App) with its decision for the pull request's head commit. When the
+# change qualifies, the App approves that commit and merges it; otherwise a person has to approve. Never checks out the
+# pull request's code. Re-runs when the pull request changes, and through workflow_run when a review, CI or a human
+# review finishes; workflow_run always runs from main with secrets, also for forks.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
@@ -14,17 +14,22 @@ on:
 permissions: {}
 
 concurrency:
-  # Keyed on the head commit for both events. A running gate finishes instead of being cancelled, which showed up as a
-  # failed check; the gate is idempotent. GitHub still cancels a waiting run when a newer one queues, so a burst of
-  # events can leave a cancelled run, but no longer one cut off halfway.
+  # Keyed on the head commit for both events. A running gate finishes instead of being cancelled; the gate is idempotent.
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
 jobs:
   gate:
-    uses: heyimada/review/.github/workflows/gate.yml@3ad7182dc644e6a59efa8e1042a42b61f48624de # main
+    name: Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: review
     permissions:
       contents: read
       pull-requests: read
       checks: read
-      id-token: write
+    steps:
+      - uses: heyimada/review/actions/gate@0fbfe9190b3cd91a1ba8ba5f609f9b786a1a928c # main
+        with:
+          client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
