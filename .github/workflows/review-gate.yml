@@ -28,3 +28,6 @@ jobs:
       pull-requests: read
       checks: read
       id-token: write
+    # The engine's jobs read the App key and Claude tokens from this repository's review and fix environments, which
+    # only reach a reusable workflow when the caller inherits its secrets.
+    secrets: inherit
