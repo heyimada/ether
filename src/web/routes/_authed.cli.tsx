@@ -18,7 +18,8 @@ function useDetectedPlatform() {
   const [platform, setPlatform] = useState<string | null>(null);
   useEffect(() => {
     const ua = navigator.userAgent;
-    const os = /Mac/.test(ua) ? "darwin" : /Win/.test(ua) ? "windows" : /Linux|X11/.test(ua) ? "linux" : null;
+    // Phones say "like Mac OS X" or "Linux" too, but none of the builds runs on them.
+    const os = /iPhone|iPad|iPod|Android/.test(ua) ? null : /Mac/.test(ua) ? "darwin" : /Win/.test(ua) ? "windows" : /Linux|X11/.test(ua) ? "linux" : null;
     if (!os) return;
     setPlatform(`${os}-${os === "darwin" ? "arm64" : "x64"}`);
     const hints = (navigator as Navigator & { userAgentData?: { getHighEntropyValues(h: string[]): Promise<{ architecture?: string }> } }).userAgentData;

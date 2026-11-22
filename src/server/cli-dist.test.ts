@@ -93,3 +93,23 @@ test("build:cli refuses a release whose checksum doesn't match", async () => {
     server.stop(true);
   }
 });
+
+test("a local build after a failed download keeps the other platforms of the same version", async () => {
+  const out = join(mkdtempSync(join(tmpdir(), "ether-cli-out-")), "cli");
+  const server = releaseServer({ "ether-plan9-x": "", "ether-windows-x64.exe": "W", SHA256SUMS: `${sha("W")}  ether-windows-x64.exe\n` });
+  try {
+    expect((await run({ ...process.env, ETHER_CLI_RELEASES: `http://127.0.0.1:${server.port}`, ETHER_CLI_DIR: out } as Record<string, string>)).code).toBe(0);
+  } finally {
+    server.stop(true);
+  }
+  // Offline now, and no cargo: nothing changes. With a stand-in cargo that "builds" this platform, it's added.
+  const bin = mkdtempSync(join(tmpdir(), "ether-fake-cargo-"));
+  const target = mkdtempSync(join(tmpdir(), "ether-fake-target-"));
+  writeFileSync(join(bin, "cargo"), '#!/bin/sh\nmkdir -p "$CARGO_TARGET_DIR/release" && printf HOST > "$CARGO_TARGET_DIR/release/ether"\n', { mode: 0o755 });
+  const r = await run({ ETHER_CLI_RELEASES: "http://127.0.0.1:9", ETHER_CLI_DIR: out, CARGO_TARGET_DIR: target, PATH: `${bin}:${resolve(process.execPath, "..")}:/bin:/usr/bin` });
+  expect(r.code).toBe(0);
+  const offered = cliManifest(out).binaries.map((b) => b.platform);
+  expect(offered).toContain("windows-x64");
+  expect(offered.length).toBe(2);
+  expect(readFileSync(join(out, "SHA256SUMS"), "utf8")).toContain(`${sha("W")}  ether-windows-x64.exe`);
+});

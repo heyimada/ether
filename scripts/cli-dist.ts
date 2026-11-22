@@ -3,7 +3,7 @@
 // platform, each checked against the release's SHA256SUMS. Without network or a release: a local `cargo build` for
 // this machine's platform, if Rust is installed. `--local` skips the download; ETHER_CLI_RELEASES points elsewhere.
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { PLATFORMS, fileFor } from "../src/server/cli-dist";
 
@@ -63,21 +63,28 @@ function build(): Map<string, Uint8Array> | null {
   console.log(`Building ether ${version} for ${platform}…`);
   const r = Bun.spawnSync(["cargo", "build", "--release", "--locked"], { cwd: join(root, "cli"), stdout: "inherit", stderr: "inherit" });
   if (r.exitCode !== 0) return console.warn("cargo build failed."), null;
-  const bin = join(root, "cli", "target", "release", platform.startsWith("windows") ? "ether.exe" : "ether");
+  // cargo honours CARGO_TARGET_DIR, so the binary is wherever that points.
+  const target = resolve(join(root, "cli"), process.env.CARGO_TARGET_DIR ?? "target");
+  const bin = join(target, "release", platform.startsWith("windows") ? "ether.exe" : "ether");
   return new Map([[fileFor(platform), new Uint8Array(readFileSync(bin))]]);
 }
 
-const files = (process.argv.includes("--local") ? null : await download()) ?? build();
+const downloaded = process.argv.includes("--local") ? null : await download();
+const files = downloaded ?? build();
 if (!files) {
   console.warn("No ether client binaries; the /cli page will say so. Nothing changed.");
   process.exit(0);
 }
-rmSync(out, { recursive: true, force: true });
+// A release replaces everything. A local build only adds this machine's binary: what an earlier run downloaded for
+// the same version stays offered, while binaries of another version go.
+const sameVersion = existsSync(join(out, "VERSION")) && readFileSync(join(out, "VERSION"), "utf8").trim() === version;
+if (downloaded || !sameVersion) rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 for (const [name, data] of files) {
   writeFileSync(join(out, name), data);
   if (!name.endsWith(".exe")) chmodSync(join(out, name), 0o755);
 }
 writeFileSync(join(out, "VERSION"), `${version}\n`);
-writeFileSync(join(out, "SHA256SUMS"), [...files].map(([n, d]) => `${sha256(d)}  ${n}`).join("\n") + "\n");
-console.log(`dist/cli: ether ${version} for ${[...files.keys()].join(", ")}`);
+const offered = PLATFORMS.map((p) => fileFor(p.id)).filter((name) => existsSync(join(out, name)));
+writeFileSync(join(out, "SHA256SUMS"), offered.map((n) => `${sha256(readFileSync(join(out, n)))}  ${n}`).join("\n") + "\n");
+console.log(`dist/cli: ether ${version} for ${offered.join(", ")}`);
