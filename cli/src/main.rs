@@ -1153,8 +1153,8 @@ diff --git a/run.sh b/run.sh
 old mode 100644
 new mode 100755
 diff --git a/with space.txt b/with space.txt
---- a/with space.txt
-+++ b/with space.txt
+--- a/with space.txt\t
++++ b/with space.txt\t
 @@ -1 +1 @@
 -a
 +b
