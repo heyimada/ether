@@ -19,7 +19,9 @@ function useDetectedPlatform() {
   useEffect(() => {
     const ua = navigator.userAgent;
     // Phones say "like Mac OS X" or "Linux" too, but none of the builds runs on them.
-    const os = /iPhone|iPad|iPod|Android/.test(ua) ? null : /Mac/.test(ua) ? "darwin" : /Win/.test(ua) ? "windows" : /Linux|X11/.test(ua) ? "linux" : null;
+    // An iPad asking for the desktop site says "Macintosh", but it's the only "Mac" with a touch screen.
+    const tablet = /Mac/.test(ua) && navigator.maxTouchPoints > 1;
+    const os = tablet || /iPhone|iPad|iPod|Android/.test(ua) ? null : /Mac/.test(ua) ? "darwin" : /Win/.test(ua) ? "windows" : /Linux|X11/.test(ua) ? "linux" : null;
     if (!os) return;
     setPlatform(`${os}-${os === "darwin" ? "arm64" : "x64"}`);
     const hints = (navigator as Navigator & { userAgentData?: { getHighEntropyValues(h: string[]): Promise<{ architecture?: string }> } }).userAgentData;
