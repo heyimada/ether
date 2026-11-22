@@ -13,6 +13,7 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthedIndexRouteImport } from './routes/_authed.index'
+import { Route as AuthedCliRouteImport } from './routes/_authed.cli'
 import { Route as AuthedNewRouteImport } from './routes/_authed.new'
 import { Route as AuthedNotificationsRouteImport } from './routes/_authed.notifications'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
@@ -62,6 +63,11 @@ const RegisterRoute = RegisterRouteImport.update({
 const AuthedIndexRoute = AuthedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedCliRoute = AuthedCliRouteImport.update({
+  id: '/cli',
+  path: '/cli',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedNewRoute = AuthedNewRouteImport.update({
@@ -241,6 +247,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/cli': typeof AuthedCliRoute
   '/new': typeof AuthedNewRoute
   '/notifications': typeof AuthedNotificationsRoute
   '/settings': typeof AuthedSettingsRoute
@@ -276,6 +283,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/cli': typeof AuthedCliRoute
   '/new': typeof AuthedNewRoute
   '/notifications': typeof AuthedNotificationsRoute
   '/settings': typeof AuthedSettingsRoute
@@ -313,6 +321,7 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/_authed/cli': typeof AuthedCliRoute
   '/_authed/new': typeof AuthedNewRoute
   '/_authed/notifications': typeof AuthedNotificationsRoute
   '/_authed/settings': typeof AuthedSettingsRoute
@@ -352,6 +361,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/register'
+    | '/cli'
     | '/new'
     | '/notifications'
     | '/settings'
@@ -387,6 +397,7 @@ export interface FileRouteTypes {
   to:
     | '/login'
     | '/register'
+    | '/cli'
     | '/new'
     | '/notifications'
     | '/settings'
@@ -423,6 +434,7 @@ export interface FileRouteTypes {
     | '/_authed'
     | '/login'
     | '/register'
+    | '/_authed/cli'
     | '/_authed/new'
     | '/_authed/notifications'
     | '/_authed/settings'
@@ -491,6 +503,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthedIndexRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/cli': {
+      id: '/_authed/cli'
+      path: '/cli'
+      fullPath: '/cli'
+      preLoaderRoute: typeof AuthedCliRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/new': {
@@ -770,6 +789,7 @@ const AuthedOwnerRepoRouteWithChildren = AuthedOwnerRepoRoute._addFileChildren(
 )
 
 interface AuthedRouteChildren {
+  AuthedCliRoute: typeof AuthedCliRoute
   AuthedNewRoute: typeof AuthedNewRoute
   AuthedNotificationsRoute: typeof AuthedNotificationsRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
@@ -782,6 +802,7 @@ interface AuthedRouteChildren {
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
+  AuthedCliRoute: AuthedCliRoute,
   AuthedNewRoute: AuthedNewRoute,
   AuthedNotificationsRoute: AuthedNotificationsRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,

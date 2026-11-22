@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { cpSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -32,7 +32,13 @@ export default async function globalSetup() {
   const webDir = join(dataDir, "web");
   cpSync(built, webDir, { recursive: true });
   const sshPort = await freePort();
-  const env = { ...process.env, ETHER_DATA: dataDir, ETHER_PORT: String(port), ETHER_HOST: "127.0.0.1", ETHER_WEB_DIST: webDir, ETHER_SSH_PORT: String(sshPort), ETHER_CI_RUNNER_TIMEOUT: "8" };
+  // Stand-in client "binaries" for the download page and installers: small scripts that print their platform.
+  const cliDir = mkdtempSync(join(tmpdir(), "ether-e2e-cli-"));
+  for (const platform of ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64", "windows-x64"])
+    writeFileSync(join(cliDir, `ether-${platform}${platform.startsWith("windows") ? ".exe" : ""}`), `#!/bin/sh\necho "ether ${platform} $*"\n`);
+  writeFileSync(join(cliDir, "VERSION"), "9.9.9\n");
+  process.env.ETHER_CLI_DIR = cliDir;
+  const env = { ...process.env, ETHER_CLI_DIR: cliDir, ETHER_DATA: dataDir, ETHER_PORT: String(port), ETHER_HOST: "127.0.0.1", ETHER_WEB_DIST: webDir, ETHER_SSH_PORT: String(sshPort), ETHER_CI_RUNNER_TIMEOUT: "8" };
 
   const admin = spawnSync("bun", ["src/server/cli.ts", "create-admin", ADMIN.username, "--password", ADMIN.password], {
     cwd: root,

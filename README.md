@@ -200,10 +200,17 @@ Reviewers and wait timers decide whether a deployment *starts*, not what it does
 
 ## Command-line client
 
-`cli/` is a Rust client in the spirit of GitHub's `gh`, built as `ether`:
+`cli/` is a Rust client in the spirit of GitHub's `gh`, built as `ether`. Each Ether server offers it for download at **`/cli`** (also in the account menu), with installers that check the SHA-256 of what they fetch:
 
 ```sh
-cd cli && cargo build --release        # binary at cli/target/release/ether(.exe)
+curl -fsSL https://ether.example.com/install.sh | sh     # macOS and Linux, into ~/.local/bin
+irm https://ether.example.com/install.ps1 | iex          # Windows, into %LOCALAPPDATA%\Programs\ether
+```
+
+The server gets the binaries with `bun run build:cli` (`scripts/deploy.ps1` runs it): it downloads every platform from the GitHub release `cli-v<version>` for the version in `cli/Cargo.toml`, checked against its `SHA256SUMS`, and without network or a release builds this machine's platform with `cargo` if Rust is installed. The binaries land in `dist/cli/` (`ETHER_CLI_DIR` overrides it). Pushing a tag `cli-v<version>` runs `.github/workflows/cli-release.yml`, which builds macOS (Apple silicon and Intel), Linux (x86-64 and ARM64, static) and Windows and publishes that release. `ether auth status` says when the server offers a newer client than the one you run.
+
+```sh
+cd cli && cargo build --release        # or build it yourself; binary at cli/target/release/ether(.exe)
 echo "$TOKEN" | ether auth login --host https://ether.example.com --with-token
 ether auth status                      # who you are; `auth logout` forgets the token (it stays valid)
 ether repo create my-tool --public     # or --org acme; --description "…"

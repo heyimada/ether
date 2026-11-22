@@ -1,0 +1,82 @@
+name: CLI release
+
+# Builds the `ether` client for every platform Ether offers for download and attaches the binaries, with their
+# SHA256SUMS, to the GitHub release cli-v<version>. `bun run build:cli` on a server downloads them from there.
+# Push a tag such as cli-v0.1.0 (matching cli/Cargo.toml) to release, or run it by hand to rebuild a release.
+on:
+  push:
+    tags: ["cli-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { platform: linux-x64, os: ubuntu-latest, target: x86_64-unknown-linux-musl, musl: true }
+          - { platform: linux-arm64, os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, musl: true }
+          - { platform: darwin-arm64, os: macos-latest, target: aarch64-apple-darwin }
+          - { platform: darwin-x64, os: macos-latest, target: x86_64-apple-darwin }
+          - { platform: windows-x64, os: windows-latest, target: x86_64-pc-windows-msvc, exe: .exe }
+    defaults:
+      run:
+        working-directory: cli
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - if: matrix.musl
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+          key: ${{ matrix.target }}
+      # Static Linux binaries (musl), so they run on any distribution.
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - run: |
+          mkdir -p ../out
+          cp "target/${{ matrix.target }}/release/ether${{ matrix.exe }}" "../out/ether-${{ matrix.platform }}${{ matrix.exe }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ether-${{ matrix.platform }}
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: out
+          merge-multiple: true
+      - name: Check the version and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^version *= *"\(.*\)"/\1/p' cli/Cargo.toml | head -1)
+          tag="cli-v$version"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "$tag" ]; then
+            echo "The tag ${GITHUB_REF_NAME} doesn't match cli/Cargo.toml ($tag)" >&2
+            exit 1
+          fi
+          cd out
+          sha256sum ether-* > SHA256SUMS
+          cat SHA256SUMS
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" ether-* SHA256SUMS --clobber
+          else
+            gh release create "$tag" ether-* SHA256SUMS --title "ether CLI $version" --notes "The ether command-line client $version. Ether servers offer it under /cli after \`bun run build:cli\`." --target "${GITHUB_SHA}"
+          fi

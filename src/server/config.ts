@@ -16,6 +16,8 @@ export const config = {
   sshHost: process.env.ETHER_SSH_HOST ?? new URL(publicUrl).hostname,
   // Overridable so test runs can serve a private copy of the build.
   webDist: resolve(process.env.ETHER_WEB_DIST ?? resolve(import.meta.dirname, "../../dist/client")),
+  // The `ether` client binaries offered for download (`bun run build:cli` fills it).
+  cliDist: resolve(process.env.ETHER_CLI_DIR ?? resolve(import.meta.dirname, "../../dist/cli")),
 };
 
 // Everything Ether keeps in its data directory. Backup and restore copy all of it; the hooks directory isn't here

@@ -7,6 +7,8 @@ Set-Location $root
 
 bun install --frozen-lockfile
 bun run build
+# The ether client offered under /cli: the GitHub release's binaries, else a local build if Rust is installed.
+bun run build:cli
 
 $action = New-ScheduledTaskAction -Execute "pwsh.exe" -Argument "-NoProfile -WindowStyle Hidden -File `"$root\scripts\start.ps1`"" -WorkingDirectory $root
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
