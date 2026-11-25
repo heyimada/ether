@@ -407,13 +407,24 @@ fn auth(cmd: AuthCmd) -> Result<()> {
         }
         AuthCmd::Status => {
             let (host, entry) = Config::load()?.current()?;
-            let me = Client::new(&host, &entry.token)?
+            let c = Client::new(&host, &entry.token)?;
+            let me = c
                 .get("/api/me")
                 .context("the saved token no longer works; log in again")?;
             println!(
                 "{host}: logged in as {}",
                 me["user"]["username"].as_str().unwrap_or(&entry.user)
             );
+            // The server offers its own build of the client; say when it's newer than this one.
+            if let Some(offered) = c
+                .get("/api/cli")
+                .ok()
+                .and_then(|m| m["version"].as_str().map(str::to_string))
+            {
+                if newer(&offered, env!("CARGO_PKG_VERSION")) {
+                    println!("A newer ether ({offered}) is available: {host}/cli");
+                }
+            }
             Ok(())
         }
         AuthCmd::Logout => {
@@ -1034,6 +1045,22 @@ fn pr(cmd: PrCmd) -> Result<()> {
     }
 }
 
+// Whether dotted version `a` is later than `b` (1.10.0 > 1.9.2); anything unreadable counts as 0.
+fn newer(a: &str, b: &str) -> bool {
+    let parts = |v: &str| -> Vec<u64> { v.split('.').map(|p| p.parse().unwrap_or(0)).collect() };
+    let (a, b) = (parts(a), parts(b));
+    for i in 0..a.len().max(b.len()) {
+        let (x, y) = (
+            a.get(i).copied().unwrap_or(0),
+            b.get(i).copied().unwrap_or(0),
+        );
+        if x != y {
+            return x > y;
+        }
+    }
+    false
+}
+
 // A path as git prints it in a diff: bare, or in double quotes with C escapes (octal bytes for non-ASCII).
 fn unquote(path: &str) -> String {
     let Some(inner) = path.strip_prefix('"').and_then(|p| p.strip_suffix('"')) else {
@@ -1125,7 +1152,16 @@ fn changed_files(diff: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::changed_files;
+    use super::{changed_files, newer};
+
+    #[test]
+    fn newer_compares_versions_by_number() {
+        assert!(newer("0.2.0", "0.1.9"));
+        assert!(newer("1.10.0", "1.9.2"));
+        assert!(!newer("0.1.0", "0.1.0"));
+        assert!(!newer("0.1", "0.1.0"));
+        assert!(!newer("0.0.9", "0.1.0"));
+    }
 
     #[test]
     fn changed_files_covers_every_kind_of_change() {
@@ -1153,8 +1189,8 @@ diff --git a/run.sh b/run.sh
 old mode 100644
 new mode 100755
 diff --git a/with space.txt b/with space.txt
---- a/with space.txt
-+++ b/with space.txt
+--- a/with space.txt\t
++++ b/with space.txt\t
 @@ -1 +1 @@
 -a
 +b

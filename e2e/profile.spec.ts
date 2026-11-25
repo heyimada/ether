@@ -44,7 +44,7 @@ test("the account menu holds profile, settings, admin and sign out; new reposito
   await expect(page.getByRole("main").getByRole("link", { name: "New repository" })).toBeVisible();
 
   const menu = await openMenu(page);
-  await expect(menu.getByRole("menuitem")).toHaveText([/Your profile/, /New organization/, /Settings/, /Admin/, /Sign out/]);
+  await expect(menu.getByRole("menuitem")).toHaveText([/Your profile/, /New organization/, /Settings/, /Command-line client/, /Admin/, /Sign out/]);
   await info.attach("menu", { body: await page.screenshot(), contentType: "image/png" });
   await menu.getByRole("menuitem", { name: /Your profile/ }).click();
   await expect(page).toHaveURL(`${baseURL()}/${ADMIN.username}`);
@@ -56,7 +56,7 @@ test("the account menu holds profile, settings, admin and sign out; new reposito
   const phone = await ctx.newPage();
   await uiLogin(phone, friend.username, friend.password);
   const phoneMenu = await openMenu(phone);
-  await expect(phoneMenu.getByRole("menuitem")).toHaveText([/Your profile/, /New organization/, /Settings/, /Sign out/]);
+  await expect(phoneMenu.getByRole("menuitem")).toHaveText([/Your profile/, /New organization/, /Settings/, /Command-line client/, /Sign out/]);
   expect(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await phoneMenu.getByRole("menuitem", { name: /Sign out/ }).click();
   await expect(phone).toHaveURL(/\/login/);

@@ -60,6 +60,8 @@ test("the ether CLI logs in, manages repositories, issues and pull requests, and
 
   expect(ok(["auth", "login", "--host", baseURL(), "--with-token"], { input: `${me.token}\n` })).toContain(`Logged in to ${baseURL()} as ${me.username}`);
   expect(ok(["auth", "status"])).toContain(me.username);
+  // The server offers a newer build (the e2e server says 9.9.9), and status says so.
+  expect(ok(["auth", "status"])).toContain(`A newer ether (9.9.9) is available: ${baseURL()}/cli`);
 
   const repo = unique("cli");
   expect(ok(["repo", "create", repo, "--description", "made from the CLI", "--public"])).toContain(`${me.username}/${repo}`);

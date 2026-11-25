@@ -1,6 +1,6 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Link, Outlet, createFileRoute, redirect, useRouter, useRouterState } from "@tanstack/react-router";
-import { Bell, Building2, ChevronDown, LogOut, Settings, Shield, User } from "lucide-react";
+import { Bell, Building2, ChevronDown, LogOut, Settings, Shield, Terminal, User } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { JumpBox } from "../components/jump";
 import { Avatar, BrandMark, MENU_LABEL, MENU_SEP, PeopleContext } from "../components/ui";
@@ -130,6 +130,11 @@ function UserMenu({ me, displayName }: { me: Me; displayName: string }) {
           <Menu.Item asChild className="menu-item">
             <Link to="/settings">
               <Settings size={16} aria-hidden /> Settings
+            </Link>
+          </Menu.Item>
+          <Menu.Item asChild className="menu-item">
+            <Link to="/cli">
+              <Terminal size={16} aria-hidden /> Command-line client
             </Link>
           </Menu.Item>
           {me.isAdmin && (

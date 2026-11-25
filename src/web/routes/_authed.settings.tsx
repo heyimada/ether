@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ProfileSettings, loadMyProfile } from "../components/profile-settings";
 import { SshKeys, loadSshKeys } from "../components/ssh-keys";
@@ -52,7 +52,7 @@ function Settings() {
       <h2>Access tokens</h2>
       <p className="text-muted">
         Git uses personal access tokens instead of your password. When git asks for credentials, enter <code>{me.username}</code> as the username and a
-        token as the password.
+        token as the password. The <Link to="/cli">command-line client</Link> logs in with one too.
       </p>
       <form className="card body" onSubmit={onSubmit(create.run)}>
         <ErrorNote error={create.error} />

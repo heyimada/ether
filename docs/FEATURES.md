@@ -67,7 +67,7 @@ Where each user-visible feature lives in the code, and which end-to-end spec cov
 | Tool | What it does | Code | e2e |
 |---|---|---|---|
 | Admin CLI | `bun run ether create-admin`, `reset-password`, `invite`, `backup` and `restore`. | `src/server/cli.ts` | `backup.spec.ts` |
-| `ether` client | A Rust client for auth, repositories, issues, pull requests (drafts, reviews, reviewers, checks, diffs, stacks, merge methods), shell completions and raw API calls. | `cli/src/` | `cli.spec.ts` |
+| `ether` client | A Rust client for auth, repositories, issues, pull requests (drafts, reviews, reviewers, checks, diffs, stacks, merge methods), shell completions and raw API calls, offered for download at `/cli` with `install.sh` / `install.ps1` (`bun run build:cli`, `.github/workflows/cli-release.yml`). | `cli/src/` | `cli.spec.ts` |
 | `ether-runner` | CI runner for other machines (`bun run build:runner`). | `src/runner/main.ts` | `runners.spec.ts` |
 | Tailscale deploy | Windows scripts that start Ether at logon and run `tailscale serve`. | `scripts/deploy.ps1`, `scripts/start.ps1` | |
 | Review bot | AI bug and security review, `/fix`, and the merge gate for this repository's pull requests. | `.github/review.json`, `.github/workflows/`, [heyimada/review](https://github.com/heyimada/review) | tests in heyimada/review |
